@@ -18,7 +18,7 @@ class Paciente(models.Model):
     telefone = models.CharField(max_length=20, blank=True)
     
     # Endereço
-    cep = models.CharField(max_length=9, blank=True)
+    cep = models.CharField(max_length=20, blank=True, null=True)
     logradouro = models.CharField(max_length=255, blank=True)
     numero = models.CharField(max_length=20, blank=True)
     complemento = models.CharField(max_length=100, blank=True, null=True)
