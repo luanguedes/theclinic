@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import Profissional, Especialidade
+from .models import Profissional, Especialidade, ProfissionalEspecialidade
+
+# 1. Configura a "tabela filha" (Vínculo + CRM) para aparecer dentro do Médico
+class ProfissionalEspecialidadeInline(admin.TabularInline):
+    model = ProfissionalEspecialidade
+    extra = 1  # Deixa uma linha em branco pronta para preencher
+    autocomplete_fields = ['especialidade'] # Opcional: Ajuda se tiver muitas especialidades
 
 @admin.register(Especialidade)
 class EspecialidadeAdmin(admin.ModelAdmin):
@@ -8,9 +14,16 @@ class EspecialidadeAdmin(admin.ModelAdmin):
 
 @admin.register(Profissional)
 class ProfissionalAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'crm', 'ativo') # Ajuste 'crm' ou 'registro' conforme seu model
-    search_fields = ('nome', 'crm')
+    # Campos que realmente existem no Profissional
+    list_display = ('id', 'nome', 'cpf', 'created_at') 
+    search_fields = ('nome', 'cpf')
     
-    # Isso cria aquela caixa dupla para selecionar várias especialidades
-    # Se der erro dizendo que o campo não existe, verifique se no model chama 'especialidades' ou 'especialidade'
-    filter_horizontal = ('especialidades',)
+    # Aqui a mágica acontece: colocamos o vínculo do conselho dentro da tela do médico
+    inlines = [ProfissionalEspecialidadeInline] 
+
+# Opcional: Se quiser ver a tabela de vínculos separada também
+@admin.register(ProfissionalEspecialidade)
+class ProfissionalEspecialidadeAdmin(admin.ModelAdmin):
+    list_display = ('profissional', 'especialidade', 'sigla_conselho', 'registro_conselho', 'uf_conselho')
+    list_filter = ('sigla_conselho', 'uf_conselho')
+    search_fields = ('profissional__nome', 'registro_conselho')
