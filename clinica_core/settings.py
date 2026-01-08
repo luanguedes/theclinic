@@ -52,9 +52,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
+     
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -68,10 +69,17 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     )
 }
+CORS_ALLOW_ALL_ORIGINS = True # Pode restringir depois
 
 CORS_ALLOWED_ORIGINS = [
+    "https://theclinic.up.railway.app", # URL do seu Frontend (sem barra no final)
     "http://localhost:5173",
     "http://localhost:3000",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://theclinic.up.railway.app", # Frontend
+    "https://theclinic-production.up.railway.app", # Backend
 ]
 
 ROOT_URLCONF = 'clinica_core.urls'
@@ -189,5 +197,4 @@ SIMPLE_JWT = {
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media' 
 
-CORS_ALLOW_ALL_ORIGINS = True # Pode restringir depois
-CSRF_TRUSTED_ORIGINS = ['https://*.up.railway.app'] # Confia nos domínios do Railway
+
