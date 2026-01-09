@@ -20,6 +20,7 @@ import ConfigurarAgenda from './pages/ConfigurarAgenda';
 import Convenios from './pages/Convenios';
 import DadosClinica from './pages/DadosClinica';
 import MarcarConsulta from './pages/MarcarConsulta';
+import Recepcao from './pages/Recepcao';
 
 const RotaPrivada = ({ children, adminOnly = false }) => {
   const { user, loading } = useAuth();
@@ -53,6 +54,7 @@ function App() {
               <Route path="/agenda/marcar" element={<RotaPrivada><MarcarConsulta /></RotaPrivada>} />
               <Route path="/convenios" element={<RotaPrivada adminOnly><Convenios /></RotaPrivada>} />
               <Route path="/clinica" element={<RotaPrivada adminOnly><DadosClinica /></RotaPrivada>} />
+              <Route path="/recepcao" element={<RotaPrivada><Recepcao /></RotaPrivada>} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </NotificationProvider>

@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'agendamento',
     'agendas',
     'configuracoes',
+    'financeiro',
 ]
 
 MIDDLEWARE = [

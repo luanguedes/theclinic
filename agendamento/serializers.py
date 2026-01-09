@@ -10,6 +10,12 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     nome_profissional = serializers.CharField(source='profissional.nome', read_only=True)
     nome_especialidade = serializers.CharField(source='especialidade.nome', read_only=True)
     nome_convenio = serializers.SerializerMethodField()
+    fatura_pago = serializers.SerializerMethodField()
+
+    def get_fatura_pago(self, obj):
+        if hasattr(obj, 'fatura'):
+            return obj.fatura.pago
+        return False
     
     # --- DADOS COMPLETOS PARA O PDF ---
     detalhes_pdf = serializers.SerializerMethodField()
