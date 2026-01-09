@@ -9,17 +9,14 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     telefone_paciente = serializers.CharField(source='paciente.telefone', read_only=True)
     nome_profissional = serializers.CharField(source='profissional.nome', read_only=True)
     nome_especialidade = serializers.CharField(source='especialidade.nome', read_only=True)
+    
+    # Campos Calculados
     nome_convenio = serializers.SerializerMethodField()
     fatura_pago = serializers.SerializerMethodField()
-
-    def get_fatura_pago(self, obj):
-        # Tenta acessar a fatura relacionada
-        try:
-            return obj.fatura.pago
-        except:
-            return False
     
-    # --- DADOS COMPLETOS PARA O PDF ---
+    # --- NOVO CAMPO: FORMA DE PAGAMENTO SALVA ---
+    fatura_forma_pagamento = serializers.SerializerMethodField()
+
     detalhes_pdf = serializers.SerializerMethodField()
 
     class Meta:
@@ -29,19 +26,26 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     def get_nome_convenio(self, obj):
         return obj.convenio.nome if obj.convenio else "Particular"
 
+    def get_fatura_pago(self, obj):
+        try: return obj.fatura.pago
+        except: return False
+
+    # --- LÓGICA DO NOVO CAMPO ---
+    def get_fatura_forma_pagamento(self, obj):
+        try:
+            return obj.fatura.forma_pagamento
+        except:
+            return None # Retorna None se não tiver fatura ainda
+
     def get_detalhes_pdf(self, obj):
-        # 1. Dados da Clínica
+        # ... (seu código existente do PDF continua igual aqui) ...
         clinica = DadosClinica.load()
-        
         logo_url = ""
         if clinica.logo:
             request = self.context.get('request')
-            if request:
-                logo_url = request.build_absolute_uri(clinica.logo.url)
-            else:
-                logo_url = clinica.logo.url
+            if request: logo_url = request.build_absolute_uri(clinica.logo.url)
+            else: logo_url = clinica.logo.url
         
-        # 2. Registro do Conselho (CRM/etc)
         registro = ""
         try:
             vinculo = ProfissionalEspecialidade.objects.get(
@@ -49,11 +53,9 @@ class AgendamentoSerializer(serializers.ModelSerializer):
                 especialidade=obj.especialidade
             )
             registro = f"{vinculo.sigla_conselho}: {vinculo.registro_conselho}/{vinculo.uf_conselho}"
-        except:
-            registro = "Não informado"
+        except: registro = "Não informado"
 
         return {
-            # Paciente
             "clinica_logo": logo_url,
             "paciente_cpf": obj.paciente.cpf,
             "paciente_nascimento": obj.paciente.data_nascimento,
@@ -61,11 +63,7 @@ class AgendamentoSerializer(serializers.ModelSerializer):
             "paciente_mae": obj.paciente.nome_mae,
             "paciente_endereco": f"{obj.paciente.logradouro}, {obj.paciente.numero} - {obj.paciente.bairro}",
             "paciente_cidade": f"{obj.paciente.cidade}/{obj.paciente.estado}",
-            
-            # Profissional
             "profissional_registro": registro,
-
-            # Clínica
             "clinica_nome": clinica.nome_fantasia,
             "clinica_endereco": f"{clinica.logradouro}, {clinica.numero}",
             "clinica_bairro": f"{clinica.bairro} - {clinica.cidade}",

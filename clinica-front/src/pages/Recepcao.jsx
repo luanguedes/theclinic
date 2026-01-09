@@ -127,11 +127,10 @@ export default function Recepcao() {
     const abrirCheckin = (item) => {
         setSelectedItem(item);
         
-        // Se já tiver dados de fatura (fatura_pago vem do serializer), usamos.
-        // Caso contrário, usamos o valor do agendamento.
         setFormCheckin({
             valor: item.valor || '',
-            forma_pagamento: 'dinheiro', // O ideal seria vir do backend se já foi salvo, mas por padrão 'dinheiro' serve para edição rápida
+            // Se vier do backend (edição), usa o salvo. Se não (novo), usa 'dinheiro'.
+            forma_pagamento: item.fatura_forma_pagamento || 'dinheiro',
             pago: item.fatura_pago || false
         });
         setModalOpen(true);
