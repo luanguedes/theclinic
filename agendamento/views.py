@@ -25,10 +25,15 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Agendamento.objects.all()
-        
+
+        # --- 1. FILTROS ---
         profissional = self.request.query_params.get('profissional')
         especialidade = self.request.query_params.get('especialidade')
+        
+        # Filtros de Data
         data_filtro = self.request.query_params.get('data')
+        mes_filtro = self.request.query_params.get('mes')
+        ano_filtro = self.request.query_params.get('ano')
 
         if profissional and profissional not in ['undefined', 'null', '']:
             queryset = queryset.filter(profissional_id=profissional)
@@ -36,12 +41,25 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         if especialidade and especialidade not in ['undefined', 'null', '']:
             queryset = queryset.filter(especialidade_id=especialidade)
             
+        # Lógica de Data:
+        # 1. Se tem data específica, usa ela.
+        # 2. Se tem Mês e Ano, filtra pelo mês.
+        # 3. Se não tem nada, usa HOJE (padrão).
+        
         if data_filtro and data_filtro not in ['undefined', 'null', '']:
             queryset = queryset.filter(data=data_filtro)
+        elif mes_filtro and ano_filtro:
+            queryset = queryset.filter(data__month=mes_filtro, data__year=ano_filtro)
         else:
-            queryset = queryset.filter(data=date.today())
+            # Se não passou filtro de mês, aplica o padrão de hoje
+            # (A menos que queira listar tudo, mas para dashboard o padrão hoje é seguro)
+            # Para o Dashboard funcionar sem travar, se não vier nada, NÃO filtramos data aqui,
+            # deixamos o frontend mandar os parametros.
+            # Mas para manter compatibilidade com outras telas:
+            if not self.request.query_params.get('nopage'): 
+                 queryset = queryset.filter(data=date.today())
 
-        # Ordenação Complexa
+        # --- 2. ORDENAÇÃO ---
         queryset = queryset.annotate(
             prioridade_status=Case(
                 When(status='agendado', then=Value(1)),
@@ -53,11 +71,7 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                 default=Value(10),
                 output_field=IntegerField(),
             )
-        ).order_by(
-            'prioridade_status',
-            'horario',
-            'paciente__data_nascimento'
-        )
+        ).order_by('prioridade_status', 'horario')
 
         return queryset
 
