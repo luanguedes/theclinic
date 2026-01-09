@@ -163,8 +163,8 @@ export default function MarcarConsulta() {
         });
         
         api.get(`agendas/config/?status=ativos&profissional_id=${profissionalId}&nopage=true`)
-           .then(res => setRegrasProfissional(res.data))
-           .catch(e => console.error(e));
+            .then(res => setRegrasProfissional(res.data))
+            .catch(e => console.error(e));
     } else {
         setEspecialidades([]);
         setEspecialidadeId('');
@@ -420,15 +420,32 @@ export default function MarcarConsulta() {
           }
       } finally { setLoadingCep(false); }
   };
+
+  // --- FUNÇÃO CORRIGIDA AQUI ---
   const salvarPacienteCompleto = async (e) => {
       e.preventDefault();
       try {
+          // 1. Posta no backend
           const { data } = await api.post('pacientes/', novoPaciente);
+          
           notify.success("Paciente cadastrado!");
-          api.get('pacientes/lista/').then(res => setPacientes(res.data.results?.map(p => ({ id: p.id, label: `${p.nome} - ${p.cpf}` })) || []));
+
+          // 2. Cria objeto para lista local
+          const novoItemLista = { 
+              id: data.id, 
+              label: `${data.nome} - ${data.cpf}` 
+          };
+
+          // 3. Atualiza lista de opções imediatamente (sem GET)
+          setPacientes(listaAtual => [novoItemLista, ...listaAtual]);
+
+          // 4. Seleciona o ID no campo
           setPacienteId(data.id); 
+          
+          // 5. Fecha modal e limpa form
           setModalPacienteOpen(false);
           setNovoPaciente(formInicialPaciente);
+
       } catch (error) { 
           if (error.response?.data?.cpf) notify.warning("CPF já cadastrado!");
           else notify.error("Erro ao cadastrar paciente."); 
@@ -551,7 +568,7 @@ export default function MarcarConsulta() {
                 </div>
             </div>
         )}
-
+        
         {/* MODAL DE AGENDAMENTO */}
         {modalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
