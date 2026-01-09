@@ -49,6 +49,7 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                 When(status='em_atendimento', then=Value(3)),
                 When(status='finalizado', then=Value(4)),
                 When(status='cancelado', then=Value(5)),
+                When(status='faltou', then=Value(6)),
                 default=Value(10),
                 output_field=IntegerField(),
             )
@@ -59,6 +60,19 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         )
 
         return queryset
+
+    @action(detail=True, methods=['post'])
+    def marcar_falta(self, request, pk=None):
+        agendamento = self.get_object()
+        
+        # Só permite marcar falta se ainda não foi atendido
+        if agendamento.status in ['em_atendimento', 'finalizado']:
+             return Response({"error": "Paciente já foi atendido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        agendamento.status = 'faltou'
+        agendamento.save()
+        
+        return Response({'status': 'Falta registrada com sucesso.'}, status=status.HTTP_200_OK)
 
     # --- AÇÃO BLINDADA COM TRANSAÇÃO ATÔMICA ---
     @action(detail=True, methods=['post'])

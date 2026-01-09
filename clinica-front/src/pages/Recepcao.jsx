@@ -4,12 +4,12 @@ import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
     Search, CalendarClock, User, CheckCircle2, 
-    Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil 
+    Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil, UserX 
 } from 'lucide-react';
 
 export default function Recepcao() {
     const { api } = useAuth();
-    const { notify } = useNotification();
+    const { notify, confirmDialog } = useNotification(); // Use o confirmDialog aqui
 
     // --- ESTADOS ---
     const [loading, setLoading] = useState(false);
@@ -21,8 +21,8 @@ export default function Recepcao() {
     const [profissionalFiltro, setProfissionalFiltro] = useState('');
     const [buscaTexto, setBuscaTexto] = useState('');
     
-    // Filtro Visual (Legenda)
-    const [statusVisiveis, setStatusVisiveis] = useState(['agendado', 'aguardando', 'em_atendimento', 'finalizado']);
+    // Filtro Visual (Legenda) - Adicionado 'faltou'
+    const [statusVisiveis, setStatusVisiveis] = useState(['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou']);
 
     // Modal de Check-in
     const [modalOpen, setModalOpen] = useState(false);
@@ -45,13 +45,12 @@ export default function Recepcao() {
 
     useEffect(() => {
         if(api) carregarAgenda();
-    }, [api, dataFiltro, profissionalFiltro]); // Recarrega se mudar data ou médico
+    }, [api, dataFiltro, profissionalFiltro]);
 
     // --- LÓGICA ---
     const carregarAgenda = async () => {
         setLoading(true);
         try {
-            // Passamos os filtros para o Backend
             const params = new URLSearchParams();
             if (dataFiltro) params.append('data', dataFiltro);
             if (profissionalFiltro) params.append('profissional', profissionalFiltro);
@@ -68,15 +67,12 @@ export default function Recepcao() {
 
     const verificarAtraso = (horario, status) => {
         if (status !== 'agendado') return false;
-        // Cria data do agendamento
         const dataAgendamento = new Date(`${dataFiltro}T${horario}`);
         const agora = new Date();
         
-        // Se for hoje e já passou do horário (tolerância 15 min)
         if (dataFiltro === agora.toISOString().split('T')[0]) {
            return agora > new Date(dataAgendamento.getTime() + 15*60000);
         }
-        // Se for data passada e ainda está 'agendado', está atrasado
         if (new Date(dataFiltro) < new Date(agora.setHours(0,0,0,0))) return true;
 
         return false;
@@ -92,7 +88,6 @@ export default function Recepcao() {
         return idade;
     };
 
-    // Filtro local para busca de texto e toggle de status
     const itensFiltrados = agendamentos.filter(item => {
         if (!statusVisiveis.includes(item.status)) return false;
         if (buscaTexto) {
@@ -103,7 +98,6 @@ export default function Recepcao() {
         return true;
     });
 
-    // --- MANIPULAÇÃO DO STATUS ---
     const toggleStatus = (status) => {
         if (statusVisiveis.includes(status)) {
             setStatusVisiveis(statusVisiveis.filter(s => s !== status));
@@ -119,17 +113,16 @@ export default function Recepcao() {
             case 'em_atendimento': return 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
             case 'finalizado': return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800';
             case 'cancelado': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
+            case 'faltou': return 'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600';
             default: return 'bg-slate-100 text-slate-600';
         }
     };
 
-    // --- CHECK-IN / EDIÇÃO ---
+    // --- AÇÕES ---
     const abrirCheckin = (item) => {
         setSelectedItem(item);
-        
         setFormCheckin({
             valor: item.valor || '',
-            // Se vier do backend (edição), usa o salvo. Se não (novo), usa 'dinheiro'.
             forma_pagamento: item.fatura_forma_pagamento || 'dinheiro',
             pago: item.fatura_pago || false
         });
@@ -139,14 +132,11 @@ export default function Recepcao() {
     const confirmarCheckin = async () => {
         setLoadingCheckin(true);
         try {
-            // Este endpoint agora deve usar update_or_create no backend para suportar edições
             await api.post(`agendamento/${selectedItem.id}/confirmar_chegada/`, formCheckin);
-            
             const acao = selectedItem.status === 'agendado' ? 'Chegada confirmada' : 'Dados atualizados';
             notify.success(`${acao} com sucesso!`);
-            
             setModalOpen(false);
-            carregarAgenda(); // Atualiza a lista para refletir status e pagamento
+            carregarAgenda();
         } catch (error) {
             console.error(error);
             notify.error("Erro ao salvar dados.");
@@ -155,7 +145,27 @@ export default function Recepcao() {
         }
     };
 
-    // Classes CSS reutilizáveis
+    // NOVA FUNÇÃO: MARCAR FALTA
+    const handleMarcarFalta = async (item) => {
+        const confirm = await confirmDialog(
+            `Confirmar que o paciente ${item.nome_paciente} FALTOU à consulta?`,
+            "Registrar Falta",
+            "Sim, Faltou",
+            "Cancelar",
+            "danger" // Cor vermelha no botão
+        );
+
+        if (confirm) {
+            try {
+                await api.post(`agendamento/${item.id}/marcar_falta/`);
+                notify.info("Falta registrada.");
+                carregarAgenda();
+            } catch (error) {
+                notify.error("Erro ao registrar falta.");
+            }
+        }
+    };
+
     const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white transition-all";
 
     return (
@@ -199,9 +209,9 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* --- LEGENDA (BADGES CLICÁVEIS) --- */}
+                {/* --- LEGENDA --- */}
                 <div className="flex flex-wrap gap-2 mb-4 animate-in fade-in slide-in-from-top-2">
-                    {['agendado', 'aguardando', 'em_atendimento', 'finalizado'].map(status => (
+                    {['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou'].map(status => (
                         <button 
                             key={status}
                             onClick={() => toggleStatus(status)}
@@ -213,12 +223,13 @@ export default function Recepcao() {
                         >
                             {status === 'agendado' && <CalendarClock size={12}/>}
                             {status === 'aguardando' && <Clock size={12}/>}
+                            {status === 'faltou' && <UserX size={12}/>}
                             {status.replace('_', ' ')}
                         </button>
                     ))}
                 </div>
 
-                {/* --- TABELA DE PACIENTES --- */}
+                {/* --- TABELA --- */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden min-h-[400px]">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
@@ -239,7 +250,6 @@ export default function Recepcao() {
                                 ) : (
                                     itensFiltrados.map((item) => {
                                         const atrasado = verificarAtraso(item.horario, item.status);
-                                        // Pega idade do serializer (detalhes_pdf) se disponível
                                         const idade = item.detalhes_pdf?.paciente_nascimento ? calcularIdade(item.detalhes_pdf.paciente_nascimento) : '';
 
                                         return (
@@ -280,12 +290,21 @@ export default function Recepcao() {
 
                                                         {/* Botão Confirmar (Só se Agendado) */}
                                                         {item.status === 'agendado' && (
-                                                            <button 
-                                                                onClick={() => abrirCheckin(item)}
-                                                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
-                                                            >
-                                                                <CheckCircle2 size={16}/> Confirmar
-                                                            </button>
+                                                            <>
+                                                                <button 
+                                                                    onClick={() => handleMarcarFalta(item)}
+                                                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors border border-transparent"
+                                                                    title="Marcar Falta"
+                                                                >
+                                                                    <UserX size={18}/>
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => abrirCheckin(item)}
+                                                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
+                                                                >
+                                                                    <CheckCircle2 size={16}/> Confirmar
+                                                                </button>
+                                                            </>
                                                         )}
 
                                                         {/* Botão Editar (Se Aguardando ou Em Atendimento) */}
@@ -293,7 +312,7 @@ export default function Recepcao() {
                                                             <button 
                                                                 onClick={() => abrirCheckin(item)} 
                                                                 className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200"
-                                                                title="Editar dados da recepção/pagamento"
+                                                                title="Editar dados"
                                                             >
                                                                 <Pencil size={18}/>
                                                             </button>
@@ -309,7 +328,7 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* --- MODAL DE CHECK-IN / EDIÇÃO --- */}
+                {/* --- MODAL DE CHECK-IN --- */}
                 {modalOpen && selectedItem && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">

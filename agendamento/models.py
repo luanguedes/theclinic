@@ -11,6 +11,7 @@ class Agendamento(models.Model):
         EM_ATENDIMENTO = 'em_atendimento', 'Em Atendimento'
         FINALIZADO = 'finalizado', 'Finalizado'
         CANCELADO = 'cancelado', 'Cancelado'
+        FALTOU = 'faltou', 'Faltou'
 
     profissional = models.ForeignKey(Profissional, on_delete=models.CASCADE)
     especialidade = models.ForeignKey(Especialidade, on_delete=models.CASCADE)
