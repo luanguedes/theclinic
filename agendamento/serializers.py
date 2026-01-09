@@ -13,9 +13,11 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     fatura_pago = serializers.SerializerMethodField()
 
     def get_fatura_pago(self, obj):
-        if hasattr(obj, 'fatura'):
+        # Tenta acessar a fatura relacionada
+        try:
             return obj.fatura.pago
-        return False
+        except:
+            return False
     
     # --- DADOS COMPLETOS PARA O PDF ---
     detalhes_pdf = serializers.SerializerMethodField()

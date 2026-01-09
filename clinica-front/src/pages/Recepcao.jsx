@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    Search, CalendarClock, User, Filter, CheckCircle2, 
-    Clock, DollarSign, AlertCircle, X, Save, Loader2 
+    Search, CalendarClock, User, CheckCircle2, 
+    Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil 
 } from 'lucide-react';
 
 export default function Recepcao() {
@@ -51,7 +51,7 @@ export default function Recepcao() {
     const carregarAgenda = async () => {
         setLoading(true);
         try {
-            // Passamos os filtros para o Backend (que já tem a ordenação inteligente)
+            // Passamos os filtros para o Backend
             const params = new URLSearchParams();
             if (dataFiltro) params.append('data', dataFiltro);
             if (profissionalFiltro) params.append('profissional', profissionalFiltro);
@@ -123,13 +123,16 @@ export default function Recepcao() {
         }
     };
 
-    // --- CHECK-IN ---
+    // --- CHECK-IN / EDIÇÃO ---
     const abrirCheckin = (item) => {
         setSelectedItem(item);
+        
+        // Se já tiver dados de fatura (fatura_pago vem do serializer), usamos.
+        // Caso contrário, usamos o valor do agendamento.
         setFormCheckin({
             valor: item.valor || '',
-            forma_pagamento: 'dinheiro',
-            pago: false
+            forma_pagamento: 'dinheiro', // O ideal seria vir do backend se já foi salvo, mas por padrão 'dinheiro' serve para edição rápida
+            pago: item.fatura_pago || false
         });
         setModalOpen(true);
     };
@@ -137,12 +140,17 @@ export default function Recepcao() {
     const confirmarCheckin = async () => {
         setLoadingCheckin(true);
         try {
+            // Este endpoint agora deve usar update_or_create no backend para suportar edições
             await api.post(`agendamento/${selectedItem.id}/confirmar_chegada/`, formCheckin);
-            notify.success(`Chegada de ${selectedItem.nome_paciente} confirmada!`);
+            
+            const acao = selectedItem.status === 'agendado' ? 'Chegada confirmada' : 'Dados atualizados';
+            notify.success(`${acao} com sucesso!`);
+            
             setModalOpen(false);
-            carregarAgenda(); // Atualiza a lista e a ordenação
+            carregarAgenda(); // Atualiza a lista para refletir status e pagamento
         } catch (error) {
-            notify.error("Erro ao confirmar chegada.");
+            console.error(error);
+            notify.error("Erro ao salvar dados.");
         } finally {
             setLoadingCheckin(false);
         }
@@ -232,7 +240,7 @@ export default function Recepcao() {
                                 ) : (
                                     itensFiltrados.map((item) => {
                                         const atrasado = verificarAtraso(item.horario, item.status);
-                                        // Tenta pegar data de nascimento do detalhe_pdf se disponível, ou do serializer se você adicionou
+                                        // Pega idade do serializer (detalhes_pdf) se disponível
                                         const idade = item.detalhes_pdf?.paciente_nascimento ? calcularIdade(item.detalhes_pdf.paciente_nascimento) : '';
 
                                         return (
@@ -247,7 +255,6 @@ export default function Recepcao() {
                                                 <td className="px-6 py-4">
                                                     <div className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                                         {item.nome_paciente}
-                                                        {/* Se quiser adicionar sexo/idade visualmente */}
                                                     </div>
                                                     <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                                                         <User size={12}/> {idade ? `${idade} anos` : 'Idade n/d'} 
@@ -264,21 +271,32 @@ export default function Recepcao() {
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <div className="flex justify-end items-center gap-3">
-                                                        {/* Indicador de Pagamento */}
+                                                    <div className="flex justify-end items-center gap-2">
+                                                        {/* Ícone de Pagamento */}
                                                         {item.fatura_pago ? (
-                                                            <span title="Pago" className="text-green-500"><DollarSign size={20}/></span>
+                                                            <div title="Pago" className="text-green-500 p-2"><DollarSign size={20}/></div>
                                                         ) : (
-                                                            <span title="Pagamento Pendente" className="text-slate-300"><DollarSign size={20}/></span>
+                                                            <div title="Pagamento Pendente" className="text-slate-300 p-2"><DollarSign size={20}/></div>
                                                         )}
 
-                                                        {/* Botão de Check-in */}
+                                                        {/* Botão Confirmar (Só se Agendado) */}
                                                         {item.status === 'agendado' && (
                                                             <button 
                                                                 onClick={() => abrirCheckin(item)}
                                                                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
                                                             >
                                                                 <CheckCircle2 size={16}/> Confirmar
+                                                            </button>
+                                                        )}
+
+                                                        {/* Botão Editar (Se Aguardando ou Em Atendimento) */}
+                                                        {(item.status === 'aguardando' || item.status === 'em_atendimento') && (
+                                                            <button 
+                                                                onClick={() => abrirCheckin(item)} 
+                                                                className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200"
+                                                                title="Editar dados da recepção/pagamento"
+                                                            >
+                                                                <Pencil size={18}/>
                                                             </button>
                                                         )}
                                                     </div>
@@ -292,12 +310,15 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* --- MODAL DE CHECK-IN --- */}
+                {/* --- MODAL DE CHECK-IN / EDIÇÃO --- */}
                 {modalOpen && selectedItem && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                             <div className="bg-green-600 p-5 text-white flex justify-between items-center">
-                                <h3 className="font-bold text-lg flex items-center gap-2"><CheckCircle2/> Confirmar Chegada</h3>
+                                <h3 className="font-bold text-lg flex items-center gap-2">
+                                    <CheckCircle2/> 
+                                    {selectedItem.status === 'agendado' ? 'Confirmar Chegada' : 'Editar Recepção'}
+                                </h3>
                                 <button onClick={() => setModalOpen(false)}><X/></button>
                             </div>
                             
@@ -350,7 +371,8 @@ export default function Recepcao() {
                                         disabled={loadingCheckin}
                                         className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg disabled:opacity-50"
                                     >
-                                        {loadingCheckin ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Confirmar
+                                        {loadingCheckin ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
+                                        {selectedItem.status === 'agendado' ? 'Confirmar' : 'Salvar Alterações'}
                                     </button>
                                 </div>
                             </div>

@@ -425,30 +425,40 @@ export default function MarcarConsulta() {
   const salvarPacienteCompleto = async (e) => {
       e.preventDefault();
       try {
-          // 1. Posta no backend
+          // 1. Envia para o Backend
           const { data } = await api.post('pacientes/', novoPaciente);
           
           notify.success("Paciente cadastrado!");
 
-          // 2. Cria objeto para lista local
+          // 2. Prepara o objeto para a lista
           const novoItemLista = { 
               id: data.id, 
               label: `${data.nome} - ${data.cpf}` 
           };
 
-          // 3. Atualiza lista de opções imediatamente (sem GET)
+          // 3. Atualiza a lista de opções
           setPacientes(listaAtual => [novoItemLista, ...listaAtual]);
 
-          // 4. Seleciona o ID no campo
-          setPacienteId(data.id); 
+          // 4. CORREÇÃO CRÍTICA: setTimeout
+          // Espera 100ms para o React redesenhar a lista com o novo paciente
+          // antes de tentar selecioná-lo no campo.
+          setTimeout(() => {
+              setPacienteId(data.id);
+          }, 100);
           
           // 5. Fecha modal e limpa form
           setModalPacienteOpen(false);
           setNovoPaciente(formInicialPaciente);
 
       } catch (error) { 
-          if (error.response?.data?.cpf) notify.warning("CPF já cadastrado!");
-          else notify.error("Erro ao cadastrar paciente."); 
+          console.error("Erro ao salvar paciente:", error);
+          if (error.response?.data?.cpf) {
+              notify.warning("Este CPF já está cadastrado!");
+          } else {
+              // Mostra erro genérico ou detalhe do backend se houver
+              const msg = error.response?.data?.detail || "Erro ao cadastrar paciente.";
+              notify.error(msg); 
+          }
       }
   };
 
