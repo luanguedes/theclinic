@@ -22,16 +22,18 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
 
+    // Sincroniza o texto do input com o valor selecionado externamente
     useEffect(() => { 
         const selected = options.find(o => String(o.id) === String(value)); 
         if (selected) setQuery(selected.label);
         else if (!value) setQuery('');
-    }, [value, options]);
+    }, [value, options]); // Importante: 'options' na dependência garante que se a lista mudar (novo paciente), ele atualiza o texto
 
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
                 setIsOpen(false);
+                // Ao fechar, se o texto não bater com a seleção, restaura o label correto
                 const selected = options.find(o => String(o.id) === String(value));
                 setQuery(selected ? selected.label : '');
             }
@@ -119,7 +121,7 @@ export default function MarcarConsulta() {
 
   const [modalPacienteOpen, setModalPacienteOpen] = useState(false);
   const [loadingCep, setLoadingCep] = useState(false);
-  const [loadingPaciente, setLoadingPaciente] = useState(false); // NOVO ESTADO DE LOADING
+  const [loadingPaciente, setLoadingPaciente] = useState(false);
   
   const formInicialPaciente = { nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' };
   const [novoPaciente, setNovoPaciente] = useState(formInicialPaciente);
@@ -411,34 +413,54 @@ export default function MarcarConsulta() {
       } finally { setLoadingCep(false); }
   };
 
-  // --- FUNÇÃO CORRIGIDA: ATUALIZA LISTA DO BANCO ---
+  // --- FUNÇÃO CORRIGIDA E BLINDADA: ATUALIZA LISTA LOCALMENTE E EVITA RACE CONDITION ---
   const salvarPacienteCompleto = async (e) => {
       e.preventDefault();
-      setLoadingPaciente(true); // Bloqueia botão
+      setLoadingPaciente(true); // Bloqueia botão para evitar duplo clique
+      
       try {
-          // 1. Salva no banco
+          // 1. Envia para o Backend (Salva no banco)
           const { data } = await api.post('pacientes/', novoPaciente);
-          notify.success("Paciente cadastrado!");
-
-          // 2. ESTRATÉGIA SEGURA: Recarrega a lista completa da API para garantir
-          // Como a API ordena por -criado_em (mais recente primeiro), o novo paciente será o primeiro.
-          const resLista = await api.get('pacientes/lista/');
-          const listaAtualizada = resLista.data.results?.map(p => ({ 
-              id: p.id, 
-              label: `${p.nome} - ${p.cpf}` 
-          })) || [];
-
-          setPacientes(listaAtualizada);
-          setPacienteId(data.id); // Seleciona o ID
           
+          notify.success("Paciente cadastrado com sucesso!");
+
+          // 2. Prepara o objeto para a lista visual (Usamos os dados retornados do POST)
+          // Isso evita ter que fazer um 'get' que poderia falhar ou demorar
+          const novoItemParaLista = { 
+              id: data.id, 
+              label: `${data.nome} - ${data.cpf}` 
+          };
+
+          // 3. Adiciona o novo paciente no TOPO da lista atual
+          setPacientes(prevLista => [novoItemParaLista, ...prevLista]);
+
+          // 4. Fecha o modal e limpa o formulário imediatamente
           setModalPacienteOpen(false);
           setNovoPaciente(formInicialPaciente);
 
+          // 5. O PULO DO GATO: Seleciona o ID com um pequeno delay (100ms)
+          // Isso dá tempo para o React redesenhar o <SearchableSelect> com o novo item na lista
+          // antes de tentarmos marcar ele como value={id}.
+          setTimeout(() => {
+              setPacienteId(data.id);
+          }, 100);
+
       } catch (error) { 
-          if (error.response?.data?.cpf) notify.warning("Este CPF já está cadastrado!");
-          else notify.error("Erro ao cadastrar paciente. Verifique os dados."); 
+          console.error("Erro no cadastro:", error);
+          
+          if (error.response?.data?.cpf) {
+              notify.warning("Atenção: Este CPF já está cadastrado!");
+          } 
+          else if (error.response?.data) {
+              // Tenta pegar a primeira mensagem de erro legível
+              const msg = Object.values(error.response.data).flat()[0];
+              notify.error(`Erro: ${msg || "Verifique os dados."}`);
+          }
+          else {
+              notify.error("Erro de conexão ou processamento."); 
+          }
       } finally {
-          setLoadingPaciente(false); // Libera botão
+          setLoadingPaciente(false); // Libera o botão
       }
   };
 
@@ -523,11 +545,13 @@ export default function MarcarConsulta() {
                                             ) : (
                                                 <>
                                                     <div className={`text-sm font-bold ${isPast ? 'text-slate-400' : 'text-green-600'}`}>{isPast ? 'Expirado' : 'Livre'}</div>
+                                                    
                                                     {slot.convenio_regra_nome && (
                                                         <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1 truncate">
                                                             <ShieldCheck size={12}/> {slot.convenio_regra_nome}
                                                         </div>
                                                     )}
+
                                                     {slot.valor > 0 && <div className="text-xs font-semibold text-slate-500 mt-0.5">R$ {Number(slot.valor).toFixed(2)}</div>}
                                                 </>
                                             )}
