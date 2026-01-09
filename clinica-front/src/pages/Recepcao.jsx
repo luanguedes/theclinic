@@ -4,12 +4,12 @@ import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
     Search, CalendarClock, User, CheckCircle2, 
-    Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil, UserX 
+    Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil, UserX, RotateCcw 
 } from 'lucide-react';
 
 export default function Recepcao() {
     const { api } = useAuth();
-    const { notify, confirmDialog } = useNotification(); // Use o confirmDialog aqui
+    const { notify, confirmDialog } = useNotification();
 
     // --- ESTADOS ---
     const [loading, setLoading] = useState(false);
@@ -21,7 +21,7 @@ export default function Recepcao() {
     const [profissionalFiltro, setProfissionalFiltro] = useState('');
     const [buscaTexto, setBuscaTexto] = useState('');
     
-    // Filtro Visual (Legenda) - Adicionado 'faltou'
+    // Filtro Visual (Legenda)
     const [statusVisiveis, setStatusVisiveis] = useState(['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou']);
 
     // Modal de Check-in
@@ -145,14 +145,13 @@ export default function Recepcao() {
         }
     };
 
-    // NOVA FUNÇÃO: MARCAR FALTA
     const handleMarcarFalta = async (item) => {
         const confirm = await confirmDialog(
             `Confirmar que o paciente ${item.nome_paciente} FALTOU à consulta?`,
             "Registrar Falta",
             "Sim, Faltou",
             "Cancelar",
-            "danger" // Cor vermelha no botão
+            "danger"
         );
 
         if (confirm) {
@@ -160,8 +159,26 @@ export default function Recepcao() {
                 await api.post(`agendamento/${item.id}/marcar_falta/`);
                 notify.info("Falta registrada.");
                 carregarAgenda();
+            } catch (error) { notify.error("Erro ao registrar falta."); }
+        }
+    };
+
+    const handleReverter = async (item) => {
+        const confirm = await confirmDialog(
+            `Deseja desfazer a recepção de ${item.nome_paciente}? Isso apagará os dados financeiros criados.`,
+            "Desfazer Recepção",
+            "Sim, Desfazer",
+            "Cancelar",
+            "warning"
+        );
+
+        if (confirm) {
+            try {
+                await api.post(`agendamento/${item.id}/reverter_chegada/`);
+                notify.info("Recepção desfeita. Paciente voltou para 'Agendado'.");
+                carregarAgenda();
             } catch (error) {
-                notify.error("Erro ao registrar falta.");
+                notify.error("Erro ao reverter recepção.");
             }
         }
     };
@@ -236,9 +253,10 @@ export default function Recepcao() {
                             <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                                 <tr>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Horário</th>
+                                    {/* MUDANÇA: STATUS AGORA É A 2ª COLUNA */}
+                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Paciente</th>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Profissional</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
                                     <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase">Ação</th>
                                 </tr>
                             </thead>
@@ -254,6 +272,7 @@ export default function Recepcao() {
 
                                         return (
                                             <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                                {/* COLUNA 1: HORÁRIO */}
                                                 <td className="px-6 py-4">
                                                     <div className={`font-bold text-lg ${atrasado ? 'text-red-500 animate-pulse flex items-center gap-1' : 'text-slate-700 dark:text-white'}`}>
                                                         {item.horario.substring(0, 5)}
@@ -261,6 +280,15 @@ export default function Recepcao() {
                                                     </div>
                                                     {atrasado && <div className="text-[10px] text-red-500 font-bold uppercase">Atrasado</div>}
                                                 </td>
+
+                                                {/* COLUNA 2: STATUS (MOVIDA PARA CÁ) */}
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(item.status)}`}>
+                                                        {item.status.replace('_', ' ').toUpperCase()}
+                                                    </span>
+                                                </td>
+
+                                                {/* COLUNA 3: PACIENTE */}
                                                 <td className="px-6 py-4">
                                                     <div className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                                         {item.nome_paciente}
@@ -270,15 +298,14 @@ export default function Recepcao() {
                                                         {item.nome_convenio && <span className="bg-slate-100 dark:bg-slate-700 px-1.5 rounded text-slate-600 dark:text-slate-300 font-medium">{item.nome_convenio}</span>}
                                                     </div>
                                                 </td>
+
+                                                {/* COLUNA 4: PROFISSIONAL */}
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                                                     <div className="font-medium">{item.nome_profissional}</div>
                                                     <div className="text-xs text-slate-400">{item.nome_especialidade}</div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(item.status)}`}>
-                                                        {item.status.replace('_', ' ').toUpperCase()}
-                                                    </span>
-                                                </td>
+
+                                                {/* COLUNA 5: AÇÕES */}
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end items-center gap-2">
                                                         {/* Ícone de Pagamento */}
@@ -288,34 +315,25 @@ export default function Recepcao() {
                                                             <div title="Pagamento Pendente" className="text-slate-300 p-2"><DollarSign size={20}/></div>
                                                         )}
 
-                                                        {/* Botão Confirmar (Só se Agendado) */}
+                                                        {/* BOTOES AGENDADO */}
                                                         {item.status === 'agendado' && (
                                                             <>
-                                                                <button 
-                                                                    onClick={() => handleMarcarFalta(item)}
-                                                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors border border-transparent"
-                                                                    title="Marcar Falta"
-                                                                >
-                                                                    <UserX size={18}/>
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => abrirCheckin(item)}
-                                                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
-                                                                >
-                                                                    <CheckCircle2 size={16}/> Confirmar
-                                                                </button>
+                                                                <button onClick={() => handleMarcarFalta(item)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors border border-transparent" title="Marcar Falta"><UserX size={18}/></button>
+                                                                <button onClick={() => abrirCheckin(item)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"><CheckCircle2 size={16}/> Confirmar</button>
                                                             </>
                                                         )}
 
-                                                        {/* Botão Editar (Se Aguardando ou Em Atendimento) */}
-                                                        {(item.status === 'aguardando' || item.status === 'em_atendimento') && (
-                                                            <button 
-                                                                onClick={() => abrirCheckin(item)} 
-                                                                className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200"
-                                                                title="Editar dados"
-                                                            >
-                                                                <Pencil size={18}/>
-                                                            </button>
+                                                        {/* BOTOES AGUARDANDO (EDITAR E REVERTER) */}
+                                                        {(item.status === 'aguardando') && (
+                                                            <>
+                                                                <button onClick={() => handleReverter(item)} className="text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-orange-200" title="Desfazer Recepção"><RotateCcw size={18}/></button>
+                                                                <button onClick={() => abrirCheckin(item)} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200" title="Editar dados"><Pencil size={18}/></button>
+                                                            </>
+                                                        )}
+
+                                                        {/* BOTAO EDITAR (EM ATENDIMENTO) */}
+                                                        {item.status === 'em_atendimento' && (
+                                                            <button onClick={() => abrirCheckin(item)} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200" title="Editar dados"><Pencil size={18}/></button>
                                                         )}
                                                     </div>
                                                 </td>
@@ -333,36 +351,21 @@ export default function Recepcao() {
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                             <div className="bg-green-600 p-5 text-white flex justify-between items-center">
-                                <h3 className="font-bold text-lg flex items-center gap-2">
-                                    <CheckCircle2/> 
-                                    {selectedItem.status === 'agendado' ? 'Confirmar Chegada' : 'Editar Recepção'}
-                                </h3>
+                                <h3 className="font-bold text-lg flex items-center gap-2"><CheckCircle2/> {selectedItem.status === 'agendado' ? 'Confirmar Chegada' : 'Editar Recepção'}</h3>
                                 <button onClick={() => setModalOpen(false)}><X/></button>
                             </div>
-                            
                             <div className="p-6 space-y-4">
                                 <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg text-center mb-4">
                                     <p className="text-sm text-slate-500">Paciente</p>
                                     <p className="font-bold text-lg text-slate-800 dark:text-white">{selectedItem.nome_paciente}</p>
                                 </div>
-
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Valor da Consulta (R$)</label>
-                                    <input 
-                                        type="number" 
-                                        value={formCheckin.valor} 
-                                        onChange={e => setFormCheckin({...formCheckin, valor: e.target.value})}
-                                        className={inputClass}
-                                    />
+                                    <input type="number" value={formCheckin.valor} onChange={e => setFormCheckin({...formCheckin, valor: e.target.value})} className={inputClass}/>
                                 </div>
-
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Forma de Pagamento</label>
-                                    <select 
-                                        value={formCheckin.forma_pagamento} 
-                                        onChange={e => setFormCheckin({...formCheckin, forma_pagamento: e.target.value})}
-                                        className={inputClass}
-                                    >
+                                    <select value={formCheckin.forma_pagamento} onChange={e => setFormCheckin({...formCheckin, forma_pagamento: e.target.value})} className={inputClass}>
                                         <option value="dinheiro">Dinheiro</option>
                                         <option value="pix">Pix</option>
                                         <option value="cartao_credito">Cartão de Crédito</option>
@@ -371,27 +374,13 @@ export default function Recepcao() {
                                         <option value="pendente">A Definir / Pagar Depois</option>
                                     </select>
                                 </div>
-
                                 <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={formCheckin.pago}
-                                        onChange={e => setFormCheckin({...formCheckin, pago: e.target.checked})}
-                                        className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"
-                                    />
+                                    <input type="checkbox" checked={formCheckin.pago} onChange={e => setFormCheckin({...formCheckin, pago: e.target.checked})} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"/>
                                     <span className="text-sm font-bold text-slate-700 dark:text-white">Pagamento já realizado?</span>
                                 </label>
-
                                 <div className="pt-4 flex gap-3 justify-end">
                                     <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-lg">Cancelar</button>
-                                    <button 
-                                        onClick={confirmarCheckin} 
-                                        disabled={loadingCheckin}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg disabled:opacity-50"
-                                    >
-                                        {loadingCheckin ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
-                                        {selectedItem.status === 'agendado' ? 'Confirmar' : 'Salvar Alterações'}
-                                    </button>
+                                    <button onClick={confirmarCheckin} disabled={loadingCheckin} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg disabled:opacity-50">{loadingCheckin ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} {selectedItem.status === 'agendado' ? 'Confirmar' : 'Salvar Alterações'}</button>
                                 </div>
                             </div>
                         </div>

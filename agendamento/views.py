@@ -62,6 +62,32 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         return queryset
 
     @action(detail=True, methods=['post'])
+    def reverter_chegada(self, request, pk=None):
+        agendamento = self.get_object()
+
+        # Só permite reverter se estiver "Aguardando"
+        if agendamento.status != 'aguardando':
+            return Response(
+                {"error": "Só é possível reverter se o paciente ainda estiver aguardando."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            with transaction.atomic():
+                # 1. Volta o status
+                agendamento.status = 'agendado'
+                agendamento.save()
+
+                # 2. Apaga a Fatura criada por engano (Limpeza Financeira)
+                if hasattr(agendamento, 'fatura'):
+                    agendamento.fatura.delete()
+
+            return Response({'status': 'Recepção revertida com sucesso!'}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
+
+    @action(detail=True, methods=['post'])
     def marcar_falta(self, request, pk=None):
         agendamento = self.get_object()
         
