@@ -22,14 +22,12 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
 
-    // Sincroniza o texto do input com o valor selecionado externamente
     useEffect(() => { 
         const selected = options.find(o => String(o.id) === String(value)); 
         if (selected) setQuery(selected.label);
         else if (!value) setQuery('');
     }, [value, options]);
 
-    // Fecha ao clicar fora
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
@@ -42,7 +40,6 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [containerRef, value, options]);
 
-    // Lógica de filtro que permite ver a lista toda se o texto for igual ao selecionado
     const filtered = (query === '' || query === (options.find(o => String(o.id) === String(value))?.label)) 
         ? options 
         : options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
@@ -113,7 +110,6 @@ export default function MarcarConsulta() {
   const [valorSelecionado, setValorSelecionado] = useState(''); 
   const [pacienteId, setPacienteId] = useState('');
   const [convenioId, setConvenioId] = useState('');
-  // Estado para travar o campo de convênio se a regra exigir
   const [convenioTravado, setConvenioTravado] = useState(false);
   
   const [encaixeHora, setEncaixeHora] = useState('');
@@ -123,6 +119,8 @@ export default function MarcarConsulta() {
 
   const [modalPacienteOpen, setModalPacienteOpen] = useState(false);
   const [loadingCep, setLoadingCep] = useState(false);
+  const [loadingPaciente, setLoadingPaciente] = useState(false); // NOVO ESTADO DE LOADING
+  
   const formInicialPaciente = { nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' };
   const [novoPaciente, setNovoPaciente] = useState(formInicialPaciente);
 
@@ -143,7 +141,6 @@ export default function MarcarConsulta() {
   const [vagasDoDia, setVagasDoDia] = useState([]);
   const [regrasProfissional, setRegrasProfissional] = useState([]); 
 
-  // Carrega listas
   useEffect(() => {
     if (api) {
         api.get('profissionais/').then(res => setProfissionais(res.data.results?.map(p => ({ id: p.id, label: p.nome })) || []));
@@ -152,7 +149,6 @@ export default function MarcarConsulta() {
     }
   }, [api]);
 
-  // Carrega Especialidades e Regras quando o profissional muda
   useEffect(() => {
     if (profissionalId) {
         api.get(`profissionais/${profissionalId}/`).then(res => {
@@ -172,7 +168,6 @@ export default function MarcarConsulta() {
     }
   }, [profissionalId, api]);
 
-  // Recarrega agenda
   useEffect(() => {
     if (profissionalId && especialidadeId && dataApi) carregarAgenda();
     else setVagasDoDia([]);
@@ -211,7 +206,6 @@ export default function MarcarConsulta() {
 
     regrasFiltradas.forEach(regra => {
         const valorRegra = parseFloat(regra.valor || 0);
-        // Pega o nome do convênio da REGRA (do backend corrigido)
         const convenioRegraNome = regra.convenio_nome; 
         const convenioRegraId = regra.convenio;
 
@@ -293,7 +287,6 @@ export default function MarcarConsulta() {
       setPacienteId(''); 
       setObservacao('');
       
-      // Se a vaga tem convênio fixo, preenche e trava
       if (slot.convenio_regra_id) {
           setConvenioId(slot.convenio_regra_id);
           setConvenioTravado(true);
@@ -314,7 +307,7 @@ export default function MarcarConsulta() {
      setTipoModal('encaixe'); 
      setValorSelecionado(''); 
      setConvenioId('');
-     setConvenioTravado(false); // Encaixe é sempre livre
+     setConvenioTravado(false);
      setModalOpen(true); 
   };
 
@@ -327,10 +320,7 @@ export default function MarcarConsulta() {
       setObservacao(slot.observacoes || '');
       setTipoModal(slot.is_encaixe ? 'encaixe' : 'normal');
       if(slot.is_encaixe) setEncaixeHora(slot.hora);
-      
-      // Na edição, deixamos livre para correções
       setConvenioTravado(false);
-
       setModalOpen(true);
   };
 
@@ -377,7 +367,7 @@ export default function MarcarConsulta() {
         } else {
             const { data } = await api.post('agendamento/', payload);
             notify.success("Agendamento criado!");
-            generateAppointmentReceipt(data); // Imprime automático
+            generateAppointmentReceipt(data);
         }
         setModalOpen(false);
         carregarAgenda();
@@ -421,44 +411,34 @@ export default function MarcarConsulta() {
       } finally { setLoadingCep(false); }
   };
 
-  // --- FUNÇÃO CORRIGIDA AQUI ---
+  // --- FUNÇÃO CORRIGIDA: ATUALIZA LISTA DO BANCO ---
   const salvarPacienteCompleto = async (e) => {
       e.preventDefault();
+      setLoadingPaciente(true); // Bloqueia botão
       try {
-          // 1. Envia para o Backend
+          // 1. Salva no banco
           const { data } = await api.post('pacientes/', novoPaciente);
-          
           notify.success("Paciente cadastrado!");
 
-          // 2. Prepara o objeto para a lista
-          const novoItemLista = { 
-              id: data.id, 
-              label: `${data.nome} - ${data.cpf}` 
-          };
+          // 2. ESTRATÉGIA SEGURA: Recarrega a lista completa da API para garantir
+          // Como a API ordena por -criado_em (mais recente primeiro), o novo paciente será o primeiro.
+          const resLista = await api.get('pacientes/lista/');
+          const listaAtualizada = resLista.data.results?.map(p => ({ 
+              id: p.id, 
+              label: `${p.nome} - ${p.cpf}` 
+          })) || [];
 
-          // 3. Atualiza a lista de opções
-          setPacientes(listaAtual => [novoItemLista, ...listaAtual]);
-
-          // 4. CORREÇÃO CRÍTICA: setTimeout
-          // Espera 100ms para o React redesenhar a lista com o novo paciente
-          // antes de tentar selecioná-lo no campo.
-          setTimeout(() => {
-              setPacienteId(data.id);
-          }, 100);
+          setPacientes(listaAtualizada);
+          setPacienteId(data.id); // Seleciona o ID
           
-          // 5. Fecha modal e limpa form
           setModalPacienteOpen(false);
           setNovoPaciente(formInicialPaciente);
 
       } catch (error) { 
-          console.error("Erro ao salvar paciente:", error);
-          if (error.response?.data?.cpf) {
-              notify.warning("Este CPF já está cadastrado!");
-          } else {
-              // Mostra erro genérico ou detalhe do backend se houver
-              const msg = error.response?.data?.detail || "Erro ao cadastrar paciente.";
-              notify.error(msg); 
-          }
+          if (error.response?.data?.cpf) notify.warning("Este CPF já está cadastrado!");
+          else notify.error("Erro ao cadastrar paciente. Verifique os dados."); 
+      } finally {
+          setLoadingPaciente(false); // Libera botão
       }
   };
 
@@ -543,14 +523,11 @@ export default function MarcarConsulta() {
                                             ) : (
                                                 <>
                                                     <div className={`text-sm font-bold ${isPast ? 'text-slate-400' : 'text-green-600'}`}>{isPast ? 'Expirado' : 'Livre'}</div>
-                                                    
-                                                    {/* MOSTRAR CONVÊNIO DA REGRA ANTES DO VALOR */}
                                                     {slot.convenio_regra_nome && (
                                                         <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1 truncate">
                                                             <ShieldCheck size={12}/> {slot.convenio_regra_nome}
                                                         </div>
                                                     )}
-
                                                     {slot.valor > 0 && <div className="text-xs font-semibold text-slate-500 mt-0.5">R$ {Number(slot.valor).toFixed(2)}</div>}
                                                 </>
                                             )}
@@ -609,14 +586,13 @@ export default function MarcarConsulta() {
                             <SearchableSelect label="" options={pacientes} value={pacienteId} onChange={setPacienteId} placeholder="Pesquisar..." />
                         </div>
                         
-                        {/* CONVÊNIO: TRAVADO SE FOR FIXO DA AGENDA */}
                         <SearchableSelect 
                             label="Convênio (Opcional)" 
                             options={convenios} 
                             value={convenioId} 
                             onChange={setConvenioId} 
                             placeholder="Particular..."
-                            disabled={convenioTravado} // TRAVA O CAMPO
+                            disabled={convenioTravado}
                         />
                         
                         {tipoModal === 'encaixe' && <div><label className="block text-sm font-bold mb-1">Horário</label><input type="time" className="w-full border p-3 rounded-lg dark:bg-slate-900 dark:text-white" value={encaixeHora} onChange={e => setEncaixeHora(e.target.value)} /></div>}
@@ -638,7 +614,7 @@ export default function MarcarConsulta() {
             </div>
         )}
         
-        {/* MODAL DE NOVO PACIENTE (MANTIDO) */}
+        {/* MODAL DE NOVO PACIENTE */}
         {modalPacienteOpen && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl animate-in fade-in zoom-in duration-200 my-10">
@@ -663,7 +639,10 @@ export default function MarcarConsulta() {
                         </div>
                         <div className="pt-8 flex gap-3 justify-end">
                             <button type="button" onClick={() => setModalPacienteOpen(false)} className="px-6 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-lg hover:bg-slate-200">Cancelar</button>
-                            <button type="submit" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"><Save size={18}/> Salvar e Usar</button>
+                            <button type="submit" disabled={loadingPaciente} className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50">
+                                {loadingPaciente ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
+                                Salvar e Usar
+                            </button>
                         </div>
                     </form>
                 </div>
