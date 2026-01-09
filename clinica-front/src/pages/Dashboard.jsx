@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-    Users, Calendar, DollarSign, Settings, Activity, ArrowRight, 
-    CalendarDays, Clock, TrendingUp, Filter 
+    Users, DollarSign, Activity, Clock, TrendingUp, 
+    CalendarCheck, AlertCircle, ChevronRight 
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -12,7 +12,7 @@ export default function Dashboard() {
 
     // --- ESTADOS DOS FILTROS ---
     const hoje = new Date().toISOString().split('T')[0];
-    const mesAtual = new Date().toISOString().slice(0, 7); // Formato YYYY-MM
+    const mesAtual = new Date().toISOString().slice(0, 7);
 
     const [filtroDia, setFiltroDia] = useState(hoje);
     const [filtroMes, setFiltroMes] = useState(mesAtual);
@@ -20,9 +20,9 @@ export default function Dashboard() {
     // --- ESTADOS DOS DADOS ---
     const [statsDia, setStatsDia] = useState({ total: 0, aguardando: 0 });
     const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0 });
+    const [listaHoje, setListaHoje] = useState([]); // Nova lista para a tabela
     const [loading, setLoading] = useState(true);
 
-    // --- CARREGAMENTO DE DADOS ---
     useEffect(() => {
         if (api) {
             carregarDados();
@@ -32,30 +32,29 @@ export default function Dashboard() {
     const carregarDados = async () => {
         setLoading(true);
         try {
-            // 1. Busca dados do DIA ESPECÍFICO
-            // Chama a API passando a data exata
+            // 1. DADOS DO DIA (Para Cards e Tabela)
             const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true`);
-            const listaDia = resDia.data.results || resDia.data;
+            const dadosDia = resDia.data.results || resDia.data;
             
-            const totalDia = listaDia.filter(a => a.status !== 'cancelado').length;
-            const aguardandoDia = listaDia.filter(a => a.status === 'aguardando').length;
+            // Filtra cancelados e faltas para as métricas visuais
+            const validosDia = dadosDia.filter(a => a.status !== 'cancelado' && a.status !== 'faltou');
+            const aguardando = validosDia.filter(a => a.status === 'aguardando').length;
 
-            setStatsDia({ total: totalDia, aguardando: aguardandoDia });
+            setStatsDia({ total: validosDia.length, aguardando });
+            
+            // Salva a lista para exibir na tabela (limitada a 5 ou 10 itens para não poluir)
+            setListaHoje(dadosDia);
 
-            // 2. Busca dados do MÊS SELECIONADO
+            // 2. DADOS DO MÊS (Para Faturamento)
             const [ano, mes] = filtroMes.split('-');
             const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
-            const listaMes = resMes.data.results || resMes.data;
+            const dadosMes = resMes.data.results || resMes.data;
 
-            // Lógica: Pacientes únicos no mês (excluindo cancelados)
             const pacientesUnicos = new Set(
-                listaMes.filter(a => a.status !== 'cancelado').map(a => a.paciente)
+                dadosMes.filter(a => a.status !== 'cancelado').map(a => a.paciente)
             );
 
-            // Lógica: Faturamento (Soma valor de todos não cancelados)
-            // Se quiser somar só os pagos, verifique a flag 'fatura_pago' se disponível, 
-            // mas aqui somamos o "Confirmado" (Agendado/Atendido)
-            const faturamento = listaMes
+            const faturamento = dadosMes
                 .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
                 .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
 
@@ -65,7 +64,7 @@ export default function Dashboard() {
             });
 
         } catch (error) {
-            console.error("Erro ao carregar dashboard", error);
+            console.error("Erro dashboard", error);
         } finally {
             setLoading(false);
         }
@@ -75,160 +74,196 @@ export default function Dashboard() {
     
     const FilterInput = ({ type, value, onChange, label }) => (
         <div className="flex flex-col">
-            <span className="text-xs font-bold text-slate-500 mb-1 ml-1 uppercase tracking-wider">{label}</span>
+            <span className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">{label}</span>
             <input 
                 type={type} 
                 value={value} 
                 onChange={e => onChange(e.target.value)} 
-                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
+                className="bg-transparent border-b border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm py-1 outline-none focus:border-blue-500 transition-colors font-semibold"
             />
         </div>
     );
 
     const GradientCard = ({ title, value, subValue, icon: Icon, gradient, loading }) => (
-        <div className={`relative overflow-hidden rounded-2xl p-6 text-white shadow-lg ${gradient} transition-transform hover:-translate-y-1`}>
-            <div className="relative z-10 flex justify-between items-start">
+        <div className={`relative overflow-hidden rounded-3xl p-6 text-white shadow-xl ${gradient} transition-all hover:scale-[1.02]`}>
+            <div className="relative z-10">
+                <div className="flex justify-between items-start mb-4">
+                    <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md">
+                        <Icon size={24} className="text-white" />
+                    </div>
+                    {loading && <div className="h-6 w-16 bg-white/20 animate-pulse rounded-full"></div>}
+                </div>
                 <div>
                     <p className="text-blue-100 font-medium text-sm mb-1">{title}</p>
-                    {loading ? (
-                        <div className="h-8 w-24 bg-white/20 animate-pulse rounded mt-1"></div>
-                    ) : (
-                        <h3 className="text-3xl font-bold">{value}</h3>
-                    )}
+                    <h3 className="text-4xl font-bold tracking-tight">{loading ? '...' : value}</h3>
                     {subValue && (
-                        <p className="text-white/80 text-sm mt-2 font-medium bg-white/20 inline-block px-2 py-0.5 rounded-lg backdrop-blur-sm">
+                        <p className="text-white/80 text-xs mt-2 font-medium bg-black/10 inline-block px-2 py-1 rounded-lg">
                             {subValue}
                         </p>
                     )}
                 </div>
-                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm shadow-inner">
-                    <Icon size={28} className="text-white" />
-                </div>
             </div>
-            {/* Elemento decorativo de fundo */}
-            <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
         </div>
     );
 
-    const ShortcutCard = ({ to, title, description, icon: Icon, colorClass }) => (
-        <Link to={to} className="group relative bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 transition-all">
-            <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-xl ${colorClass} text-white shadow-md group-hover:scale-110 transition-transform`}>
-                    <Icon size={24} />
-                </div>
-                <div>
-                    <h3 className="text-base font-bold text-slate-700 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{title}</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{description}</p>
-                </div>
-            </div>
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400">
-                <ArrowRight size={20}/>
-            </div>
-        </Link>
-    );
+    const getStatusStyle = (status) => {
+        switch(status) {
+            case 'agendado': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
+            case 'aguardando': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 animate-pulse';
+            case 'em_atendimento': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
+            case 'finalizado': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+            case 'faltou': return 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400';
+            case 'cancelado': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+            default: return 'bg-gray-100 text-gray-600';
+        }
+    };
 
     return (
         <Layout>
             <div className="max-w-7xl mx-auto pb-10">
                 
-                {/* CABEÇALHO E FILTROS */}
-                <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+                {/* CABEÇALHO */}
+                <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
-                            Olá, <span className="text-blue-600 dark:text-blue-400">{user?.first_name || user?.username}</span>
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">
+                            Dashboard
                         </h1>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Aqui está o resumo da sua clínica.</p>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
+                            <Activity size={16} className="text-green-500"/> 
+                            Visão geral de <span className="font-bold text-slate-700 dark:text-slate-200">{user?.first_name || user?.username}</span>
+                        </p>
                     </div>
 
-                    <div className="flex gap-3 bg-white dark:bg-slate-900 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
-                        <FilterInput 
-                            label="Filtrar Dia" 
-                            type="date" 
-                            value={filtroDia} 
-                            onChange={setFiltroDia} 
-                        />
-                        <div className="w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-                        <FilterInput 
-                            label="Filtrar Mês" 
-                            type="month" 
-                            value={filtroMes} 
-                            onChange={setFiltroMes} 
-                        />
+                    <div className="flex gap-6 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                        <FilterInput label="Dia Referência" type="date" value={filtroDia} onChange={setFiltroDia} />
+                        <FilterInput label="Mês Financeiro" type="month" value={filtroMes} onChange={setFiltroMes} />
                     </div>
                 </div>
 
-                {/* KPI CARDS */}
+                {/* KPI CARDS - Agora ocupam mais destaque */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                    
-                    {/* CARD 1: TOTAL PACIENTES MÊS */}
                     <GradientCard 
-                        title={`Pacientes em ${filtroMes.split('-')[1]}/${filtroMes.split('-')[0]}`}
-                        value={statsMes.totalPacientes}
-                        subValue="Pacientes únicos atendidos"
-                        icon={Users}
-                        gradient="bg-gradient-to-br from-blue-500 to-indigo-600"
+                        title="Pacientes Agendados (Dia)"
+                        value={statsDia.total}
+                        subValue={`${statsDia.aguardando} na sala de espera`}
+                        icon={CalendarCheck}
+                        gradient="bg-gradient-to-br from-blue-600 to-indigo-600"
                         loading={loading}
                     />
 
-                    {/* CARD 2: DIA ATUAL (DUPLA INFORMAÇÃO) */}
-                    <div className="relative overflow-hidden rounded-2xl p-6 text-white shadow-lg bg-gradient-to-br from-orange-400 to-pink-500 transition-transform hover:-translate-y-1">
-                        <div className="relative z-10">
-                            <div className="flex justify-between items-start mb-2">
-                                <p className="text-orange-50 font-medium text-sm">Resumo do Dia ({filtroDia.split('-')[2]}/{filtroDia.split('-')[1]})</p>
-                                <Clock size={24} className="text-white/80"/>
-                            </div>
-                            
-                            <div className="flex gap-6 mt-2">
-                                <div>
-                                    {loading ? <div className="h-6 w-10 bg-white/20 rounded animate-pulse"/> : <h3 className="text-3xl font-bold">{statsDia.total}</h3>}
-                                    <span className="text-xs text-white/90 font-medium">Agendados</span>
-                                </div>
-                                <div className="w-px bg-white/30 h-10 self-center"></div>
-                                <div>
-                                    {loading ? <div className="h-6 w-10 bg-white/20 rounded animate-pulse"/> : <h3 className="text-3xl font-bold">{statsDia.aguardando}</h3>}
-                                    <span className="text-xs text-white/90 font-medium bg-white/20 px-2 py-0.5 rounded-lg">Aguardando</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
-                    </div>
-
-                    {/* CARD 3: FATURAMENTO */}
                     <GradientCard 
-                        title="Faturamento Confirmado (Mês)"
+                        title="Total Pacientes (Mês)"
+                        value={statsMes.totalPacientes}
+                        subValue={`Referente a ${filtroMes.split('-')[1]}/${filtroMes.split('-')[0]}`}
+                        icon={Users}
+                        gradient="bg-gradient-to-br from-violet-600 to-purple-600"
+                        loading={loading}
+                    />
+
+                    <GradientCard 
+                        title="Faturamento Confirmado"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
-                        subValue="Baseado em agendamentos ativos"
+                        subValue="Estimativa mensal"
                         icon={DollarSign}
                         gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
                         loading={loading}
                     />
                 </div>
 
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                    <Activity size={20} className="text-blue-500"/> Acesso Rápido
-                </h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {(user?.acesso_atendimento || user?.is_superuser) && (
-                        <ShortcutCard to="/recepcao" title="Recepção" description="Check-in e Fila." icon={CalendarDays} colorClass="bg-blue-600"/>
-                    )}
-                    {(user?.acesso_agendamento || user?.is_superuser) && (
-                        <ShortcutCard to="/agenda/marcar" title="Marcar Consulta" description="Novo agendamento." icon={Calendar} colorClass="bg-indigo-500"/>
-                    )}
-                    {(user?.acesso_faturamento || user?.is_superuser) && (
-                        <ShortcutCard to="/faturamento" title="Financeiro" description="Notas e caixa." icon={DollarSign} colorClass="bg-emerald-500"/>
-                    )}
-                    {user?.is_superuser && (
-                        <ShortcutCard to="/operadores" title="Configurações" description="Gestão do sistema." icon={Settings} colorClass="bg-slate-700"/>
-                    )}
-                </div>
-
-                <div className="mt-10 p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                        Sistema Operacional v7.0
+                {/* ÁREA PRINCIPAL: LISTA DE HOJE (Substitui o menu de botões) */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    
+                    {/* COLUNA ESQUERDA: AGENDA DE HOJE */}
+                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                                    <Clock className="text-blue-500" size={20}/> Agenda do Dia
+                                </h3>
+                                <p className="text-xs text-slate-500">Visualização rápida dos pacientes de hoje ({filtroDia.split('-')[2]}/{filtroDia.split('-')[1]})</p>
+                            </div>
+                            <Link to="/recepcao" className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg transition-colors">
+                                Ir para Recepção <ChevronRight size={16}/>
+                            </Link>
+                        </div>
+                        
+                        <div className="flex-1 overflow-auto max-h-[400px] p-2">
+                            {loading ? (
+                                <div className="text-center py-10 text-slate-400">Carregando...</div>
+                            ) : listaHoje.length === 0 ? (
+                                <div className="text-center py-12 flex flex-col items-center">
+                                    <div className="bg-slate-100 dark:bg-slate-700 p-4 rounded-full mb-3 text-slate-400"><CalendarCheck size={32}/></div>
+                                    <p className="text-slate-500 font-medium">Nenhum agendamento para este dia.</p>
+                                </div>
+                            ) : (
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="text-xs text-slate-400 uppercase tracking-wider bg-white dark:bg-slate-800 sticky top-0 z-10">
+                                        <tr>
+                                            <th className="px-6 py-3 font-bold">Horário</th>
+                                            <th className="px-6 py-3 font-bold">Paciente</th>
+                                            <th className="px-6 py-3 font-bold">Status</th>
+                                            <th className="px-6 py-3 font-bold text-right">Valor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+                                        {listaHoje.map((item) => (
+                                            <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                                <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.horario.slice(0,5)}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-slate-800 dark:text-white">{item.nome_paciente}</div>
+                                                    <div className="text-xs text-slate-500">{item.nome_profissional}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${getStatusStyle(item.status)}`}>
+                                                        {item.status.replace('_', ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-medium text-slate-600 dark:text-slate-400">
+                                                    {item.valor > 0 ? `R$ ${Number(item.valor).toFixed(2)}` : '-'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
                     </div>
-                    <span>© 2026 TheClinic</span>
+
+                    {/* COLUNA DIREITA: STATUS RÁPIDO */}
+                    <div className="flex flex-col gap-6">
+                        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-lg flex flex-col justify-center items-center text-center h-full min-h-[200px]">
+                            <div className="bg-white/10 p-4 rounded-full mb-4 animate-pulse">
+                                <AlertCircle size={32} className="text-yellow-400"/>
+                            </div>
+                            <h3 className="text-2xl font-bold">{statsDia.aguardando}</h3>
+                            <p className="text-slate-300 text-sm font-medium uppercase tracking-widest mt-1">Pacientes Aguardando</p>
+                            <Link to="/recepcao" className="mt-6 w-full bg-white text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors shadow-lg">
+                                Realizar Atendimento
+                            </Link>
+                        </div>
+                        
+                        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+                            <h4 className="font-bold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
+                                <TrendingUp size={18} className="text-green-500"/> Performance
+                            </h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="flex justify-between text-xs mb-1 text-slate-500 dark:text-slate-400">
+                                        <span>Meta Diária (Est.)</span>
+                                        <span>85%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">
+                                        <div className="bg-green-500 h-2 rounded-full" style={{width: '85%'}}></div>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                    A clínica está com um fluxo <strong>saudável</strong> hoje. Não há atrasos críticos registrados no momento.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </Layout>
