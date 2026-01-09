@@ -62,7 +62,7 @@ export default function Navbar() {
 
           {(user?.acesso_agendamento || user?.is_superuser) && (
             <NavItem icon={CalendarDays} title="Agendamento">
-              <DropdownLink to="/recepcao" text="Recepção" icon={CheckCircle2} />
+              <DropdownLink to="/recepcao" text="Recepção" />
               <DropdownLink to="/agenda/marcar" text="Marcar Consulta" />
               <div className="border-t border-slate-100 dark:border-slate-700 my-1"></div>
               <DropdownLink to="/agenda/configurar" text="Configurar Horários" />
