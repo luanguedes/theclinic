@@ -8,9 +8,7 @@ class Paciente(models.Model):
     ]
 
     nome = models.CharField(max_length=255)
-    # Novo Campo
     nome_mae = models.CharField(max_length=255, blank=True, null=True, verbose_name="Nome da Mãe")
-    # Novo Campo
     sexo = models.CharField(max_length=20, choices=SEXO_CHOICES, blank=True, null=True)
     
     cpf = models.CharField(max_length=14, unique=True)
@@ -27,8 +25,12 @@ class Paciente(models.Model):
     estado = models.CharField(max_length=2, blank=True)
 
     historico_medico = models.TextField(blank=True)
+    
     criado_em = models.DateTimeField(auto_now_add=True)
-    atualizado_em = models.DateTimeField(auto_now=True)
+    
+    # --- A CORREÇÃO É AQUI ---
+    # Mudamos de DateTimeField para DateField para compatibilidade com o banco
+    atualizado_em = models.DateField(auto_now=True) 
 
     def __str__(self):
         return f"{self.nome} ({self.cpf})"
