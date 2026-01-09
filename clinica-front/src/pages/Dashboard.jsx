@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { useNotification } from '../context/NotificationContext';
+import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
     Users, DollarSign, Activity, Clock, TrendingUp, 
-    CalendarCheck, AlertCircle, ChevronRight 
+    CalendarCheck, AlertCircle, ChevronRight, Stethoscope 
 } from 'lucide-react';
 
 export default function Dashboard() {
     const { user, api } = useAuth();
+    const { notify } = useNotification();
+    const navigate = useNavigate();
 
     // --- ESTADOS DOS FILTROS ---
     const hoje = new Date().toISOString().split('T')[0];
@@ -19,8 +22,8 @@ export default function Dashboard() {
 
     // --- ESTADOS DOS DADOS ---
     const [statsDia, setStatsDia] = useState({ total: 0, aguardando: 0 });
-    const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0 });
-    const [listaHoje, setListaHoje] = useState([]); // Nova lista para a tabela
+    const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0, receitaEstimada: 0 });
+    const [listaHoje, setListaHoje] = useState([]); 
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -32,35 +35,41 @@ export default function Dashboard() {
     const carregarDados = async () => {
         setLoading(true);
         try {
-            // 1. DADOS DO DIA (Para Cards e Tabela)
+            // 1. DADOS DO DIA
             const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true`);
             const dadosDia = resDia.data.results || resDia.data;
             
-            // Filtra cancelados e faltas para as métricas visuais
-            const validosDia = dadosDia.filter(a => a.status !== 'cancelado' && a.status !== 'faltou');
-            const aguardando = validosDia.filter(a => a.status === 'aguardando').length;
+            // "Pacientes Agendados no Total" = Todos (independente do status)
+            const totalAgendadosDia = dadosDia.length;
+            const aguardando = dadosDia.filter(a => a.status === 'aguardando').length;
 
-            setStatsDia({ total: validosDia.length, aguardando });
-            
-            // Salva a lista para exibir na tabela (limitada a 5 ou 10 itens para não poluir)
+            setStatsDia({ total: totalAgendadosDia, aguardando });
             setListaHoje(dadosDia);
 
-            // 2. DADOS DO MÊS (Para Faturamento)
+            // 2. DADOS DO MÊS
             const [ano, mes] = filtroMes.split('-');
             const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
             const dadosMes = resMes.data.results || resMes.data;
 
-            const pacientesUnicos = new Set(
-                dadosMes.filter(a => a.status !== 'cancelado').map(a => a.paciente)
-            );
+            // "Total de pacientes no mês deve considerar a quantidade total de agendamento, independente da situação"
+            const totalPacientesMes = dadosMes.length;
 
-            const faturamento = dadosMes
-                .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
+            // RECEITA CONFIRMADA: Apenas quem já pagou (fatura_pago = true)
+            // Precisamos garantir que o serializer esteja enviando 'fatura_pago'
+            const receitaConfirmada = dadosMes
+                .filter(a => a.fatura_pago === true)
+                .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+
+            // RECEITA ESTIMADA: Todos agendados - Faltosos - Cancelados
+            // (Assumindo que 'agendado', 'aguardando', 'em_atendimento', 'finalizado' contam)
+            const receitaEstimada = dadosMes
+                .filter(a => a.status !== 'faltou' && a.status !== 'cancelado')
                 .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
 
             setStatsMes({ 
-                totalPacientes: pacientesUnicos.size, 
-                receitaConfirmada: faturamento 
+                totalPacientes: totalPacientesMes, 
+                receitaConfirmada: receitaConfirmada,
+                receitaEstimada: receitaEstimada
             });
 
         } catch (error) {
@@ -68,6 +77,20 @@ export default function Dashboard() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleRealizarAtendimento = () => {
+        // Redireciona para o Prontuário (que será criado no futuro)
+        // Por enquanto, podemos colocar um aviso ou redirecionar para uma rota placeholder
+        if (!user.profissional_id) {
+            notify.error("Apenas profissionais de saúde podem realizar atendimento.");
+            return;
+        }
+        // Exemplo: rota futura
+        navigate('/atendimento/prontuario'); 
+        // Como não existe ainda, vai cair no 404 ou dashboard, 
+        // ou você pode colocar um alert provisório:
+        notify.info("Módulo de Prontuário será implementado em breve.");
     };
 
     // --- COMPONENTES VISUAIS ---
@@ -141,19 +164,19 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* KPI CARDS - Agora ocupam mais destaque */}
+                {/* KPI CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                     <GradientCard 
-                        title="Pacientes Agendados (Dia)"
+                        title="Agendamentos (Dia)"
                         value={statsDia.total}
-                        subValue={`${statsDia.aguardando} na sala de espera`}
+                        subValue={`${statsDia.aguardando} Aguardando`}
                         icon={CalendarCheck}
                         gradient="bg-gradient-to-br from-blue-600 to-indigo-600"
                         loading={loading}
                     />
 
                     <GradientCard 
-                        title="Total Pacientes (Mês)"
+                        title="Total Agendamentos (Mês)"
                         value={statsMes.totalPacientes}
                         subValue={`Referente a ${filtroMes.split('-')[1]}/${filtroMes.split('-')[0]}`}
                         icon={Users}
@@ -162,16 +185,16 @@ export default function Dashboard() {
                     />
 
                     <GradientCard 
-                        title="Faturamento Confirmado"
+                        title="Receita Confirmada (Paga)"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
-                        subValue="Estimativa mensal"
+                        subValue={`Est. Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
                         icon={DollarSign}
                         gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
                         loading={loading}
                     />
                 </div>
 
-                {/* ÁREA PRINCIPAL: LISTA DE HOJE (Substitui o menu de botões) */}
+                {/* ÁREA PRINCIPAL: LISTA DE HOJE */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
                     {/* COLUNA ESQUERDA: AGENDA DE HOJE */}
@@ -230,7 +253,7 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    {/* COLUNA DIREITA: STATUS RÁPIDO */}
+                    {/* COLUNA DIREITA: STATUS RÁPIDO & ATENDIMENTO */}
                     <div className="flex flex-col gap-6">
                         <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-lg flex flex-col justify-center items-center text-center h-full min-h-[200px]">
                             <div className="bg-white/10 p-4 rounded-full mb-4 animate-pulse">
@@ -238,9 +261,22 @@ export default function Dashboard() {
                             </div>
                             <h3 className="text-2xl font-bold">{statsDia.aguardando}</h3>
                             <p className="text-slate-300 text-sm font-medium uppercase tracking-widest mt-1">Pacientes Aguardando</p>
-                            <Link to="/recepcao" className="mt-6 w-full bg-white text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors shadow-lg">
-                                Realizar Atendimento
-                            </Link>
+                            
+                            {/* BOTÃO REALIZAR ATENDIMENTO (CONDICIONAL) */}
+                            {user?.profissional_id && (
+                                <button 
+                                    onClick={handleRealizarAtendimento}
+                                    className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
+                                >
+                                    <Stethoscope size={20}/> Realizar Atendimento
+                                </button>
+                            )}
+                            
+                            {!user?.profissional_id && (
+                                <p className="text-xs text-slate-500 mt-4 bg-black/20 px-3 py-1 rounded-lg">
+                                    Acesso ao atendimento restrito a profissionais médicos vinculados.
+                                </p>
+                            )}
                         </div>
                         
                         <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
@@ -250,15 +286,15 @@ export default function Dashboard() {
                             <div className="space-y-4">
                                 <div>
                                     <div className="flex justify-between text-xs mb-1 text-slate-500 dark:text-slate-400">
-                                        <span>Meta Diária (Est.)</span>
-                                        <span>85%</span>
+                                        <span>Fluxo Diário</span>
+                                        <span>Normal</span>
                                     </div>
                                     <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">
-                                        <div className="bg-green-500 h-2 rounded-full" style={{width: '85%'}}></div>
+                                        <div className="bg-green-500 h-2 rounded-full" style={{width: '75%'}}></div>
                                     </div>
                                 </div>
                                 <p className="text-xs text-slate-400 leading-relaxed">
-                                    A clínica está com um fluxo <strong>saudável</strong> hoje. Não há atrasos críticos registrados no momento.
+                                    Dados atualizados em tempo real conforme a movimentação da recepção.
                                 </p>
                             </div>
                         </div>

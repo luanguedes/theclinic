@@ -1,51 +1,123 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; // Adicione useRef
 import { useAuth } from '../context/AuthContext';
-import { useNotification } from '../context/NotificationContext'; // <--- NOVO
+import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2 
+  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X 
 } from 'lucide-react';
+
+// --- COMPONENTE SEARCHABLE SELECT (Reutilizado) ---
+const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const containerRef = useRef(null);
+
+    useEffect(() => { 
+        const selected = options.find(o => String(o.id) === String(value)); 
+        if (selected) setQuery(selected.label);
+        else if (!value) setQuery('');
+    }, [value, options]);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setIsOpen(false);
+                const selected = options.find(o => String(o.id) === String(value));
+                setQuery(selected ? selected.label : '');
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [containerRef, value, options]);
+
+    const filtered = (query === '' || query === (options.find(o => String(o.id) === String(value))?.label)) 
+        ? options 
+        : options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+    
+    return (
+        <div className="relative mb-4" ref={containerRef}>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+            <div className="relative">
+                <input 
+                    type="text"
+                    className="w-full pl-10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400" 
+                    value={query} 
+                    onFocus={() => setIsOpen(true)}
+                    onClick={() => setIsOpen(true)}
+                    onChange={e => { setQuery(e.target.value); setIsOpen(true); }} 
+                    placeholder={placeholder} autoComplete="off"
+                />
+                <div className="absolute left-3 top-3.5 text-slate-400"><Search size={18}/></div>
+                <div className="absolute right-2 top-3.5 flex items-center gap-1 text-slate-400">
+                    {value && <button type="button" onClick={(e)=>{e.stopPropagation(); onChange(null); setQuery('')}} className="hover:text-red-500"><X size={14}/></button>}
+                    <ChevronDown size={16}/>
+                </div>
+            </div>
+            {isOpen && (
+                <ul className="absolute z-[100] w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-auto mt-1 animate-in fade-in zoom-in duration-100">
+                    {filtered.length > 0 ? filtered.map(opt => (
+                        <li key={opt.id} onMouseDown={() => { onChange(opt.id); setQuery(opt.label); setIsOpen(false); }} className={`p-2.5 cursor-pointer text-sm border-b last:border-0 border-slate-100 dark:border-slate-700 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200`}>
+                            {opt.label}
+                            {String(value) === String(opt.id) && <Check size={14} className="text-blue-500"/>}
+                        </li>
+                    )) : <li className="p-3 text-sm text-slate-400 text-center">Nenhum resultado.</li>}
+                </ul>
+            )}
+        </div>
+    );
+};
 
 export default function CadastroOperador() {
   const { api } = useAuth();
-  const { notify } = useNotification(); // <--- HOOK
+  const { notify } = useNotification();
   const navigate = useNavigate();
   const { id } = useParams();
   
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(id ? true : false);
+  const [profissionais, setProfissionais] = useState([]); // Lista de profissionais
   
   const [formData, setFormData] = useState({
     username: '', password: '', first_name: '', email: '',
     acesso_atendimento: false, acesso_agendamento: false, 
     acesso_faturamento: false, is_superuser: false,
-    force_password_change: true
+    force_password_change: true,
+    profissional_id: null // Vinculo com médico
   });
 
   useEffect(() => {
-    if (id && api) {
-        api.get(`operadores/${id}/`)
-           .then(res => {
-                const data = res.data;
-                setFormData({
-                    username: data.username || '',
-                    first_name: data.first_name || '',
-                    email: data.email || '',
-                    acesso_atendimento: data.acesso_atendimento || false,
-                    acesso_agendamento: data.acesso_agendamento || false,
-                    acesso_faturamento: data.acesso_faturamento || false,
-                    is_superuser: data.is_superuser || false,
-                    force_password_change: data.force_password_change || false,
-                    password: ''
-                });
-           })
-           .catch(err => {
-               console.error(err);
-               if (err.response?.status === 401) notify.error("Sessão expirada. Faça login novamente.");
-               navigate('/operadores');
-           })
-           .finally(() => setFetching(false));
+    // 1. Carrega Profissionais para o Select
+    if (api) {
+        api.get('profissionais/').then(res => {
+            const lista = res.data.results || res.data;
+            setProfissionais(lista.map(p => ({ id: p.id, label: `${p.nome} (CPF: ${p.cpf})` })));
+        });
+
+        // 2. Carrega dados do Operador se for edição
+        if (id) {
+            api.get(`operadores/${id}/`)
+               .then(res => {
+                   const data = res.data;
+                   setFormData({
+                       username: data.username || '',
+                       first_name: data.first_name || '',
+                       email: data.email || '',
+                       acesso_atendimento: data.acesso_atendimento || false,
+                       acesso_agendamento: data.acesso_agendamento || false,
+                       acesso_faturamento: data.acesso_faturamento || false,
+                       is_superuser: data.is_superuser || false,
+                       force_password_change: data.force_password_change || false,
+                       profissional_id: data.profissional_id || null, // Carrega o ID
+                       password: ''
+                   });
+               })
+               .catch(err => {
+                   console.error(err);
+                   navigate('/operadores');
+               })
+               .finally(() => setFetching(false));
+        }
     }
   }, [id, api, navigate]);
 
@@ -62,16 +134,16 @@ export default function CadastroOperador() {
           const dadosParaEnviar = { ...formData };
           if (!dadosParaEnviar.password) delete dadosParaEnviar.password;
           await api.put(`operadores/${id}/`, dadosParaEnviar);
-          notify.success('Operador atualizado com sucesso!'); // <---
+          notify.success('Operador atualizado com sucesso!');
       } else {
           await api.post('operadores/novo/', formData);
-          notify.success('Operador criado com sucesso!'); // <---
+          notify.success('Operador criado com sucesso!');
       }
       navigate('/operadores');
     } catch (error) {
       console.error(error);
       const msg = error.response?.data?.error || 'Erro ao salvar operador.';
-      notify.error(msg); // <---
+      notify.error(msg);
     } finally {
       setLoading(false);
     }
@@ -149,6 +221,20 @@ export default function CadastroOperador() {
                     </div>
                   </div>
 
+                  {/* SELEÇÃO DE PROFISSIONAL VINCULADO */}
+                  <div className="col-span-2">
+                    <hr className="my-2 border-slate-100 dark:border-slate-700"/>
+                    <p className="text-xs text-blue-500 font-bold mb-2 uppercase tracking-wider flex items-center gap-1"><Stethoscope size={12}/> Vínculo Profissional (Médico)</p>
+                    <SearchableSelect 
+                        label="Este operador é um médico?" 
+                        placeholder="Pesquise o profissional..." 
+                        options={profissionais} 
+                        value={formData.profissional_id} 
+                        onChange={(val) => setFormData({...formData, profissional_id: val})}
+                    />
+                    <p className="text-xs text-slate-400">Ao vincular, este operador terá acesso ao Prontuário Eletrônico.</p>
+                  </div>
+
                   <div>
                     <label className={labelClass}>Nome de Usuário</label>
                     <div className="relative">
@@ -167,12 +253,12 @@ export default function CadastroOperador() {
                   
                    <div className="col-span-2 mt-2">
                      <PermissionToggle 
-                        name="force_password_change" 
-                        label="Forçar Troca de Senha" 
-                        icon={KeyRound} 
-                        checked={formData.force_password_change} 
-                        onChange={handleChange} 
-                      />
+                       name="force_password_change" 
+                       label="Forçar Troca de Senha" 
+                       icon={KeyRound} 
+                       checked={formData.force_password_change} 
+                       onChange={handleChange} 
+                     />
                    </div>
                 </div>
               </div>

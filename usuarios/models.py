@@ -4,6 +4,13 @@ from django.contrib.auth.models import User
 class PerfilOperador(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
     
+    profissional_vinculado = models.ForeignKey(
+        'profissionais.Profissional', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='usuario_sistema'
+    )
     acesso_atendimento = models.BooleanField(default=False)
     acesso_agendamento = models.BooleanField(default=False)
     acesso_faturamento = models.BooleanField(default=False)
