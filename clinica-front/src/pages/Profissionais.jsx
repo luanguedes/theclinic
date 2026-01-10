@@ -7,7 +7,7 @@ import { Search, UserPlus, Pencil, Trash2, Stethoscope, BriefcaseMedical } from 
 export default function Profissionais() {
   const { api } = useAuth();
   const navigate = useNavigate();
-  const [profissionais, setProfissionais] = useState([]);
+  const [profissionais, setProfissionais] = useState([]); // Array vazio inicial
   const [search, setSearch] = useState('');
 
   // --- FUNÇÃO AUXILIAR PARA FORMATAR O CPF NA TELA ---
@@ -18,11 +18,17 @@ export default function Profissionais() {
   };
 
   useEffect(() => {
-    // ROTA AJUSTADA: Agora chamamos 'profissionais/' (que no backend virou api/profissionais/)
     if(api) {
         api.get(`profissionais/?search=${search}`)
-           .then(res => setProfissionais(res.data.results || res.data))
-           .catch(err => console.error("Erro ao carregar profissionais", err));
+           .then(res => {
+               const data = res.data.results || res.data;
+               // BLINDAGEM: Só define se for array
+               setProfissionais(Array.isArray(data) ? data : []);
+           })
+           .catch(err => {
+               console.error("Erro ao carregar profissionais", err);
+               setProfissionais([]); // Garante que não quebre
+           });
     }
   }, [api, search]);
 
@@ -55,7 +61,6 @@ export default function Profissionais() {
             <button onClick={()=>navigate('/profissionais/novo')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold flex gap-2 transition-colors"><UserPlus size={20}/> Novo Profissional</button>
         </div>
 
-        {/* --- BUSCA SIMPLES --- */}
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border mb-6 border-slate-200 dark:border-slate-700 relative">
             <Search className="absolute left-7 top-7 text-slate-400" size={18} />
             <input 
@@ -72,7 +77,8 @@ export default function Profissionais() {
                     <tr><th className="px-6 py-4">Nome / CPF</th><th className="px-6 py-4">Especialidades</th><th className="px-6 py-4 text-right">Ações</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {profissionais.map(p => (
+                    {/* BLINDAGEM NO MAP: Verifica se é array antes de rodar */}
+                    {Array.isArray(profissionais) && profissionais.map(p => (
                         <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                             <td className="px-6 py-4">
                                 <div className="font-bold text-slate-700 dark:text-white">{p.nome}</div>
@@ -80,7 +86,7 @@ export default function Profissionais() {
                             </td>
                             <td className="px-6 py-4">
                                 <div className="flex flex-col gap-1">
-                                    {p.especialidades.map((esp, i) => (
+                                    {Array.isArray(p.especialidades) && p.especialidades.map((esp, i) => (
                                         <div key={i} className="flex items-center gap-2 text-sm">
                                             <span className="font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1">
                                                 <BriefcaseMedical size={12}/> {esp.nome_especialidade}
@@ -90,7 +96,7 @@ export default function Profissionais() {
                                             </span>
                                         </div>
                                     ))}
-                                    {p.especialidades.length === 0 && <span className="text-xs text-slate-400 italic">Nenhuma especialidade</span>}
+                                    {(!p.especialidades || p.especialidades.length === 0) && <span className="text-xs text-slate-400 italic">Nenhuma especialidade</span>}
                                 </div>
                             </td>
                             <td className="px-6 py-4 text-right flex justify-end gap-2">
@@ -99,7 +105,7 @@ export default function Profissionais() {
                             </td>
                         </tr>
                     ))}
-                    {profissionais.length === 0 && <tr><td colSpan="3" className="p-8 text-center text-slate-400">Nenhum profissional encontrado.</td></tr>}
+                    {(!profissionais || profissionais.length === 0) && <tr><td colSpan="3" className="p-8 text-center text-slate-400">Nenhum profissional encontrado.</td></tr>}
                 </tbody>
             </table>
         </div>

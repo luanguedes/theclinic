@@ -16,16 +16,15 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/me/', MeView.as_view(), name='me'),
 
-    # --- MÓDULOS ESPECÍFICOS (Devem vir ANTES de rotas genéricas) ---
+    # --- MÓDULOS ESPECÍFICOS (Devem vir PRIMEIRO) ---
     path('api/pacientes/', include('pacientes.urls')),
     path('api/operadores/', include('usuarios.urls')), 
     path('api/configuracoes/', include('configuracoes.urls')),
-    
-    # Agendamento e Agendas
     path('api/agendamento/', include('agendamento.urls')), 
     path('api/agendas/', include('agendas.urls')),
 
-    path('api/profissionais/', include('profissionais.urls')),
+    # --- MÓDULO DE PROFISSIONAIS E ESPECIALIDADES (POR ÚLTIMO) ---
+    path('api/', include('profissionais.urls')),
 ]
 
 if settings.DEBUG:

@@ -39,7 +39,8 @@ export default function Dashboard() {
             const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true`);
             const dadosDia = resDia.data.results || resDia.data;
             
-            // "Pacientes Agendados no Total" = Todos (independente do status)
+            // "Pacientes Agendados no Total" = Todos (independente do status, exceto cancelados se quiser remover da contagem visual, mas geralmente conta para fluxo)
+            // Aqui mantemos todos para saber o volume, mas filtramos o "Aguardando"
             const totalAgendadosDia = dadosDia.length;
             const aguardando = dadosDia.filter(a => a.status === 'aguardando').length;
 
@@ -51,19 +52,20 @@ export default function Dashboard() {
             const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
             const dadosMes = resMes.data.results || resMes.data;
 
-            // "Total de pacientes no mês deve considerar a quantidade total de agendamento, independente da situação"
+            // Total de agendamentos no mês
             const totalPacientesMes = dadosMes.length;
 
-            // RECEITA CONFIRMADA: Apenas quem já pagou (fatura_pago = true)
-            // Precisamos garantir que o serializer esteja enviando 'fatura_pago'
+            // RECEITA CONFIRMADA: Apenas quem já pagou (fatura_pago = true) e NÃO está cancelado
+            // (Embora se pagou, teoricamente conta, mas se cancelou deveria estornar. Vamos garantir que cancelado não entra).
             const receitaConfirmada = dadosMes
-                .filter(a => a.fatura_pago === true)
+                .filter(a => a.fatura_pago === true && a.status !== 'cancelado')
                 .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
 
-            // RECEITA ESTIMADA: Todos agendados - Faltosos - Cancelados
-            // (Assumindo que 'agendado', 'aguardando', 'em_atendimento', 'finalizado' contam)
+            // RECEITA ESTIMADA: 
+            // Soma tudo, EXCETO 'cancelado' e 'faltou'.
+            // Agendado, Aguardando, Em Atendimento, Finalizado -> CONTAM.
             const receitaEstimada = dadosMes
-                .filter(a => a.status !== 'faltou' && a.status !== 'cancelado')
+                .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
                 .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
 
             setStatsMes({ 
@@ -80,16 +82,10 @@ export default function Dashboard() {
     };
 
     const handleRealizarAtendimento = () => {
-        // Redireciona para o Prontuário (que será criado no futuro)
-        // Por enquanto, podemos colocar um aviso ou redirecionar para uma rota placeholder
         if (!user.profissional_id) {
             notify.error("Apenas profissionais de saúde podem realizar atendimento.");
             return;
         }
-        // Exemplo: rota futura
-        navigate('/atendimento/prontuario'); 
-        // Como não existe ainda, vai cair no 404 ou dashboard, 
-        // ou você pode colocar um alert provisório:
         notify.info("Módulo de Prontuário será implementado em breve.");
     };
 

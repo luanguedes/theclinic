@@ -13,6 +13,7 @@ export default function Recepcao() {
 
     // --- ESTADOS ---
     const [loading, setLoading] = useState(false);
+    // Inicializa como arrays vazios
     const [agendamentos, setAgendamentos] = useState([]);
     const [profissionais, setProfissionais] = useState([]);
     
@@ -38,8 +39,10 @@ export default function Recepcao() {
     useEffect(() => {
         if(api) {
             api.get('profissionais/').then(res => {
-                setProfissionais(res.data.results || res.data);
-            });
+                const data = res.data.results || res.data;
+                // Proteção: Só salva se for array
+                setProfissionais(Array.isArray(data) ? data : []);
+            }).catch(() => setProfissionais([]));
         }
     }, [api]);
 
@@ -56,10 +59,14 @@ export default function Recepcao() {
             if (profissionalFiltro) params.append('profissional', profissionalFiltro);
             
             const res = await api.get(`agendamento/?${params.toString()}`);
-            setAgendamentos(res.data.results || res.data);
+            const data = res.data.results || res.data;
+            
+            // Proteção: Só salva se for array
+            setAgendamentos(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error(error);
             notify.error("Erro ao carregar agenda.");
+            setAgendamentos([]); // Garante lista vazia em caso de erro
         } finally {
             setLoading(false);
         }
@@ -88,7 +95,8 @@ export default function Recepcao() {
         return idade;
     };
 
-    const itensFiltrados = agendamentos.filter(item => {
+    // Proteção no filtro: garante que agendamentos é array antes de filtrar
+    const itensFiltrados = Array.isArray(agendamentos) ? agendamentos.filter(item => {
         if (!statusVisiveis.includes(item.status)) return false;
         if (buscaTexto) {
             const termo = buscaTexto.toLowerCase();
@@ -96,7 +104,7 @@ export default function Recepcao() {
                    item.nome_profissional?.toLowerCase().includes(termo);
         }
         return true;
-    });
+    }) : [];
 
     const toggleStatus = (status) => {
         if (statusVisiveis.includes(status)) {
@@ -220,7 +228,8 @@ export default function Recepcao() {
                         <label className="text-xs font-bold text-slate-500 mb-1 block">Profissional</label>
                         <select value={profissionalFiltro} onChange={e => setProfissionalFiltro(e.target.value)} className={inputClass}>
                             <option value="">Todos os profissionais</option>
-                            {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                            {/* Proteção no Map de Profissionais */}
+                            {Array.isArray(profissionais) && profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                         </select>
                     </div>
                     <div className="flex-1">
@@ -263,6 +272,7 @@ export default function Recepcao() {
                                 ) : itensFiltrados.length === 0 ? (
                                     <tr><td colSpan="5" className="p-10 text-center text-slate-400">Nenhum paciente encontrado para os filtros.</td></tr>
                                 ) : (
+                                    // Proteção já garantida no itensFiltrados
                                     itensFiltrados.map((item) => {
                                         const atrasado = verificarAtraso(item.horario, item.status);
                                         const idade = item.detalhes_pdf?.paciente_nascimento ? calcularIdade(item.detalhes_pdf.paciente_nascimento) : '';
@@ -270,7 +280,7 @@ export default function Recepcao() {
                                         return (
                                             <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                                 <td className="px-6 py-4">
-                                                    <div className={`font-bold text-lg ${atrasado ? 'text-red-500 animate-pulse flex items-center gap-1' : 'text-slate-700 dark:text-white'}`}>
+                                                    <div className={`font-bold text-lg ${atrasado ? 'text-red-500 animate-pulse flex items-center gap-1' : 'text-slate-700 dark:text-slate-200'}`}>
                                                         {item.horario.substring(0, 5)}
                                                         {atrasado && <AlertCircle size={14}/>}
                                                     </div>

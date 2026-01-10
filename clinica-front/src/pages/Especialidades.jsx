@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
-// MUDANÇA 1: Troquei 'Edit' por 'Pencil' para padronizar com as outras telas
 import { Plus, Pencil, Trash2, Tag, X, Save, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function Especialidades() {
@@ -35,18 +34,22 @@ export default function Especialidades() {
       const response = await api.get(`especialidades/?page=${page}&page_size=${pageSize}&search=${search}`);
       const data = response.data;
 
-      if (data.results) {
+      // BLINDAGEM AQUI
+      if (data.results && Array.isArray(data.results)) {
         setEspecialidades(data.results);
         setTotalCount(data.count);
         setTotalPages(Math.ceil(data.count / pageSize));
-      } else {
+      } else if (Array.isArray(data)) {
         setEspecialidades(data);
         setTotalPages(1);
         setTotalCount(data.length);
+      } else {
+        setEspecialidades([]); // Garante array vazio se vier erro
       }
     } catch (error) {
       console.error("Erro", error);
       if (page > 1) setPage(1);
+      setEspecialidades([]);
     } finally {
       setLoading(false);
     }
@@ -88,8 +91,6 @@ export default function Especialidades() {
   };
 
   const paginationBtnClass = "p-2 border rounded-lg transition-colors disabled:opacity-50 bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700";
-  
-  // PADRÃO DE BOTÃO IDENTICO AO DE PACIENTES/OPERADORES
   const actionBtnClass = "p-2 bg-transparent rounded-lg transition-colors";
   const editBtnClass = `${actionBtnClass} text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30`;
   const deleteBtnClass = `${actionBtnClass} text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30`;
@@ -131,13 +132,13 @@ export default function Especialidades() {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {especialidades.map((item) => (
+                    {/* BLINDAGEM NO MAP */}
+                    {Array.isArray(especialidades) && especialidades.map((item) => (
                         <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                             <td className="px-6 py-4 font-medium text-slate-700 dark:text-white">
                                 {item.nome}
                             </td>
                             <td className="px-6 py-4 text-right flex justify-end gap-2">
-                                {/* BOTÕES PADRONIZADOS */}
                                 <button onClick={() => handleOpenModal(item)} className={editBtnClass} title="Editar">
                                     <Pencil size={18}/>
                                 </button>
@@ -147,7 +148,7 @@ export default function Especialidades() {
                             </td>
                         </tr>
                     ))}
-                    {especialidades.length === 0 && !loading && (
+                    {(!especialidades || especialidades.length === 0) && !loading && (
                         <tr><td colSpan="2" className="p-8 text-center text-slate-400">Nenhuma especialidade encontrada.</td></tr>
                     )}
                 </tbody>
