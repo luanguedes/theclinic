@@ -5,7 +5,6 @@ from pacientes.models import Paciente
 from configuracoes.models import Convenio 
 
 class BloqueioAgenda(models.Model):
-    # ... (Mantenha o BloqueioAgenda como estava) ...
     TIPO_CHOICES = [
         ('feriado', 'Feriado'),
         ('bloqueio', 'Bloqueio Manual (Férias/Reunião)'),
@@ -52,10 +51,9 @@ class Agendamento(models.Model):
         ordering = ['data', 'horario']
         constraints = [
             models.UniqueConstraint(
-                # AQUI: Garante que O MESMO PACIENTE não tenha dois agendamentos iguais
                 fields=['profissional', 'data', 'horario', 'paciente'], 
                 condition=Q(status__in=['agendado', 'aguardando', 'em_atendimento']),
-                name='unique_paciente_horario' # Nome diferente do anterior para forçar recriação
+                name='unique_paciente_horario'
             )
         ]
 

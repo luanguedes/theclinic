@@ -1,15 +1,11 @@
-# ARQUIVO: agendamento/urls.py
-
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import AgendamentoViewSet, BloqueioAgendaViewSet
 
 router = DefaultRouter()
-
-# --- CORREÇÃO: Bloqueios vem PRIMEIRO ---
+# Bloqueios PRIMEIRO
 router.register(r'bloqueios', BloqueioAgendaViewSet, basename='bloqueios') 
-
-# --- A rota vazia (catch-all) vem POR ÚLTIMO ---
+# Agendamento DEPOIS
 router.register(r'', AgendamentoViewSet, basename='agendamento')
 
 urlpatterns = [
