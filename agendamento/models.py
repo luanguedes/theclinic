@@ -5,29 +5,25 @@ from pacientes.models import Paciente
 from configuracoes.models import Convenio 
 
 class BloqueioAgenda(models.Model):
+    # ... (Mantenha o BloqueioAgenda como estava) ...
     TIPO_CHOICES = [
         ('feriado', 'Feriado'),
         ('bloqueio', 'Bloqueio Manual (Férias/Reunião)'),
     ]
-
-    profissional = models.ForeignKey(Profissional, on_delete=models.CASCADE, null=True, blank=True) # Null = Todos
+    profissional = models.ForeignKey(Profissional, on_delete=models.CASCADE, null=True, blank=True)
     data_inicio = models.DateField()
     data_fim = models.DateField()
     hora_inicio = models.TimeField(default='00:00')
     hora_fim = models.TimeField(default='23:59')
-    
     motivo = models.CharField(max_length=255)
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='bloqueio')
-    recorrente = models.BooleanField(default=False, help_text="Repete todo ano na mesma data (para feriados)")
-    
+    recorrente = models.BooleanField(default=False)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        quem = self.profissional.nome if self.profissional else "Todos"
-        return f"{self.get_tipo_display()} - {quem} ({self.data_inicio})"
+        return f"{self.motivo}"
 
 class Agendamento(models.Model):
-    # ... (Seus campos anteriores continuam aqui: Status, profissional, etc) ...
     class Status(models.TextChoices):
         AGENDADO = 'agendado', 'Agendado'
         AGUARDANDO = 'aguardando', 'Aguardando Atendimento'
@@ -54,12 +50,14 @@ class Agendamento(models.Model):
 
     class Meta:
         ordering = ['data', 'horario']
-        # --- TRAVA DE SEGURANÇA NO BANCO ---
+        # --- CORREÇÃO DE LÓGICA ---
+        # Removemos a restrição de horário único global.
+        # Adicionamos restrição para o MESMO PACIENTE não duplicar no mesmo horário.
         constraints = [
             models.UniqueConstraint(
-                fields=['profissional', 'data', 'horario'], 
-                condition=Q(is_encaixe=False, status__in=['agendado', 'aguardando', 'em_atendimento']),
-                name='unique_agendamento_horario'
+                fields=['profissional', 'data', 'horario', 'paciente'], 
+                condition=Q(status__in=['agendado', 'aguardando', 'em_atendimento']),
+                name='unique_paciente_horario'
             )
         ]
 
