@@ -6,7 +6,7 @@ import Layout from '../components/Layout';
 import { 
     Users, DollarSign, Activity, Clock, TrendingUp, 
     CalendarCheck, AlertCircle, ChevronRight, Stethoscope,
-    Calendar, Filter, ArrowUpRight, Plus, Search
+    Calendar, Filter, Plus
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -79,7 +79,7 @@ export default function Dashboard() {
             notify.error("Apenas profissionais de saúde podem realizar atendimento.");
             return;
         }
-        navigate('/triagem'); // Ajuste conforme sua rota de atendimento
+        navigate('/triagem'); 
     };
 
     const getStatusStyle = (status) => {
@@ -94,7 +94,6 @@ export default function Dashboard() {
         }
     };
 
-    // --- NOVO COMPONENTE DE CARD (CLEAN STYLE) ---
     const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading }) => (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start mb-4">
@@ -124,7 +123,7 @@ export default function Dashboard() {
         <Layout>
             <div className="max-w-7xl mx-auto pb-10">
                 
-                {/* CABEÇALHO COM TOOLBAR UNIFICADA */}
+                {/* CABEÇALHO */}
                 <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-6">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight flex items-center gap-2">
@@ -135,7 +134,6 @@ export default function Dashboard() {
                         </p>
                     </div>
 
-                    {/* BARRA DE FILTROS ESTILO "TOOLBAR" */}
                     <div className="flex items-center bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
                         <div className="flex items-center gap-2 px-3 py-2 border-r border-slate-100 dark:border-slate-700">
                             <Filter size={16} className="text-slate-400"/>
@@ -164,7 +162,7 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* KPI CARDS (NOVO DESIGN CLEAN) */}
+                {/* KPI CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <StatCard 
                         title="Agendamentos (Dia)"
@@ -214,7 +212,6 @@ export default function Dashboard() {
                                     <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div> Carregando...
                                 </div>
                             ) : listaHoje.length === 0 ? (
-                                // EMPTY STATE MELHORADO
                                 <div className="h-full flex flex-col items-center justify-center py-12 text-center">
                                     <div className="bg-slate-50 dark:bg-slate-700/50 p-6 rounded-full mb-4">
                                         <Calendar size={48} className="text-slate-300 dark:text-slate-600"/>
@@ -269,37 +266,41 @@ export default function Dashboard() {
                     {/* COLUNA DIREITA */}
                     <div className="flex flex-col gap-6">
                         
-                        {/* CARD 'AGUARDANDO' (CONTRASTE CORRIGIDO) */}
-                        <div className="bg-slate-900 dark:bg-black rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-center items-center text-center">
-                            {/* Bolinhas decorativas ao fundo */}
-                            <div className="absolute top-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -translate-x-10 -translate-y-10"></div>
-                            <div className="absolute bottom-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl translate-x-10 translate-y-10"></div>
+                        {/* CARD 'AGUARDANDO' (AGORA BRANCO E CLEAN) */}
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden flex flex-col justify-center items-center text-center">
+                            {/* Borda de status no topo */}
+                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-yellow-400"></div>
 
-                            <div className="relative z-10">
-                                <div className="bg-white/10 p-3 rounded-full mb-4 inline-flex items-center justify-center">
-                                    <AlertCircle size={28} className="text-yellow-400"/>
+                            <div className="relative z-10 w-full">
+                                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-full mb-4 inline-flex items-center justify-center ring-8 ring-yellow-50/50 dark:ring-yellow-900/10">
+                                    <AlertCircle size={32} className="text-yellow-600 dark:text-yellow-400"/>
                                 </div>
-                                <h3 className="text-4xl font-extrabold text-white">{statsDia.aguardando}</h3>
-                                <p className="text-slate-400 text-sm font-medium mt-1 uppercase tracking-widest">Pacientes Aguardando</p>
                                 
-                                <div className="w-12 h-1 bg-slate-700 rounded-full mx-auto my-6"></div>
-
+                                <h3 className="text-5xl font-extrabold text-slate-800 dark:text-white mb-1 tracking-tighter">
+                                    {statsDia.aguardando}
+                                </h3>
+                                <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">
+                                    Pacientes Aguardando
+                                </p>
+                                
                                 {user?.profissional_id ? (
                                     <button 
                                         onClick={handleRealizarAtendimento}
-                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg shadow-blue-900/50 flex items-center justify-center gap-2 active:scale-95"
+                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2 active:scale-95"
                                     >
                                         <Stethoscope size={18}/> Iniciar Atendimento
                                     </button>
                                 ) : (
-                                    <p className="text-xs text-slate-500 bg-slate-800/50 px-4 py-2 rounded-lg border border-slate-700">
-                                        Acesso ao atendimento restrito a médicos.
-                                    </p>
+                                    <div className="bg-slate-50 dark:bg-slate-700/50 px-4 py-3 rounded-lg border border-slate-100 dark:border-slate-700">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                            Acesso ao atendimento restrito a médicos.
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         </div>
                         
-                        {/* CARD PERFORMANCE (REFINADO) */}
+                        {/* CARD PERFORMANCE */}
                         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
                             <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
                                 <TrendingUp size={18} className="text-green-600"/> Performance Diária
@@ -308,7 +309,7 @@ export default function Dashboard() {
                                 <div>
                                     <div className="flex justify-between text-xs mb-2 font-medium">
                                         <span className="text-slate-500">Ocupação da Agenda</span>
-                                        <span className="text-slate-800 dark:text-white">Moderada</span>
+                                        <span className="text-slate-800 dark:text-white">Normal</span>
                                     </div>
                                     <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
                                         <div className="bg-green-500 h-full rounded-full w-[65%]"></div>
