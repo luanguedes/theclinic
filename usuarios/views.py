@@ -38,6 +38,7 @@ class MeView(APIView):
 
     def get(self, request):
         user = request.user
+        prof_id = user.profissional.id if user.profissional else None
         
         # Como estamos usando o modelo Operador customizado, 
         # os campos estão DIRETO no usuário, não precisa de .perfil
@@ -47,7 +48,7 @@ class MeView(APIView):
             "first_name": user.first_name,
             "email": user.email,
             "is_superuser": user.is_superuser,
-            "profissional_id": getattr(user, 'profissional_id', None),
+            "profissional_id": prof_id,
             
             # Permissões
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),

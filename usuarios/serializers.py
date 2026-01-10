@@ -4,6 +4,7 @@ from .models import Operador
 class OperadorSerializer(serializers.ModelSerializer):
     # Senha é write_only (só aceita na escrita, não retorna na leitura por segurança)
     password = serializers.CharField(write_only=True, required=False)
+    profissional_nome = serializers.CharField(source='profissional.nome', read_only=True)
 
     class Meta:
         model = Operador
@@ -11,6 +12,7 @@ class OperadorSerializer(serializers.ModelSerializer):
             'id', 'username', 'first_name', 'last_name', 'email', 'password',
             'is_superuser', 
             'profissional',
+            'profissional_nome',
             'acesso_agendamento', 
             'acesso_atendimento', 
             'acesso_faturamento', 

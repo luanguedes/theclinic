@@ -66,6 +66,7 @@ export default function Operadores() {
                         <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 text-xs uppercase font-bold">
                             <tr>
                                 <th className="px-6 py-4">Nome / Usuário</th>
+                                <th className="px-6 py-4">Profissional Vinculado</th>
                                 <th className="px-6 py-4">Permissões</th>
                                 <th className="px-6 py-4 text-right">Ações</th>
                             </tr>
@@ -76,6 +77,15 @@ export default function Operadores() {
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-slate-700 dark:text-white">{op.first_name || 'Sem nome'}</div>
                                         <div className="text-xs text-slate-500">{op.username}</div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                    {op.profissional_nome ? (
+                                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs font-bold border border-blue-100 flex items-center gap-1 w-fit">
+                                            <Stethoscope size={12}/> {op.profissional_nome}
+                                        </span>
+                                        ) : (
+                                        <span className="text-slate-400 text-xs">-</span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex flex-wrap gap-1">
