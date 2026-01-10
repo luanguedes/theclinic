@@ -5,7 +5,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
     Users, DollarSign, Activity, Clock, TrendingUp, 
-    CalendarCheck, AlertCircle, ChevronRight, Stethoscope 
+    CalendarCheck, AlertCircle, ChevronRight, Stethoscope,
+    Calendar, Filter, ArrowUpRight, Plus, Search
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -39,8 +40,6 @@ export default function Dashboard() {
             const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true`);
             const dadosDia = resDia.data.results || resDia.data;
             
-            // "Pacientes Agendados no Total" = Todos (independente do status, exceto cancelados se quiser remover da contagem visual, mas geralmente conta para fluxo)
-            // Aqui mantemos todos para saber o volume, mas filtramos o "Aguardando"
             const totalAgendadosDia = dadosDia.length;
             const aguardando = dadosDia.filter(a => a.status === 'aguardando').length;
 
@@ -52,18 +51,12 @@ export default function Dashboard() {
             const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
             const dadosMes = resMes.data.results || resMes.data;
 
-            // Total de agendamentos no mês
             const totalPacientesMes = dadosMes.length;
 
-            // RECEITA CONFIRMADA: Apenas quem já pagou (fatura_pago = true) e NÃO está cancelado
-            // (Embora se pagou, teoricamente conta, mas se cancelou deveria estornar. Vamos garantir que cancelado não entra).
             const receitaConfirmada = dadosMes
                 .filter(a => a.fatura_pago === true && a.status !== 'cancelado')
                 .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
 
-            // RECEITA ESTIMADA: 
-            // Soma tudo, EXCETO 'cancelado' e 'faltou'.
-            // Agendado, Aguardando, Em Atendimento, Finalizado -> CONTAM.
             const receitaEstimada = dadosMes
                 .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
                 .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
@@ -86,160 +79,184 @@ export default function Dashboard() {
             notify.error("Apenas profissionais de saúde podem realizar atendimento.");
             return;
         }
-        notify.info("Módulo de Prontuário será implementado em breve.");
+        navigate('/triagem'); // Ajuste conforme sua rota de atendimento
     };
-
-    // --- COMPONENTES VISUAIS ---
-    
-    const FilterInput = ({ type, value, onChange, label }) => (
-        <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">{label}</span>
-            <input 
-                type={type} 
-                value={value} 
-                onChange={e => onChange(e.target.value)} 
-                className="bg-transparent border-b border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm py-1 outline-none focus:border-blue-500 transition-colors font-semibold"
-            />
-        </div>
-    );
-
-    const GradientCard = ({ title, value, subValue, icon: Icon, gradient, loading }) => (
-        <div className={`relative overflow-hidden rounded-3xl p-6 text-white shadow-xl ${gradient} transition-all hover:scale-[1.02]`}>
-            <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                    <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md">
-                        <Icon size={24} className="text-white" />
-                    </div>
-                    {loading && <div className="h-6 w-16 bg-white/20 animate-pulse rounded-full"></div>}
-                </div>
-                <div>
-                    <p className="text-blue-100 font-medium text-sm mb-1">{title}</p>
-                    <h3 className="text-4xl font-bold tracking-tight">{loading ? '...' : value}</h3>
-                    {subValue && (
-                        <p className="text-white/80 text-xs mt-2 font-medium bg-black/10 inline-block px-2 py-1 rounded-lg">
-                            {subValue}
-                        </p>
-                    )}
-                </div>
-            </div>
-            <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
-        </div>
-    );
 
     const getStatusStyle = (status) => {
         switch(status) {
-            case 'agendado': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
-            case 'aguardando': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 animate-pulse';
-            case 'em_atendimento': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
-            case 'finalizado': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
-            case 'faltou': return 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400';
-            case 'cancelado': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+            case 'agendado': return 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
+            case 'aguardando': return 'bg-yellow-50 text-yellow-700 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800';
+            case 'em_atendimento': return 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
+            case 'finalizado': return 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800';
+            case 'faltou': return 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+            case 'cancelado': return 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
             default: return 'bg-gray-100 text-gray-600';
         }
     };
+
+    // --- NOVO COMPONENTE DE CARD (CLEAN STYLE) ---
+    const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading }) => (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+                <div>
+                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{title}</p>
+                    {loading ? (
+                        <div className="h-8 w-24 bg-slate-100 dark:bg-slate-700 animate-pulse rounded mt-2"></div>
+                    ) : (
+                        <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1 tracking-tight">{value}</h3>
+                    )}
+                </div>
+                <div className={`p-3 rounded-xl ${colorClass}`}>
+                    <Icon size={24} />
+                </div>
+            </div>
+            {subValue && (
+                <div className="flex items-center gap-2 text-sm">
+                    <span className="flex items-center text-slate-400 font-medium">
+                       {subValue}
+                    </span>
+                </div>
+            )}
+        </div>
+    );
 
     return (
         <Layout>
             <div className="max-w-7xl mx-auto pb-10">
                 
-                {/* CABEÇALHO */}
-                <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
+                {/* CABEÇALHO COM TOOLBAR UNIFICADA */}
+                <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-6">
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">
-                            Dashboard
+                        <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight flex items-center gap-2">
+                           <Activity size={24} className="text-blue-600"/> Dashboard
                         </h1>
-                        <p className="text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
-                            <Activity size={16} className="text-green-500"/> 
-                            Visão geral de <span className="font-bold text-slate-700 dark:text-slate-200">{user?.first_name || user?.username}</span>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
+                            Visão geral de <span className="font-semibold text-slate-900 dark:text-slate-200">{user?.first_name || user?.username}</span>
                         </p>
                     </div>
 
-                    <div className="flex gap-6 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-                        <FilterInput label="Dia Referência" type="date" value={filtroDia} onChange={setFiltroDia} />
-                        <FilterInput label="Mês Financeiro" type="month" value={filtroMes} onChange={setFiltroMes} />
+                    {/* BARRA DE FILTROS ESTILO "TOOLBAR" */}
+                    <div className="flex items-center bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 px-3 py-2 border-r border-slate-100 dark:border-slate-700">
+                            <Filter size={16} className="text-slate-400"/>
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide hidden sm:inline">Filtros:</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 px-3">
+                            <span className="text-xs text-slate-400">Dia:</span>
+                            <input 
+                                type="date" 
+                                value={filtroDia} 
+                                onChange={e => setFiltroDia(e.target.value)} 
+                                className="bg-transparent text-sm font-semibold text-slate-700 dark:text-white outline-none cursor-pointer"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-2 px-3 border-l border-slate-100 dark:border-slate-700">
+                            <span className="text-xs text-slate-400">Mês:</span>
+                            <input 
+                                type="month" 
+                                value={filtroMes} 
+                                onChange={e => setFiltroMes(e.target.value)} 
+                                className="bg-transparent text-sm font-semibold text-slate-700 dark:text-white outline-none cursor-pointer"
+                            />
+                        </div>
                     </div>
                 </div>
 
-                {/* KPI CARDS */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                    <GradientCard 
+                {/* KPI CARDS (NOVO DESIGN CLEAN) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <StatCard 
                         title="Agendamentos (Dia)"
                         value={statsDia.total}
-                        subValue={`${statsDia.aguardando} Aguardando`}
+                        subValue={`${statsDia.aguardando} Aguardando atendimento`}
                         icon={CalendarCheck}
-                        gradient="bg-gradient-to-br from-blue-600 to-indigo-600"
+                        colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
                         loading={loading}
                     />
 
-                    <GradientCard 
+                    <StatCard 
                         title="Total Agendamentos (Mês)"
                         value={statsMes.totalPacientes}
                         subValue={`Referente a ${filtroMes.split('-')[1]}/${filtroMes.split('-')[0]}`}
                         icon={Users}
-                        gradient="bg-gradient-to-br from-violet-600 to-purple-600"
+                        colorClass="bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400"
                         loading={loading}
                     />
 
-                    <GradientCard 
-                        title="Receita Confirmada (Paga)"
+                    <StatCard 
+                        title="Receita Confirmada"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
-                        subValue={`Est. Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
+                        subValue={`Estimado Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
                         icon={DollarSign}
-                        gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+                        colorClass="bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400"
                         loading={loading}
                     />
                 </div>
 
-                {/* ÁREA PRINCIPAL: LISTA DE HOJE */}
+                {/* ÁREA PRINCIPAL */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
                     {/* COLUNA ESQUERDA: AGENDA DE HOJE */}
-                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-                            <div>
-                                <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
-                                    <Clock className="text-blue-500" size={20}/> Agenda do Dia
-                                </h3>
-                                <p className="text-xs text-slate-500">Visualização rápida dos pacientes de hoje ({filtroDia.split('-')[2]}/{filtroDia.split('-')[1]})</p>
-                            </div>
-                            <Link to="/recepcao" className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg transition-colors">
+                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[400px]">
+                        <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                            <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                                <Clock size={20} className="text-slate-400"/> Agenda do Dia
+                            </h3>
+                            <Link to="/recepcao" className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
                                 Ir para Recepção <ChevronRight size={16}/>
                             </Link>
                         </div>
                         
-                        <div className="flex-1 overflow-auto max-h-[400px] p-2">
+                        <div className="flex-1 overflow-auto p-2">
                             {loading ? (
-                                <div className="text-center py-10 text-slate-400">Carregando...</div>
+                                <div className="flex items-center justify-center h-full text-slate-400 gap-2">
+                                    <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div> Carregando...
+                                </div>
                             ) : listaHoje.length === 0 ? (
-                                <div className="text-center py-12 flex flex-col items-center">
-                                    <div className="bg-slate-100 dark:bg-slate-700 p-4 rounded-full mb-3 text-slate-400"><CalendarCheck size={32}/></div>
-                                    <p className="text-slate-500 font-medium">Nenhum agendamento para este dia.</p>
+                                // EMPTY STATE MELHORADO
+                                <div className="h-full flex flex-col items-center justify-center py-12 text-center">
+                                    <div className="bg-slate-50 dark:bg-slate-700/50 p-6 rounded-full mb-4">
+                                        <Calendar size={48} className="text-slate-300 dark:text-slate-600"/>
+                                    </div>
+                                    <h4 className="text-slate-900 dark:text-white font-bold text-lg">Agenda Livre</h4>
+                                    <p className="text-slate-500 max-w-xs mx-auto mt-2 mb-6">
+                                        Nenhum paciente agendado para hoje ({filtroDia.split('-')[2]}/{filtroDia.split('-')[1]}).
+                                    </p>
+                                    <button 
+                                        onClick={() => navigate('/agenda/marcar')} 
+                                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none transition-all active:scale-95"
+                                    >
+                                        <Plus size={18}/> Novo Agendamento
+                                    </button>
                                 </div>
                             ) : (
                                 <table className="w-full text-left border-collapse">
-                                    <thead className="text-xs text-slate-400 uppercase tracking-wider bg-white dark:bg-slate-800 sticky top-0 z-10">
+                                    <thead className="text-xs font-semibold text-slate-400 uppercase tracking-wider bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-3 font-bold">Horário</th>
-                                            <th className="px-6 py-3 font-bold">Paciente</th>
-                                            <th className="px-6 py-3 font-bold">Status</th>
-                                            <th className="px-6 py-3 font-bold text-right">Valor</th>
+                                            <th className="px-6 py-3">Horário</th>
+                                            <th className="px-6 py-3">Paciente</th>
+                                            <th className="px-6 py-3">Status</th>
+                                            <th className="px-6 py-3 text-right">Valor</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
                                         {listaHoje.map((item) => (
-                                            <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                                <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.horario.slice(0,5)}</td>
-                                                <td className="px-6 py-4">
-                                                    <div className="font-bold text-slate-800 dark:text-white">{item.nome_paciente}</div>
-                                                    <div className="text-xs text-slate-500">{item.nome_profissional}</div>
+                                            <tr key={item.id} className="group hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                                <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 font-mono">
+                                                    {item.horario.slice(0,5)}
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${getStatusStyle(item.status)}`}>
+                                                    <div className="font-bold text-slate-800 dark:text-white">{item.nome_paciente}</div>
+                                                    <div className="text-xs text-slate-500 group-hover:text-blue-500 transition-colors">{item.nome_profissional}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold capitalize ${getStatusStyle(item.status)}`}>
                                                         {item.status.replace('_', ' ')}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-right font-medium text-slate-600 dark:text-slate-400">
-                                                    {item.valor > 0 ? `R$ ${Number(item.valor).toFixed(2)}` : '-'}
+                                                    {item.valor > 0 ? `R$ ${Number(item.valor).toFixed(2)}` : <span className="text-slate-300">-</span>}
                                                 </td>
                                             </tr>
                                         ))}
@@ -249,48 +266,56 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    {/* COLUNA DIREITA: STATUS RÁPIDO & ATENDIMENTO */}
+                    {/* COLUNA DIREITA */}
                     <div className="flex flex-col gap-6">
-                        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-lg flex flex-col justify-center items-center text-center h-full min-h-[200px]">
-                            <div className="bg-white/10 p-4 rounded-full mb-4 animate-pulse">
-                                <AlertCircle size={32} className="text-yellow-400"/>
+                        
+                        {/* CARD 'AGUARDANDO' (CONTRASTE CORRIGIDO) */}
+                        <div className="bg-slate-900 dark:bg-black rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-center items-center text-center">
+                            {/* Bolinhas decorativas ao fundo */}
+                            <div className="absolute top-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -translate-x-10 -translate-y-10"></div>
+                            <div className="absolute bottom-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl translate-x-10 translate-y-10"></div>
+
+                            <div className="relative z-10">
+                                <div className="bg-white/10 p-3 rounded-full mb-4 inline-flex items-center justify-center">
+                                    <AlertCircle size={28} className="text-yellow-400"/>
+                                </div>
+                                <h3 className="text-4xl font-extrabold text-white">{statsDia.aguardando}</h3>
+                                <p className="text-slate-400 text-sm font-medium mt-1 uppercase tracking-widest">Pacientes Aguardando</p>
+                                
+                                <div className="w-12 h-1 bg-slate-700 rounded-full mx-auto my-6"></div>
+
+                                {user?.profissional_id ? (
+                                    <button 
+                                        onClick={handleRealizarAtendimento}
+                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg shadow-blue-900/50 flex items-center justify-center gap-2 active:scale-95"
+                                    >
+                                        <Stethoscope size={18}/> Iniciar Atendimento
+                                    </button>
+                                ) : (
+                                    <p className="text-xs text-slate-500 bg-slate-800/50 px-4 py-2 rounded-lg border border-slate-700">
+                                        Acesso ao atendimento restrito a médicos.
+                                    </p>
+                                )}
                             </div>
-                            <h3 className="text-2xl font-bold">{statsDia.aguardando}</h3>
-                            <p className="text-slate-300 text-sm font-medium uppercase tracking-widest mt-1">Pacientes Aguardando</p>
-                            
-                            {/* BOTÃO REALIZAR ATENDIMENTO (CONDICIONAL) */}
-                            {user?.profissional_id && (
-                                <button 
-                                    onClick={handleRealizarAtendimento}
-                                    className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
-                                >
-                                    <Stethoscope size={20}/> Realizar Atendimento
-                                </button>
-                            )}
-                            
-                            {!user?.profissional_id && (
-                                <p className="text-xs text-slate-500 mt-4 bg-black/20 px-3 py-1 rounded-lg">
-                                    Acesso ao atendimento restrito a profissionais médicos vinculados.
-                                </p>
-                            )}
                         </div>
                         
-                        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
-                            <h4 className="font-bold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
-                                <TrendingUp size={18} className="text-green-500"/> Performance
+                        {/* CARD PERFORMANCE (REFINADO) */}
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+                            <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                <TrendingUp size={18} className="text-green-600"/> Performance Diária
                             </h4>
                             <div className="space-y-4">
                                 <div>
-                                    <div className="flex justify-between text-xs mb-1 text-slate-500 dark:text-slate-400">
-                                        <span>Fluxo Diário</span>
-                                        <span>Normal</span>
+                                    <div className="flex justify-between text-xs mb-2 font-medium">
+                                        <span className="text-slate-500">Ocupação da Agenda</span>
+                                        <span className="text-slate-800 dark:text-white">Moderada</span>
                                     </div>
-                                    <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">
-                                        <div className="bg-green-500 h-2 rounded-full" style={{width: '75%'}}></div>
+                                    <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                                        <div className="bg-green-500 h-full rounded-full w-[65%]"></div>
                                     </div>
                                 </div>
-                                <p className="text-xs text-slate-400 leading-relaxed">
-                                    Dados atualizados em tempo real conforme a movimentação da recepção.
+                                <p className="text-xs text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-700 pt-3 mt-2">
+                                    Dados atualizados em tempo real conforme movimentação da recepção.
                                 </p>
                             </div>
                         </div>
