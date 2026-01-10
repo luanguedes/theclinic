@@ -84,7 +84,7 @@ export default function CadastroOperador() {
     acesso_faturamento: false, acesso_cadastros: false, // <--- ADICIONEI AQUI
     is_superuser: false,
     force_password_change: true,
-    profissional_id: null
+    profissional: null
   });
 
   useEffect(() => {
@@ -109,7 +109,7 @@ export default function CadastroOperador() {
                         acesso_cadastros: data.acesso_cadastros || false, // <--- CARREGA AQUI
                         is_superuser: data.is_superuser || false,
                         force_password_change: data.force_password_change || false,
-                        profissional_id: data.profissional_id || null,
+                        profissional: data.profissional || null,
                         password: ''
                     });
                 })
@@ -231,7 +231,7 @@ export default function CadastroOperador() {
                         label="Este operador é um médico?" 
                         placeholder="Pesquise o profissional..." 
                         options={profissionais} 
-                        value={formData.profissional_id} 
+                        value={formData.profissional} 
                         onChange={(val) => setFormData({...formData, profissional_id: val})}
                     />
                     <p className="text-xs text-slate-400">Ao vincular, este operador terá acesso ao Prontuário Eletrônico.</p>
