@@ -153,7 +153,6 @@ export default function Recepcao() {
             "Cancelar",
             "danger"
         );
-
         if (confirm) {
             try {
                 await api.post(`agendamento/${item.id}/marcar_falta/`);
@@ -163,11 +162,25 @@ export default function Recepcao() {
         }
     };
 
+    // --- REVERTER: AGORA SUPORTA "FALTOU" ---
     const handleReverter = async (item) => {
+        let mensagem = "";
+        let titulo = "";
+        
+        if (item.status === 'aguardando') {
+            titulo = "Desfazer Recepção";
+            mensagem = `Deseja desfazer a recepção de ${item.nome_paciente}? Isso apagará os dados financeiros gerados para este atendimento.`;
+        } else if (item.status === 'faltou') {
+            titulo = "Remover Falta";
+            mensagem = `Deseja remover a falta de ${item.nome_paciente} e retorná-lo para a lista de agendados?`;
+        } else {
+            return; // Outros status não revertem por aqui
+        }
+
         const confirm = await confirmDialog(
-            `Deseja desfazer a recepção de ${item.nome_paciente}? Isso apagará os dados financeiros criados.`,
-            "Desfazer Recepção",
-            "Sim, Desfazer",
+            mensagem,
+            titulo,
+            "Sim, Reverter",
             "Cancelar",
             "warning"
         );
@@ -175,10 +188,10 @@ export default function Recepcao() {
         if (confirm) {
             try {
                 await api.post(`agendamento/${item.id}/reverter_chegada/`);
-                notify.info("Recepção desfeita. Paciente voltou para 'Agendado'.");
+                notify.info("Status revertido para 'Agendado'.");
                 carregarAgenda();
             } catch (error) {
-                notify.error("Erro ao reverter recepção.");
+                notify.error("Erro ao reverter status.");
             }
         }
     };
@@ -203,7 +216,6 @@ export default function Recepcao() {
                         <label className="text-xs font-bold text-slate-500 mb-1 block">Data</label>
                         <input type="date" value={dataFiltro} onChange={e => setDataFiltro(e.target.value)} className={inputClass}/>
                     </div>
-                    
                     <div className="w-full lg:w-64">
                         <label className="text-xs font-bold text-slate-500 mb-1 block">Profissional</label>
                         <select value={profissionalFiltro} onChange={e => setProfissionalFiltro(e.target.value)} className={inputClass}>
@@ -211,17 +223,11 @@ export default function Recepcao() {
                             {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                         </select>
                     </div>
-
                     <div className="flex-1">
                         <label className="text-xs font-bold text-slate-500 mb-1 block">Buscar Paciente</label>
                         <div className="relative">
                             <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-                            <input 
-                                placeholder="Nome do paciente..." 
-                                value={buscaTexto} 
-                                onChange={e => setBuscaTexto(e.target.value)} 
-                                className={`${inputClass} pl-10`}
-                            />
+                            <input placeholder="Nome do paciente..." value={buscaTexto} onChange={e => setBuscaTexto(e.target.value)} className={`${inputClass} pl-10`}/>
                         </div>
                     </div>
                 </div>
@@ -229,15 +235,7 @@ export default function Recepcao() {
                 {/* --- LEGENDA --- */}
                 <div className="flex flex-wrap gap-2 mb-4 animate-in fade-in slide-in-from-top-2">
                     {['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou'].map(status => (
-                        <button 
-                            key={status}
-                            onClick={() => toggleStatus(status)}
-                            className={`px-3 py-1 rounded-full text-xs font-bold border transition-all uppercase flex items-center gap-1 ${
-                                statusVisiveis.includes(status) 
-                                ? getStatusColor(status) + ' shadow-sm scale-105' 
-                                : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 opacity-60'
-                            }`}
-                        >
+                        <button key={status} onClick={() => toggleStatus(status)} className={`px-3 py-1 rounded-full text-xs font-bold border transition-all uppercase flex items-center gap-1 ${statusVisiveis.includes(status) ? getStatusColor(status) + ' shadow-sm scale-105' : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 opacity-60'}`}>
                             {status === 'agendado' && <CalendarClock size={12}/>}
                             {status === 'aguardando' && <Clock size={12}/>}
                             {status === 'faltou' && <UserX size={12}/>}
@@ -253,7 +251,6 @@ export default function Recepcao() {
                             <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                                 <tr>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Horário</th>
-                                    {/* MUDANÇA: STATUS AGORA É A 2ª COLUNA */}
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Paciente</th>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Profissional</th>
@@ -272,7 +269,6 @@ export default function Recepcao() {
 
                                         return (
                                             <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                                {/* COLUNA 1: HORÁRIO */}
                                                 <td className="px-6 py-4">
                                                     <div className={`font-bold text-lg ${atrasado ? 'text-red-500 animate-pulse flex items-center gap-1' : 'text-slate-700 dark:text-white'}`}>
                                                         {item.horario.substring(0, 5)}
@@ -281,14 +277,12 @@ export default function Recepcao() {
                                                     {atrasado && <div className="text-[10px] text-red-500 font-bold uppercase">Atrasado</div>}
                                                 </td>
 
-                                                {/* COLUNA 2: STATUS (MOVIDA PARA CÁ) */}
                                                 <td className="px-6 py-4">
                                                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(item.status)}`}>
                                                         {item.status.replace('_', ' ').toUpperCase()}
                                                     </span>
                                                 </td>
 
-                                                {/* COLUNA 3: PACIENTE */}
                                                 <td className="px-6 py-4">
                                                     <div className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                                         {item.nome_paciente}
@@ -299,13 +293,11 @@ export default function Recepcao() {
                                                     </div>
                                                 </td>
 
-                                                {/* COLUNA 4: PROFISSIONAL */}
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                                                     <div className="font-medium">{item.nome_profissional}</div>
                                                     <div className="text-xs text-slate-400">{item.nome_especialidade}</div>
                                                 </td>
 
-                                                {/* COLUNA 5: AÇÕES */}
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end items-center gap-2">
                                                         {/* Ícone de Pagamento */}
@@ -329,6 +321,11 @@ export default function Recepcao() {
                                                                 <button onClick={() => handleReverter(item)} className="text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-orange-200" title="Desfazer Recepção"><RotateCcw size={18}/></button>
                                                                 <button onClick={() => abrirCheckin(item)} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200" title="Editar dados"><Pencil size={18}/></button>
                                                             </>
+                                                        )}
+                                                        
+                                                        {/* BOTAO REVERTER FALTA */}
+                                                        {(item.status === 'faltou') && (
+                                                             <button onClick={() => handleReverter(item)} className="text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 p-2 rounded-lg transition-colors border border-transparent" title="Desfazer Falta"><RotateCcw size={18}/></button>
                                                         )}
 
                                                         {/* BOTAO EDITAR (EM ATENDIMENTO) */}

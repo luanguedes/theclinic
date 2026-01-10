@@ -1,7 +1,15 @@
 from rest_framework import serializers
-from .models import Agendamento
+from .models import Agendamento, BloqueioAgenda
 from configuracoes.models import DadosClinica
 from profissionais.models import ProfissionalEspecialidade
+
+
+class BloqueioAgendaSerializer(serializers.ModelSerializer):
+    nome_profissional = serializers.CharField(source='profissional.nome', read_only=True, default="Todos os Profissionais")
+    
+    class Meta:
+        model = BloqueioAgenda
+        fields = '__all__'
 
 class AgendamentoSerializer(serializers.ModelSerializer):
     # Campos de leitura simples
@@ -18,6 +26,7 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     fatura_forma_pagamento = serializers.SerializerMethodField()
 
     detalhes_pdf = serializers.SerializerMethodField()
+    
 
     class Meta:
         model = Agendamento

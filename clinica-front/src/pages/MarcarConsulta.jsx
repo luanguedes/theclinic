@@ -5,14 +5,22 @@ import Layout from '../components/Layout';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { 
-  Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, MapPin, ChevronDown, Check, AlertCircle, DollarSign, Printer, ShieldCheck 
+  Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, MapPin, ChevronDown, Check, AlertCircle, DollarSign, Printer, ShieldCheck, Lock 
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
 
 const calendarStyles = `
   .react-calendar { width: 100%; border: none; font-family: inherit; background: transparent; }
   .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 2px solid #2563eb !important; }
+  
+  /* ESTILOS NOVOS */
   .dia-livre { background-color: #dcfce7 !important; color: #166534 !important; border: 1px solid #bbf7d0 !important; font-weight: bold; }
+  .dia-feriado { background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fecaca !important; cursor: not-allowed !important; opacity: 0.8; }
+  .dia-bloqueado { background-color: #f1f5f9 !important; color: #64748b !important; border: 1px solid #cbd5e1 !important; cursor: not-allowed !important; text-decoration: line-through; }
+  
+  /* Agenda Encerrada (Visualização no Calendário) - Opcional, pode usar dia-livre também, mas aqui diferenciamos se quiser */
+  .dia-encerrado { background-color: #f3f4f6 !important; color: #6b7280 !important; border: 1px solid #e5e7eb !important; }
+
   .react-calendar__tile--active { background: #2563eb !important; color: white !important; border: none !important; }
   .react-calendar__tile:disabled { background-color: #f3f4f6 !important; color: #9ca3af !important; }
 `;
@@ -22,18 +30,16 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
 
-    // Sincroniza o texto do input com o valor selecionado externamente
     useEffect(() => { 
         const selected = options.find(o => String(o.id) === String(value)); 
         if (selected) setQuery(selected.label);
         else if (!value) setQuery('');
-    }, [value, options]); // Importante: 'options' na dependência garante que se a lista mudar (novo paciente), ele atualiza o texto
+    }, [value, options]); 
 
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
                 setIsOpen(false);
-                // Ao fechar, se o texto não bater com a seleção, restaura o label correto
                 const selected = options.find(o => String(o.id) === String(value));
                 setQuery(selected ? selected.label : '');
             }
@@ -126,6 +132,8 @@ export default function MarcarConsulta() {
   const formInicialPaciente = { nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' };
   const [novoPaciente, setNovoPaciente] = useState(formInicialPaciente);
 
+  const [listaBloqueios, setListaBloqueios] = useState([]);
+
   const getLocalISODate = (date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -143,11 +151,14 @@ export default function MarcarConsulta() {
   const [vagasDoDia, setVagasDoDia] = useState([]);
   const [regrasProfissional, setRegrasProfissional] = useState([]); 
 
+  // Carrega listas iniciais
   useEffect(() => {
     if (api) {
         api.get('profissionais/').then(res => setProfissionais(res.data.results?.map(p => ({ id: p.id, label: p.nome })) || []));
         api.get('pacientes/lista/').then(res => setPacientes(res.data.results?.map(p => ({ id: p.id, label: `${p.nome} - ${p.cpf}` })) || []));
         api.get('configuracoes/convenios/').then(res => setConvenios(res.data.results?.map(c => ({ id: c.id, label: c.nome })) || []));
+        
+        api.get('agendamento/bloqueios/').then(res => setListaBloqueios(res.data.results || res.data));
     }
   }, [api]);
 
@@ -160,7 +171,8 @@ export default function MarcarConsulta() {
             else setEspecialidadeId('');
         });
         
-        api.get(`agendas/config/?status=ativos&profissional_id=${profissionalId}&nopage=true`)
+        // --- ALTERAÇÃO AQUI: STATUS 'TODOS' PARA TRAZER AGENDAS ENCERRADAS ---
+        api.get(`agendas/config/?status=todos&profissional_id=${profissionalId}&nopage=true`)
             .then(res => setRegrasProfissional(res.data))
             .catch(e => console.error(e));
     } else {
@@ -184,21 +196,57 @@ export default function MarcarConsulta() {
   };
 
   const getTileClassName = ({ date, view }) => {
-    if (view !== 'month' || !especialidadeId) return null;
-    const dataString = getLocalISODate(date);
+    if (view !== 'month') return null;
+    
+    const dataIso = getLocalISODate(date);
+    const diaMes = dataIso.slice(5);
+
+    // 1. Bloqueios e Feriados
+    const bloqueio = listaBloqueios.find(b => {
+        const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
+        const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
+        const bateProf = !b.profissional || (profissionalId && b.profissional === parseInt(profissionalId));
+        return (bateData || bateRecorrente) && bateProf;
+    });
+
+    if (bloqueio) return bloqueio.tipo === 'feriado' ? 'dia-feriado' : 'dia-bloqueado';
+
+    // 2. Agendas
+    if (!especialidadeId) return null;
     const jsDay = date.getDay();
-    const temRegra = regrasProfissional.some(r => 
+    
+    // Procura alguma regra válida para o dia (ATIVA ou ENCERRADA)
+    const regraEncontrada = regrasProfissional.find(r => 
         (r.dia_semana === jsDay) && 
         String(r.especialidade) === String(especialidadeId) && 
-        (r.data_inicio <= dataString && r.data_fim >= dataString)
+        (r.data_inicio <= dataIso && r.data_fim >= dataIso)
     );
-    return temRegra ? 'dia-livre' : null;
+
+    if (regraEncontrada) {
+        // Se a regra existe mas está encerrada (situacao=false), pinta diferente (opcional)
+        // Se quiser que apareça verde igual, retorne 'dia-livre'. 
+        // Se quiser cinza, retorne 'dia-encerrado'.
+        // O pedido foi "aparecer no calendario", então vamos manter 'dia-livre' para indicar que "houve agenda"
+        return 'dia-livre'; 
+    }
+    
+    return null;
   };
 
   const gerarVisualizacao = (regras, agendamentos) => {
     let slots = [];
     const jsDay = dateValue.getDay(); 
     
+    // Verifica bloqueio explícito (Férias/Feriado)
+    const dataIso = getLocalISODate(dateValue);
+    const diaMes = dataIso.slice(5);
+    const bloqueioAtivo = listaBloqueios.find(b => {
+        const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
+        const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
+        const bateProf = !b.profissional || (profissionalId && b.profissional === parseInt(profissionalId));
+        return (bateData || bateRecorrente) && bateProf;
+    });
+
     const regrasFiltradas = regras.filter(r => 
         r.dia_semana === jsDay && 
         r.data_inicio <= dataApi && 
@@ -206,10 +254,15 @@ export default function MarcarConsulta() {
         String(r.especialidade) === String(especialidadeId)
     );
 
+    // Gera slots mesmo se tiver bloqueio ou agenda encerrada
+    // Apenas marcamos as flags para desabilitar depois
     regrasFiltradas.forEach(regra => {
         const valorRegra = parseFloat(regra.valor || 0);
         const convenioRegraNome = regra.convenio_nome; 
         const convenioRegraId = regra.convenio;
+        
+        // Flag para indicar que a agenda base está fechada/encerrada
+        const agendaEncerrada = (regra.situacao === false) || !!bloqueioAtivo;
 
         if (regra.tipo === 'fixo') {
             const qtd = regra.quantidade_atendimentos || 1;
@@ -219,7 +272,8 @@ export default function MarcarConsulta() {
                     valor: valorRegra, 
                     ocupado: false, 
                     convenio_regra_nome: convenioRegraNome,
-                    convenio_regra_id: convenioRegraId
+                    convenio_regra_id: convenioRegraId,
+                    agenda_fechada: agendaEncerrada // Nova prop
                 });
             }
         } else {
@@ -236,7 +290,8 @@ export default function MarcarConsulta() {
                         valor: valorRegra, 
                         ocupado: false, 
                         convenio_regra_nome: convenioRegraNome,
-                        convenio_regra_id: convenioRegraId
+                        convenio_regra_id: convenioRegraId,
+                        agenda_fechada: agendaEncerrada // Nova prop
                     });
                 }
                 atual += regra.intervalo_minutos;
@@ -413,46 +468,35 @@ export default function MarcarConsulta() {
       } finally { setLoadingCep(false); }
   };
 
-  // --- FUNÇÃO CORRIGIDA E BLINDADA: ATUALIZA LISTA LOCALMENTE E EVITA RACE CONDITION ---
+  // --- FUNÇÃO CORRIGIDA E OTIMIZADA ---
   const salvarPacienteCompleto = async (e) => {
       e.preventDefault();
-      setLoadingPaciente(true); // Bloqueia botão para evitar duplo clique
+      setLoadingPaciente(true); 
       
       try {
-          // 1. Envia para o Backend (Salva no banco)
           const { data } = await api.post('pacientes/', novoPaciente);
           
           notify.success("Paciente cadastrado com sucesso!");
 
-          // 2. Prepara o objeto para a lista visual (Usamos os dados retornados do POST)
-          // Isso evita ter que fazer um 'get' que poderia falhar ou demorar
           const novoItemParaLista = { 
               id: data.id, 
               label: `${data.nome} - ${data.cpf}` 
           };
 
-          // 3. Adiciona o novo paciente no TOPO da lista atual
           setPacientes(prevLista => [novoItemParaLista, ...prevLista]);
-
-          // 4. Fecha o modal e limpa o formulário imediatamente
           setModalPacienteOpen(false);
           setNovoPaciente(formInicialPaciente);
 
-          // 5. O PULO DO GATO: Seleciona o ID com um pequeno delay (100ms)
-          // Isso dá tempo para o React redesenhar o <SearchableSelect> com o novo item na lista
-          // antes de tentarmos marcar ele como value={id}.
           setTimeout(() => {
               setPacienteId(data.id);
           }, 100);
 
       } catch (error) { 
           console.error("Erro no cadastro:", error);
-          
           if (error.response?.data?.cpf) {
               notify.warning("Atenção: Este CPF já está cadastrado!");
           } 
           else if (error.response?.data) {
-              // Tenta pegar a primeira mensagem de erro legível
               const msg = Object.values(error.response.data).flat()[0];
               notify.error(`Erro: ${msg || "Verifique os dados."}`);
           }
@@ -460,7 +504,7 @@ export default function MarcarConsulta() {
               notify.error("Erro de conexão ou processamento."); 
           }
       } finally {
-          setLoadingPaciente(false); // Libera o botão
+          setLoadingPaciente(false);
       }
   };
 
@@ -499,7 +543,12 @@ export default function MarcarConsulta() {
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-4 h-4 rounded border" style={{backgroundColor: '#fee2e2', borderColor: '#fecaca'}}></div> 
-                                <span>Sem Vagas (Indisponível)</span>
+                                <span>Bloqueios / Feriados</span>
+                            </div>
+                            {/* ADICIONADO PARA CLAREZA */}
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded border" style={{backgroundColor: '#f3f4f6', borderColor: '#e5e7eb'}}></div> 
+                                <span>Sem Vagas / Encerrada</span>
                             </div>
                         </div>
                     </div>
@@ -514,11 +563,19 @@ export default function MarcarConsulta() {
                     <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-3 content-start">
                         {vagasDoDia.length > 0 ? vagasDoDia.map((slot, idx) => {
                             const isPast = isDateInPast(dateValue);
+                            // Se a agenda estiver fechada E não estiver ocupada, bloqueia
+                            const isLocked = slot.agenda_fechada && !slot.ocupado; 
+                            
                             return (
                                 <div 
                                     key={idx} 
                                     onClick={() => {
+                                        // TRAVAS DE CLIQUE
                                         if (slot.ocupado) return; 
+                                        if (isLocked) {
+                                            notify.warning("Esta agenda está encerrada ou bloqueada.");
+                                            return;
+                                        }
                                         if (isPast) {
                                             notify.warning("Não é possível agendar em datas passadas.");
                                             return;
@@ -528,11 +585,16 @@ export default function MarcarConsulta() {
                                     className={`relative p-3 rounded-xl border-2 flex justify-between items-center transition-all duration-200 ${
                                         slot.is_encaixe ? 'bg-yellow-50 border-yellow-200 hover:border-yellow-400' : 
                                         slot.ocupado ? 'bg-slate-50 border-slate-200 opacity-90' : 
+                                        isLocked ? 'bg-gray-100 border-gray-200 cursor-not-allowed opacity-70' : // ESTILO BLOQUEADO/ENCERRADO
                                         isPast ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-60' : 'bg-white border-green-200 hover:border-green-500 cursor-pointer hover:shadow-md'
                                     }`}
                                 >
                                     <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className={`text-lg font-bold w-16 text-center py-1 rounded-lg ${slot.is_encaixe ? 'bg-yellow-100 text-yellow-700' : slot.ocupado ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-700'}`}>
+                                        <div className={`text-lg font-bold w-16 text-center py-1 rounded-lg ${
+                                            slot.is_encaixe ? 'bg-yellow-100 text-yellow-700' : 
+                                            isLocked ? 'bg-gray-200 text-gray-500' : // Cor da hora se bloqueado
+                                            slot.ocupado ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-700'
+                                        }`}>
                                             {slot.hora}
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -544,7 +606,9 @@ export default function MarcarConsulta() {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <div className={`text-sm font-bold ${isPast ? 'text-slate-400' : 'text-green-600'}`}>{isPast ? 'Expirado' : 'Livre'}</div>
+                                                    <div className={`text-sm font-bold ${isLocked ? 'text-gray-500' : isPast ? 'text-slate-400' : 'text-green-600'}`}>
+                                                        {isLocked ? (slot.agenda_fechada ? 'Agenda Encerrada' : 'Bloqueado') : isPast ? 'Expirado' : 'Livre'}
+                                                    </div>
                                                     
                                                     {slot.convenio_regra_nome && (
                                                         <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1 truncate">
@@ -557,6 +621,8 @@ export default function MarcarConsulta() {
                                             )}
                                         </div>
                                     </div>
+                                    
+                                    {isLocked && !slot.ocupado && <div className="absolute top-2 right-2 text-gray-400"><Lock size={14}/></div>}
 
                                     {slot.ocupado && (
                                         <div className="flex gap-1 ml-2">
@@ -580,9 +646,10 @@ export default function MarcarConsulta() {
             </div>
         )}
         
-        {/* MODAL DE AGENDAMENTO */}
+        {/* MODAL DE AGENDAMENTO (CÓDIGO ANTERIOR) */}
         {modalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            // ... (O código do modal permanece idêntico, apenas reusando a lógica)
+             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                     <div className="bg-blue-600 p-6 text-white flex justify-between items-center"><h2 className="text-xl font-bold">{agendamentoIdEditar ? 'Editar Agendamento' : 'Novo Agendamento'}</h2><button onClick={() => setModalOpen(false)}><X/></button></div>
                     <div className="p-6 space-y-4">
@@ -638,9 +705,9 @@ export default function MarcarConsulta() {
             </div>
         )}
         
-        {/* MODAL DE NOVO PACIENTE */}
+        {/* MODAL DE NOVO PACIENTE (CÓDIGO ANTERIOR) */}
         {modalPacienteOpen && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl animate-in fade-in zoom-in duration-200 my-10">
                     <div className="bg-slate-800 p-5 text-white flex justify-between items-center rounded-t-2xl"><h3 className="font-bold flex items-center gap-2 text-lg"><UserPlus size={20}/> Novo Paciente</h3><button onClick={() => setModalPacienteOpen(false)} className="text-slate-400 hover:text-white"><X size={24}/></button></div>
                     <form onSubmit={salvarPacienteCompleto} className="p-6">

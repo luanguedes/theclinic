@@ -7,7 +7,6 @@ class AgendaConfigSerializer(serializers.ModelSerializer):
     nome_especialidade = serializers.CharField(source='especialidade.nome', read_only=True)
     nome_dia = serializers.CharField(source='get_dia_semana_display', read_only=True)
     
-    # --- CORREÇÃO: Renomeado para 'convenio_nome' para bater com o Frontend ---
     convenio_nome = serializers.SerializerMethodField()
     
     dias_vinculados = serializers.SerializerMethodField()
@@ -18,11 +17,10 @@ class AgendaConfigSerializer(serializers.ModelSerializer):
         model = AgendaConfig
         fields = '__all__'
 
-    # O método precisa chamar get_ + nome_do_campo
     def get_convenio_nome(self, obj):
         if obj.convenio:
             return obj.convenio.nome
-        return None # Retorna null para não mostrar nada no card se for livre
+        return None
 
     def get_dias_vinculados(self, obj):
         dias = AgendaConfig.objects.filter(group_id=obj.group_id).values_list('dia_semana', flat=True)
@@ -46,16 +44,23 @@ class AgendaConfigSerializer(serializers.ModelSerializer):
                 seen.add(chave)
         return sorted(unicos, key=lambda x: str(x['time']))
 
+    # --- CORREÇÃO AQUI ---
     def get_total_agendados(self, obj):
         try:
             Agendamento = apps.get_model('agendamento', 'Agendamento')
+            
+            # Conversão: No Model AgendaConfig 0=Domingo, mas no Django Query __week_day 1=Domingo
             target_day = obj.dia_semana + 1 
 
+            # Conta todos os agendamentos que NÃO foram cancelados dentro do período daquela agenda
+            # Isso contabiliza históricos de agendas encerradas também.
             return Agendamento.objects.filter(
                 profissional=obj.profissional,
                 data__range=(obj.data_inicio, obj.data_fim),
                 data__week_day=target_day,
-                status__in=['agendado', 'confirmado', 'concluido']
+                # Lista atualizada com TODOS os status que contam como "vaga ocupada" ou "paciente atendido"
+                status__in=['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou']
             ).count()
-        except Exception:
+        except Exception as e:
+            print(f"Erro ao contar agendados: {e}")
             return 0

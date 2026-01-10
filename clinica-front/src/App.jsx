@@ -55,6 +55,7 @@ function App() {
               <Route path="/convenios" element={<RotaPrivada adminOnly><Convenios /></RotaPrivada>} />
               <Route path="/clinica" element={<RotaPrivada adminOnly><DadosClinica /></RotaPrivada>} />
               <Route path="/recepcao" element={<RotaPrivada><Recepcao /></RotaPrivada>} />
+              <Route path="/agenda/bloqueios" element={<RotaPrivada adminOnly><Bloqueios /></RotaPrivada>} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </NotificationProvider>

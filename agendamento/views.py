@@ -6,14 +6,91 @@ from django.db.models import Case, When, Value, IntegerField
 from django.db import transaction # <--- IMPORTANTE
 from datetime import date
 
-from .models import Agendamento
-from .serializers import AgendamentoSerializer
+from .models import Agendamento, BloqueioAgenda
+from .serializers import AgendamentoSerializer, BloqueioAgendaSerializer
 
 # Tenta importar o modelo de Fatura
 try:
     from financeiro.models import Fatura
 except ImportError:
     Fatura = None
+
+class BloqueioAgendaViewSet(viewsets.ModelViewSet):
+    queryset = BloqueioAgenda.objects.all().order_by('-data_inicio')
+    serializer_class = BloqueioAgendaSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    # Endpoint para checar conflitos antes de criar
+    @action(detail=False, methods=['post'])
+    def verificar_conflitos(self, request):
+        data = request.data
+        prof_id = data.get('profissional')
+        d_ini = data.get('data_inicio')
+        d_fim = data.get('data_fim')
+        h_ini = data.get('hora_inicio', '00:00')
+        h_fim = data.get('hora_fim', '23:59')
+
+        # Filtra agendamentos no período
+        conflitos = Agendamento.objects.filter(
+            data__range=[d_ini, d_fim],
+            horario__gte=h_ini,
+            horario__lte=h_fim,
+            status__in=['agendado', 'aguardando']
+        )
+
+        if prof_id:
+            conflitos = conflitos.filter(profissional_id=prof_id)
+
+        if not conflitos.exists():
+            return Response({'conflito': False, 'total': 0, 'pacientes': []})
+
+        # Serializa os dados para o relatório PDF
+        dados_pacientes = []
+        for c in conflitos:
+            dados_pacientes.append({
+                'id': c.id,
+                'paciente_nome': c.paciente.nome,
+                'paciente_cpf': c.paciente.cpf,
+                'paciente_nascimento': c.paciente.data_nascimento,
+                'paciente_telefone': c.paciente.telefone,
+                'medico': c.profissional.nome,
+                'data': c.data,
+                'horario': c.horario
+            })
+
+        return Response({
+            'conflito': True, 
+            'total': len(dados_pacientes), 
+            'pacientes': dados_pacientes
+        })
+
+    # Sobrescreve o create para lidar com a ação escolhida (cancelar ou manter)
+    def create(self, request, *args, **kwargs):
+        acao_conflito = request.data.pop('acao_conflito', 'manter') # manter | cancelar
+        
+        # Cria o bloqueio
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        bloqueio = serializer.save()
+
+        # Se escolheu cancelar, cancela os agendamentos afetados
+        if acao_conflito == 'cancelar':
+            prof_id = bloqueio.profissional.id if bloqueio.profissional else None
+            
+            conflitos = Agendamento.objects.filter(
+                data__range=[bloqueio.data_inicio, bloqueio.data_fim],
+                horario__gte=bloqueio.hora_inicio,
+                horario__lte=bloqueio.hora_fim,
+                status__in=['agendado', 'aguardando']
+            )
+            
+            if prof_id:
+                conflitos = conflitos.filter(profissional_id=prof_id)
+            
+            conflitos.update(status='cancelado', observacoes=f"Cancelado por bloqueio de agenda: {bloqueio.motivo}")
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class AgendamentoViewSet(viewsets.ModelViewSet):
     serializer_class = AgendamentoSerializer
@@ -79,27 +156,28 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     def reverter_chegada(self, request, pk=None):
         agendamento = self.get_object()
 
-        # Só permite reverter se estiver "Aguardando"
-        if agendamento.status != 'aguardando':
+        # ALTERAÇÃO AQUI: Permite reverter se estiver 'aguardando' OU 'faltou'
+        if agendamento.status not in ['aguardando', 'faltou']:
             return Response(
-                {"error": "Só é possível reverter se o paciente ainda estiver aguardando."}, 
+                {"error": "Apenas agendamentos 'Aguardando' ou 'Faltou' podem ser revertidos."}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             with transaction.atomic():
-                # 1. Volta o status
+                # 1. Volta o status para Agendado
                 agendamento.status = 'agendado'
                 agendamento.save()
 
-                # 2. Apaga a Fatura criada por engano (Limpeza Financeira)
+                # 2. Se tiver fatura (caso de 'aguardando'), apaga. 
+                # (Se for 'faltou' geralmente não tem fatura, mas o código protege igual)
                 if hasattr(agendamento, 'fatura'):
                     agendamento.fatura.delete()
 
-            return Response({'status': 'Recepção revertida com sucesso!'}, status=status.HTTP_200_OK)
+            return Response({'status': 'Status revertido para Agendado!'}, status=status.HTTP_200_OK)
         
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'])
     def marcar_falta(self, request, pk=None):
