@@ -18,9 +18,6 @@ const calendarStyles = `
   .dia-feriado { background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fecaca !important; cursor: not-allowed !important; opacity: 0.8; }
   .dia-bloqueado { background-color: #f1f5f9 !important; color: #64748b !important; border: 1px solid #cbd5e1 !important; cursor: not-allowed !important; text-decoration: line-through; }
   
-  /* Agenda Encerrada (Visualização no Calendário) - Opcional, pode usar dia-livre também, mas aqui diferenciamos se quiser */
-  .dia-encerrado { background-color: #f3f4f6 !important; color: #6b7280 !important; border: 1px solid #e5e7eb !important; }
-
   .react-calendar__tile--active { background: #2563eb !important; color: white !important; border: none !important; }
   .react-calendar__tile:disabled { background-color: #f3f4f6 !important; color: #9ca3af !important; }
 `;
@@ -171,7 +168,7 @@ export default function MarcarConsulta() {
             else setEspecialidadeId('');
         });
         
-        // --- ALTERAÇÃO AQUI: STATUS 'TODOS' PARA TRAZER AGENDAS ENCERRADAS ---
+        // Status 'todos' para trazer agendas encerradas e mostrar no histórico
         api.get(`agendas/config/?status=todos&profissional_id=${profissionalId}&nopage=true`)
             .then(res => setRegrasProfissional(res.data))
             .catch(e => console.error(e));
@@ -223,10 +220,6 @@ export default function MarcarConsulta() {
     );
 
     if (regraEncontrada) {
-        // Se a regra existe mas está encerrada (situacao=false), pinta diferente (opcional)
-        // Se quiser que apareça verde igual, retorne 'dia-livre'. 
-        // Se quiser cinza, retorne 'dia-encerrado'.
-        // O pedido foi "aparecer no calendario", então vamos manter 'dia-livre' para indicar que "houve agenda"
         return 'dia-livre'; 
     }
     
@@ -254,8 +247,6 @@ export default function MarcarConsulta() {
         String(r.especialidade) === String(especialidadeId)
     );
 
-    // Gera slots mesmo se tiver bloqueio ou agenda encerrada
-    // Apenas marcamos as flags para desabilitar depois
     regrasFiltradas.forEach(regra => {
         const valorRegra = parseFloat(regra.valor || 0);
         const convenioRegraNome = regra.convenio_nome; 
@@ -468,7 +459,6 @@ export default function MarcarConsulta() {
       } finally { setLoadingCep(false); }
   };
 
-  // --- FUNÇÃO CORRIGIDA E OTIMIZADA ---
   const salvarPacienteCompleto = async (e) => {
       e.preventDefault();
       setLoadingPaciente(true); 
@@ -545,7 +535,6 @@ export default function MarcarConsulta() {
                                 <div className="w-4 h-4 rounded border" style={{backgroundColor: '#fee2e2', borderColor: '#fecaca'}}></div> 
                                 <span>Bloqueios / Feriados</span>
                             </div>
-                            {/* ADICIONADO PARA CLAREZA */}
                             <div className="flex items-center gap-2">
                                 <div className="w-4 h-4 rounded border" style={{backgroundColor: '#f3f4f6', borderColor: '#e5e7eb'}}></div> 
                                 <span>Sem Vagas / Encerrada</span>
@@ -563,21 +552,35 @@ export default function MarcarConsulta() {
                     <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-3 content-start">
                         {vagasDoDia.length > 0 ? vagasDoDia.map((slot, idx) => {
                             const isPast = isDateInPast(dateValue);
+                            
+                            // NOVA LÓGICA: Verifica se o horário já passou HOJE
+                            const agora = new Date();
+                            const isHoje = dateValue.toDateString() === agora.toDateString();
+                            let isPastTime = false;
+                            
+                            if (isHoje) {
+                                const [h, m] = slot.hora.split(':').map(Number);
+                                const dataSlot = new Date(agora); // Cria data baseada em hoje
+                                dataSlot.setHours(h, m, 0, 0);
+                                if (dataSlot < agora) isPastTime = true;
+                            }
+
                             // Se a agenda estiver fechada E não estiver ocupada, bloqueia
                             const isLocked = slot.agenda_fechada && !slot.ocupado; 
+                            // Bloqueio temporal total (data passada OU hora passada hoje)
+                            const isBloqueadoTemporal = isPast || isPastTime; 
                             
                             return (
                                 <div 
                                     key={idx} 
                                     onClick={() => {
-                                        // TRAVAS DE CLIQUE
                                         if (slot.ocupado) return; 
                                         if (isLocked) {
                                             notify.warning("Esta agenda está encerrada ou bloqueada.");
                                             return;
                                         }
-                                        if (isPast) {
-                                            notify.warning("Não é possível agendar em datas passadas.");
+                                        if (isBloqueadoTemporal) {
+                                            notify.warning("Não é possível agendar em datas/horários passados.");
                                             return;
                                         }
                                         abrirAgendar(slot);
@@ -585,14 +588,16 @@ export default function MarcarConsulta() {
                                     className={`relative p-3 rounded-xl border-2 flex justify-between items-center transition-all duration-200 ${
                                         slot.is_encaixe ? 'bg-yellow-50 border-yellow-200 hover:border-yellow-400' : 
                                         slot.ocupado ? 'bg-slate-50 border-slate-200 opacity-90' : 
-                                        isLocked ? 'bg-gray-100 border-gray-200 cursor-not-allowed opacity-70' : // ESTILO BLOQUEADO/ENCERRADO
-                                        isPast ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-60' : 'bg-white border-green-200 hover:border-green-500 cursor-pointer hover:shadow-md'
+                                        isLocked ? 'bg-gray-100 border-gray-200 cursor-not-allowed opacity-70' : 
+                                        isBloqueadoTemporal ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-60 text-slate-400' : 
+                                        'bg-white border-green-200 hover:border-green-500 cursor-pointer hover:shadow-md'
                                     }`}
                                 >
                                     <div className="flex items-center gap-3 overflow-hidden">
                                         <div className={`text-lg font-bold w-16 text-center py-1 rounded-lg ${
                                             slot.is_encaixe ? 'bg-yellow-100 text-yellow-700' : 
-                                            isLocked ? 'bg-gray-200 text-gray-500' : // Cor da hora se bloqueado
+                                            isLocked ? 'bg-gray-200 text-gray-500' :
+                                            isBloqueadoTemporal ? 'bg-slate-200 text-slate-400' : 
                                             slot.ocupado ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-700'
                                         }`}>
                                             {slot.hora}
@@ -606,8 +611,8 @@ export default function MarcarConsulta() {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <div className={`text-sm font-bold ${isLocked ? 'text-gray-500' : isPast ? 'text-slate-400' : 'text-green-600'}`}>
-                                                        {isLocked ? (slot.agenda_fechada ? 'Agenda Encerrada' : 'Bloqueado') : isPast ? 'Expirado' : 'Livre'}
+                                                    <div className={`text-sm font-bold ${isLocked ? 'text-gray-500' : isBloqueadoTemporal ? 'text-slate-400' : 'text-green-600'}`}>
+                                                        {isLocked ? (slot.agenda_fechada ? 'Agenda Encerrada' : 'Bloqueado') : isBloqueadoTemporal ? 'Expirado' : 'Livre'}
                                                     </div>
                                                     
                                                     {slot.convenio_regra_nome && (
@@ -646,9 +651,8 @@ export default function MarcarConsulta() {
             </div>
         )}
         
-        {/* MODAL DE AGENDAMENTO (CÓDIGO ANTERIOR) */}
+        {/* MODAL DE AGENDAMENTO */}
         {modalOpen && (
-            // ... (O código do modal permanece idêntico, apenas reusando a lógica)
              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                     <div className="bg-blue-600 p-6 text-white flex justify-between items-center"><h2 className="text-xl font-bold">{agendamentoIdEditar ? 'Editar Agendamento' : 'Novo Agendamento'}</h2><button onClick={() => setModalOpen(false)}><X/></button></div>
@@ -705,7 +709,7 @@ export default function MarcarConsulta() {
             </div>
         )}
         
-        {/* MODAL DE NOVO PACIENTE (CÓDIGO ANTERIOR) */}
+        {/* MODAL DE NOVO PACIENTE */}
         {modalPacienteOpen && (
              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl animate-in fade-in zoom-in duration-200 my-10">

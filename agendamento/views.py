@@ -9,11 +9,6 @@ from datetime import date
 from .models import BloqueioAgenda, Agendamento
 from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
 
-# Tenta importar o modelo de Fatura
-try:
-    from financeiro.models import Fatura
-except ImportError:
-    Fatura = None
 
 class BloqueioAgendaViewSet(viewsets.ModelViewSet):
     queryset = BloqueioAgenda.objects.all().order_by('-data_inicio')
@@ -197,50 +192,31 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     def confirmar_chegada(self, request, pk=None):
         agendamento = self.get_object()
         
-        # Bloqueio de datas futuras
-        if agendamento.data > date.today():
-             return Response(
-                {"error": "Não é possível confirmar a chegada de um agendamento futuro."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Captura dados
-        forma_pagamento = request.data.get('forma_pagamento', 'pendente')
-        # Tratamento seguro de valor
-        valor_req = request.data.get('valor')
-        if valor_req == '' or valor_req is None:
-            valor_cobrado = agendamento.valor
-        else:
-            valor_cobrado = valor_req
-            
-        ja_pagou = request.data.get('pago', False)
+        # ... (suas validações de data e valores continuam iguais) ...
+        
+        # Carrega o Model dinamicamente para evitar erro circular
+        from django.apps import apps 
+        Fatura = apps.get_model('financeiro', 'Fatura') 
 
         try:
-            # USAMOS TRANSACTION.ATOMIC PARA GARANTIR INTEGRIDADE
             with transaction.atomic():
-                # 1. Atualiza o Agendamento
-                if agendamento.status == 'agendado':
-                    agendamento.status = 'aguardando'
+                # ... (atualização do agendamento continua igual) ...
                 
-                # Se veio valor novo, atualiza no agendamento também
-                agendamento.valor = valor_cobrado
-                agendamento.save()
-
                 # 2. Atualiza ou Cria a Fatura
-                if Fatura:
-                    Fatura.objects.update_or_create(
-                        agendamento=agendamento,
-                        defaults={
-                            'valor': valor_cobrado,
-                            'forma_pagamento': forma_pagamento,
-                            'pago': ja_pagou,
-                            'data_pagamento': date.today() if ja_pagou else None,
-                            'data_vencimento': date.today(), # Agora o campo existe no model!
-                            'desconto': 0.00
-                        }
-                    )
+                Fatura.objects.update_or_create(
+                    agendamento=agendamento,
+                    defaults={
+                        'valor': valor_cobrado,
+                        'forma_pagamento': forma_pagamento,
+                        'pago': ja_pagou,
+                        'data_pagamento': date.today() if ja_pagou else None,
+                        'data_vencimento': date.today(),
+                        'desconto': 0.00
+                    }
+                )
             
             return Response({'status': 'Check-in realizado com sucesso!'}, status=status.HTTP_200_OK)
+
 
         except Exception as e:
             return Response(

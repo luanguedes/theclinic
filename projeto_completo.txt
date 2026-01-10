@@ -350,23 +350,42 @@ ARQUIVO: profissionais/__init__.py
 ARQUIVO: agendamento/models.py
 ============================================================
 from django.db import models
+from django.db.models import Q
 from profissionais.models import Profissional, Especialidade
 from pacientes.models import Paciente 
 from configuracoes.models import Convenio 
 
+class BloqueioAgenda(models.Model):
+    # ... (Mantenha o BloqueioAgenda como estava) ...
+    TIPO_CHOICES = [
+        ('feriado', 'Feriado'),
+        ('bloqueio', 'Bloqueio Manual (Férias/Reunião)'),
+    ]
+    profissional = models.ForeignKey(Profissional, on_delete=models.CASCADE, null=True, blank=True)
+    data_inicio = models.DateField()
+    data_fim = models.DateField()
+    hora_inicio = models.TimeField(default='00:00')
+    hora_fim = models.TimeField(default='23:59')
+    motivo = models.CharField(max_length=255)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='bloqueio')
+    recorrente = models.BooleanField(default=False)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.motivo}"
+
 class Agendamento(models.Model):
-    # Definimos a classe Status aqui
     class Status(models.TextChoices):
         AGENDADO = 'agendado', 'Agendado'
         AGUARDANDO = 'aguardando', 'Aguardando Atendimento'
         EM_ATENDIMENTO = 'em_atendimento', 'Em Atendimento'
         FINALIZADO = 'finalizado', 'Finalizado'
         CANCELADO = 'cancelado', 'Cancelado'
+        FALTOU = 'faltou', 'Faltou'
 
     profissional = models.ForeignKey(Profissional, on_delete=models.CASCADE)
     especialidade = models.ForeignKey(Especialidade, on_delete=models.CASCADE)
     paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE)
-    
     convenio = models.ForeignKey(Convenio, on_delete=models.SET_NULL, null=True, blank=True)
     
     data = models.DateField()
@@ -376,19 +395,20 @@ class Agendamento(models.Model):
     valor = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     observacoes = models.TextField(blank=True, null=True)
     
-    # --- A CORREÇÃO É AQUI ---
-    # Usamos Status.choices e Status.AGENDADO
-    status = models.CharField(
-        max_length=20, 
-        choices=Status.choices,  # <--- Mudou aqui
-        default=Status.AGENDADO  # <--- Mudou aqui
-    )
-    
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.AGENDADO)
     criado_em = models.DateTimeField(auto_now_add=True)
-    atualizado_em = models.DateTimeField(auto_now=True) # Importante adicionar este campo que eu mencionei antes
+    atualizado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['data', 'horario']
+        constraints = [
+            models.UniqueConstraint(
+                # AQUI: Garante que O MESMO PACIENTE não tenha dois agendamentos iguais
+                fields=['profissional', 'data', 'horario', 'paciente'], 
+                condition=Q(status__in=['agendado', 'aguardando', 'em_atendimento']),
+                name='unique_paciente_horario' # Nome diferente do anterior para forçar recriação
+            )
+        ]
 
     def __str__(self):
         return f"{self.paciente} - {self.data} {self.horario}"
@@ -439,55 +459,140 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db.models import Case, When, Value, IntegerField
+from django.db import transaction # <--- IMPORTANTE
 from datetime import date
 
-# Imports dos Models
-from .models import Agendamento
-from .serializers import AgendamentoSerializer
+from .models import BloqueioAgenda, Agendamento
+from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
 
-# Import seguro do Financeiro (caso o app ainda não esteja 100% configurado)
+# Tenta importar o modelo de Fatura
 try:
     from financeiro.models import Fatura
 except ImportError:
     Fatura = None
+
+class BloqueioAgendaViewSet(viewsets.ModelViewSet):
+    queryset = BloqueioAgenda.objects.all().order_by('-data_inicio')
+    serializer_class = BloqueioAgendaSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    # Endpoint para checar conflitos antes de criar
+    @action(detail=False, methods=['post'])
+    def verificar_conflitos(self, request):
+        data = request.data
+        prof_id = data.get('profissional')
+        d_ini = data.get('data_inicio')
+        d_fim = data.get('data_fim')
+        h_ini = data.get('hora_inicio', '00:00')
+        h_fim = data.get('hora_fim', '23:59')
+
+        # Filtra agendamentos no período
+        conflitos = Agendamento.objects.filter(
+            data__range=[d_ini, d_fim],
+            horario__gte=h_ini,
+            horario__lte=h_fim,
+            status__in=['agendado', 'aguardando']
+        )
+
+        if prof_id:
+            conflitos = conflitos.filter(profissional_id=prof_id)
+
+        if not conflitos.exists():
+            return Response({'conflito': False, 'total': 0, 'pacientes': []})
+
+        # Serializa os dados para o relatório PDF
+        dados_pacientes = []
+        for c in conflitos:
+            dados_pacientes.append({
+                'id': c.id,
+                'paciente_nome': c.paciente.nome,
+                'paciente_cpf': c.paciente.cpf,
+                'paciente_nascimento': c.paciente.data_nascimento,
+                'paciente_telefone': c.paciente.telefone,
+                'medico': c.profissional.nome,
+                'data': c.data,
+                'horario': c.horario
+            })
+
+        return Response({
+            'conflito': True, 
+            'total': len(dados_pacientes), 
+            'pacientes': dados_pacientes
+        })
+
+    # Sobrescreve o create para lidar com a ação escolhida (cancelar ou manter)
+    def create(self, request, *args, **kwargs):
+        acao_conflito = request.data.pop('acao_conflito', 'manter') # manter | cancelar
+        
+        # Cria o bloqueio
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        bloqueio = serializer.save()
+
+        # Se escolheu cancelar, cancela os agendamentos afetados
+        if acao_conflito == 'cancelar':
+            prof_id = bloqueio.profissional.id if bloqueio.profissional else None
+            
+            conflitos = Agendamento.objects.filter(
+                data__range=[bloqueio.data_inicio, bloqueio.data_fim],
+                horario__gte=bloqueio.hora_inicio,
+                horario__lte=bloqueio.hora_fim,
+                status__in=['agendado', 'aguardando']
+            )
+            
+            if prof_id:
+                conflitos = conflitos.filter(profissional_id=prof_id)
+            
+            conflitos.update(status='cancelado', observacoes=f"Cancelado por bloqueio de agenda: {bloqueio.motivo}")
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class AgendamentoViewSet(viewsets.ModelViewSet):
     serializer_class = AgendamentoSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
 
-    # Habilita a barra de pesquisa por texto
     filter_backends = [filters.SearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
 
     def get_queryset(self):
-        # Começa com todos os agendamentos
         queryset = Agendamento.objects.all()
 
-        # --- 1. FILTROS DA URL ---
+        # --- 1. FILTROS ---
         profissional = self.request.query_params.get('profissional')
         especialidade = self.request.query_params.get('especialidade')
+        
+        # Filtros de Data
         data_filtro = self.request.query_params.get('data')
+        mes_filtro = self.request.query_params.get('mes')
+        ano_filtro = self.request.query_params.get('ano')
 
-        # Filtro de Profissional
         if profissional and profissional not in ['undefined', 'null', '']:
             queryset = queryset.filter(profissional_id=profissional)
         
-        # Filtro de Especialidade
         if especialidade and especialidade not in ['undefined', 'null', '']:
             queryset = queryset.filter(especialidade_id=especialidade)
             
-        # Filtro de Data (Lógica Inteligente)
+        # Lógica de Data:
+        # 1. Se tem data específica, usa ela.
+        # 2. Se tem Mês e Ano, filtra pelo mês.
+        # 3. Se não tem nada, usa HOJE (padrão).
+        
         if data_filtro and data_filtro not in ['undefined', 'null', '']:
-            # Se o usuário escolheu uma data, usa ela
             queryset = queryset.filter(data=data_filtro)
+        elif mes_filtro and ano_filtro:
+            queryset = queryset.filter(data__month=mes_filtro, data__year=ano_filtro)
         else:
-            # Se NÃO escolheu data, mostra apenas os de HOJE (Padrão da Recepção)
-            # Para ver todos, o front teria que mandar uma flag específica, mas por padrão limpamos a tela
-            queryset = queryset.filter(data=date.today())
+            # Se não passou filtro de mês, aplica o padrão de hoje
+            # (A menos que queira listar tudo, mas para dashboard o padrão hoje é seguro)
+            # Para o Dashboard funcionar sem travar, se não vier nada, NÃO filtramos data aqui,
+            # deixamos o frontend mandar os parametros.
+            # Mas para manter compatibilidade com outras telas:
+            if not self.request.query_params.get('nopage'): 
+                 queryset = queryset.filter(data=date.today())
 
-        # --- 2. ORDENAÇÃO COMPLEXA (A Mágica) ---
-        # Regra: Agendado (1) > Aguardando (2) > Em Atendimento (3) > Finalizado (4) > Cancelado (5)
+        # --- 2. ORDENAÇÃO ---
         queryset = queryset.annotate(
             prioridade_status=Case(
                 When(status='agendado', then=Value(1)),
@@ -495,62 +600,122 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                 When(status='em_atendimento', then=Value(3)),
                 When(status='finalizado', then=Value(4)),
                 When(status='cancelado', then=Value(5)),
+                When(status='faltou', then=Value(6)),
                 default=Value(10),
                 output_field=IntegerField(),
             )
-        ).order_by(
-            'prioridade_status',       # 1º Critério: Status
-            'horario',                 # 2º Critério: Horário (Crescente)
-            'paciente__data_nascimento'# 3º Critério: Idade (Data de nascimento menor = Mais velho primeiro)
-        )
+        ).order_by('prioridade_status', 'horario')
 
         return queryset
 
-    # --- AÇÃO DE CHECK-IN (RECEPÇÃO) ---
+    @action(detail=True, methods=['post'])
+    def reverter_chegada(self, request, pk=None):
+        agendamento = self.get_object()
+
+        # ALTERAÇÃO AQUI: Permite reverter se estiver 'aguardando' OU 'faltou'
+        if agendamento.status not in ['aguardando', 'faltou']:
+            return Response(
+                {"error": "Apenas agendamentos 'Aguardando' ou 'Faltou' podem ser revertidos."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            with transaction.atomic():
+                # 1. Volta o status para Agendado
+                agendamento.status = 'agendado'
+                agendamento.save()
+
+                # 2. Se tiver fatura (caso de 'aguardando'), apaga. 
+                # (Se for 'faltou' geralmente não tem fatura, mas o código protege igual)
+                if hasattr(agendamento, 'fatura'):
+                    agendamento.fatura.delete()
+
+            return Response({'status': 'Status revertido para Agendado!'}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'])
+    def marcar_falta(self, request, pk=None):
+        agendamento = self.get_object()
+        
+        # Só permite marcar falta se ainda não foi atendido
+        if agendamento.status in ['em_atendimento', 'finalizado']:
+             return Response({"error": "Paciente já foi atendido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        agendamento.status = 'faltou'
+        agendamento.save()
+        
+        return Response({'status': 'Falta registrada com sucesso.'}, status=status.HTTP_200_OK)
+
+    # --- AÇÃO BLINDADA COM TRANSAÇÃO ATÔMICA ---
     @action(detail=True, methods=['post'])
     def confirmar_chegada(self, request, pk=None):
         agendamento = self.get_object()
         
+        # Bloqueio de datas futuras
         if agendamento.data > date.today():
-             return Response({"error": "Não é possível confirmar datas futuras."}, status=status.HTTP_400_BAD_REQUEST)
+             return Response(
+                {"error": "Não é possível confirmar a chegada de um agendamento futuro."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # 1. Captura dados
+        # Captura dados
         forma_pagamento = request.data.get('forma_pagamento', 'pendente')
-        # Garante que valor seja um número (mesmo que venha string vazia)
-        valor_raw = request.data.get('valor', agendamento.valor)
-        valor_cobrado = float(valor_raw) if valor_raw else 0.00
+        # Tratamento seguro de valor
+        valor_req = request.data.get('valor')
+        if valor_req == '' or valor_req is None:
+            valor_cobrado = agendamento.valor
+        else:
+            valor_cobrado = valor_req
+            
         ja_pagou = request.data.get('pago', False)
 
-        # 2. Atualiza Status
-        agendamento.status = 'aguardando'
-        agendamento.save()
+        try:
+            # USAMOS TRANSACTION.ATOMIC PARA GARANTIR INTEGRIDADE
+            with transaction.atomic():
+                # 1. Atualiza o Agendamento
+                if agendamento.status == 'agendado':
+                    agendamento.status = 'aguardando'
+                
+                # Se veio valor novo, atualiza no agendamento também
+                agendamento.valor = valor_cobrado
+                agendamento.save()
 
-        # 3. Cria ou Atualiza Fatura (IMPORTANTE: update_or_create é melhor aqui)
-        if Fatura:
-            Fatura.objects.update_or_create(
-                agendamento=agendamento,
-                defaults={
-                    'valor': valor_cobrado,
-                    'forma_pagamento': forma_pagamento,
-                    'pago': ja_pagou,
-                    'data_pagamento': date.today() if ja_pagou else None,
-                    'data_vencimento': date.today()
-                }
+                # 2. Atualiza ou Cria a Fatura
+                if Fatura:
+                    Fatura.objects.update_or_create(
+                        agendamento=agendamento,
+                        defaults={
+                            'valor': valor_cobrado,
+                            'forma_pagamento': forma_pagamento,
+                            'pago': ja_pagou,
+                            'data_pagamento': date.today() if ja_pagou else None,
+                            'data_vencimento': date.today(), # Agora o campo existe no model!
+                            'desconto': 0.00
+                        }
+                    )
+            
+            return Response({'status': 'Check-in realizado com sucesso!'}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": f"Erro ao processar check-in: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-            return Response({'status': 'Confirmado e Faturado!'}, status=status.HTTP_200_OK)
-        
-        return Response({'status': 'Confirmado (Sem módulo financeiro)'}, status=status.HTTP_200_OK)
 
 ============================================================
 ARQUIVO: agendamento/urls.py
 ============================================================
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AgendamentoViewSet
+from .views import AgendamentoViewSet, BloqueioAgendaViewSet # <--- Importe aqui
 
 router = DefaultRouter()
-# Isso vai gerar a rota: /api/agendamentos/ (vazia pois o prefixo já está no include principal)
+
 router.register(r'', AgendamentoViewSet, basename='agendamento')
+
+router.register(r'bloqueios', BloqueioAgendaViewSet, basename='bloqueios') 
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -560,9 +725,17 @@ urlpatterns = [
 ARQUIVO: agendamento/serializers.py
 ============================================================
 from rest_framework import serializers
-from .models import Agendamento
+from .models import Agendamento, BloqueioAgenda
 from configuracoes.models import DadosClinica
 from profissionais.models import ProfissionalEspecialidade
+
+
+class BloqueioAgendaSerializer(serializers.ModelSerializer):
+    nome_profissional = serializers.CharField(source='profissional.nome', read_only=True, default="Todos os Profissionais")
+    
+    class Meta:
+        model = BloqueioAgenda
+        fields = '__all__'
 
 class AgendamentoSerializer(serializers.ModelSerializer):
     # Campos de leitura simples
@@ -570,39 +743,110 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     telefone_paciente = serializers.CharField(source='paciente.telefone', read_only=True)
     nome_profissional = serializers.CharField(source='profissional.nome', read_only=True)
     nome_especialidade = serializers.CharField(source='especialidade.nome', read_only=True)
+    
+    # Campos Calculados
     nome_convenio = serializers.SerializerMethodField()
     fatura_pago = serializers.SerializerMethodField()
-
-    def get_fatura_pago(self, obj):
-        # Tenta acessar a fatura relacionada
-        try:
-            return obj.fatura.pago
-        except:
-            return False
     
-    # --- DADOS COMPLETOS PARA O PDF ---
+    # --- NOVO CAMPO: FORMA DE PAGAMENTO SALVA ---
+    fatura_forma_pagamento = serializers.SerializerMethodField()
+
     detalhes_pdf = serializers.SerializerMethodField()
+    
 
     class Meta:
         model = Agendamento
         fields = '__all__'
 
+    def validate(self, data):
+        # Se for encaixe ou edição de status (não criação), pula validação
+        if data.get('is_encaixe') or self.instance:
+            return data
+
+        profissional = data['profissional']
+        especialidade = data['especialidade']
+        dia_agenda = data['data']
+        horario = data['horario']
+        
+        # 1. Busca a REGRA de agenda válida para esse dia/hora
+        # Precisamos encontrar a AgendaConfig que gerou esse horário
+        dia_semana_num = dia_agenda.weekday() # 0=Segunda... 6=Domingo (Python)
+        # Ajuste: No seu Model AgendaConfig 0=Domingo? Verifique. 
+        # Normalmente Python weekday: 0=Seg, 6=Dom. 
+        # Se no seu sistema 0=Domingo, use: (dia_agenda.isoweekday() % 7)
+        
+        # Vamos assumir o padrão do seu sistema (verifique se 0 é Dom ou Seg na page CriarAgenda)
+        # Vou usar um filtro genérico que pega a regra vigente
+        
+        # Converte para o padrão do seu banco (ajuste se necessário)
+        # Supondo que no banco 0=Domingo, 1=Segunda...
+        dia_semana_banco = (dia_agenda.weekday() + 1) % 7 
+
+        regras = AgendaConfig.objects.filter(
+            profissional=profissional,
+            especialidade=especialidade,
+            data_inicio__lte=dia_agenda,
+            data_fim__gte=dia_agenda,
+            dia_semana=dia_semana_banco
+        )
+
+        limite_vagas = 1 # Padrão seguro
+
+        for regra in regras:
+            # Verifica se o horário bate com a regra
+            if regra.tipo == 'fixo':
+                if regra.hora_inicio == horario:
+                    limite_vagas = regra.quantidade_atendimentos
+                    break
+            else:
+                # Regras de intervalo (Padrão ou Periodo)
+                # Verifica se o horário está dentro do range da regra
+                if regra.hora_inicio <= horario < regra.hora_fim:
+                    if regra.tipo == 'periodo':
+                        limite_vagas = regra.quantidade_atendimentos
+                    else:
+                        # Tipo 'padrao' (por tempo) geralmente é 1 por vez
+                        limite_vagas = 1 
+                    break
+        
+        # 2. Conta quantos já existem nesse horário (excluindo cancelados/faltas)
+        agendados = Agendamento.objects.filter(
+            profissional=profissional,
+            data=dia_agenda,
+            horario=horario,
+            status__in=['agendado', 'aguardando', 'em_atendimento', 'finalizado']
+        ).count()
+
+        if agendados >= limite_vagas:
+            raise serializers.ValidationError(
+                f"Limite de vagas excedido para este horário! (Máximo: {limite_vagas}, Agendados: {agendados}). Use a opção 'Encaixe' se necessário."
+            )
+
+        return data    
+
     def get_nome_convenio(self, obj):
         return obj.convenio.nome if obj.convenio else "Particular"
 
+    def get_fatura_pago(self, obj):
+        try: return obj.fatura.pago
+        except: return False
+
+    # --- LÓGICA DO NOVO CAMPO ---
+    def get_fatura_forma_pagamento(self, obj):
+        try:
+            return obj.fatura.forma_pagamento
+        except:
+            return None # Retorna None se não tiver fatura ainda
+
     def get_detalhes_pdf(self, obj):
-        # 1. Dados da Clínica
+        # ... (seu código existente do PDF continua igual aqui) ...
         clinica = DadosClinica.load()
-        
         logo_url = ""
         if clinica.logo:
             request = self.context.get('request')
-            if request:
-                logo_url = request.build_absolute_uri(clinica.logo.url)
-            else:
-                logo_url = clinica.logo.url
+            if request: logo_url = request.build_absolute_uri(clinica.logo.url)
+            else: logo_url = clinica.logo.url
         
-        # 2. Registro do Conselho (CRM/etc)
         registro = ""
         try:
             vinculo = ProfissionalEspecialidade.objects.get(
@@ -610,11 +854,9 @@ class AgendamentoSerializer(serializers.ModelSerializer):
                 especialidade=obj.especialidade
             )
             registro = f"{vinculo.sigla_conselho}: {vinculo.registro_conselho}/{vinculo.uf_conselho}"
-        except:
-            registro = "Não informado"
+        except: registro = "Não informado"
 
         return {
-            # Paciente
             "clinica_logo": logo_url,
             "paciente_cpf": obj.paciente.cpf,
             "paciente_nascimento": obj.paciente.data_nascimento,
@@ -622,11 +864,7 @@ class AgendamentoSerializer(serializers.ModelSerializer):
             "paciente_mae": obj.paciente.nome_mae,
             "paciente_endereco": f"{obj.paciente.logradouro}, {obj.paciente.numero} - {obj.paciente.bairro}",
             "paciente_cidade": f"{obj.paciente.cidade}/{obj.paciente.estado}",
-            
-            # Profissional
             "profissional_registro": registro,
-
-            # Clínica
             "clinica_nome": clinica.nome_fantasia,
             "clinica_endereco": f"{clinica.logradouro}, {clinica.numero}",
             "clinica_bairro": f"{clinica.bairro} - {clinica.cidade}",
@@ -647,6 +885,13 @@ from django.contrib.auth.models import User
 class PerfilOperador(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
     
+    profissional_vinculado = models.ForeignKey(
+        'profissionais.Profissional', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='usuario_sistema'
+    )
     acesso_atendimento = models.BooleanField(default=False)
     acesso_agendamento = models.BooleanField(default=False)
     acesso_faturamento = models.BooleanField(default=False)
@@ -836,44 +1081,69 @@ ARQUIVO: usuarios/serializers.py
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import PerfilOperador, ConfiguracaoSistema
+from profissionais.models import Profissional
 
 # --- SERIALIZER DE CRIAÇÃO E EDIÇÃO ---
 class OperadorSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False) # required=False para permitir edição sem trocar a senha
+    password = serializers.CharField(write_only=True, required=False)
     
-    # Campos que vêm do Frontend (definimos como False padrão, mas o to_representation vai preencher na leitura)
+    # Campos virtuais (não existem no User, mas sim no Perfil)
     acesso_atendimento = serializers.BooleanField(default=False)
     acesso_agendamento = serializers.BooleanField(default=False)
     acesso_faturamento = serializers.BooleanField(default=False)
     force_password_change = serializers.BooleanField(default=True)
+    
+    # Campo de vínculo profissional
+    profissional_id = serializers.PrimaryKeyRelatedField(
+        queryset=Profissional.objects.all(), 
+        source='perfil.profissional_vinculado', 
+        required=False, 
+        allow_null=True
+    )
 
     class Meta:
         model = User
         fields = ['id', 'username', 'password', 'first_name', 'email', 'is_superuser', 
                   'acesso_atendimento', 'acesso_agendamento', 'acesso_faturamento', 
-                  'force_password_change']
+                  'force_password_change', 'profissional_id']
 
-    # --- LÓGICA DE LEITURA (INJETA DADOS DO PERFIL) ---
     def to_representation(self, instance):
-        """ Injeta os dados do Perfil quando o Frontend pede os dados do Operador """
+        """ Injeta os dados do Perfil de forma segura na leitura """
         representation = super().to_representation(instance)
         
-        if hasattr(instance, 'perfil'):
-            representation['acesso_atendimento'] = instance.perfil.acesso_atendimento
-            representation['acesso_agendamento'] = instance.perfil.acesso_agendamento
-            representation['acesso_faturamento'] = instance.perfil.acesso_faturamento
-            representation['force_password_change'] = instance.perfil.force_password_change
+        # Tenta acessar o perfil de forma segura
+        try:
+            perfil = instance.perfil
+            representation['acesso_atendimento'] = perfil.acesso_atendimento
+            representation['acesso_agendamento'] = perfil.acesso_agendamento
+            representation['acesso_faturamento'] = perfil.acesso_faturamento
+            representation['force_password_change'] = perfil.force_password_change
+            
+            if perfil.profissional_vinculado:
+                representation['profissional_id'] = perfil.profissional_vinculado.id
+            else:
+                representation['profissional_id'] = None
+        except Exception:
+            # Se não tiver perfil, define padrões
+            representation['acesso_atendimento'] = False
+            representation['acesso_agendamento'] = False
+            representation['acesso_faturamento'] = False
+            representation['force_password_change'] = False
+            representation['profissional_id'] = None
             
         return representation
 
-    # --- LÓGICA DE CRIAÇÃO (CREATE) ---
     def create(self, validated_data):
+        # Remove campos que não são do User
         atendimento = validated_data.pop('acesso_atendimento', False)
         agendamento = validated_data.pop('acesso_agendamento', False)
         faturamento = validated_data.pop('acesso_faturamento', False)
         force_change = validated_data.pop('force_password_change', True)
 
-        # Cria usuário com criptografia (create_user faz o hash automaticamente)
+        # O DRF pode aninhar o source 'perfil.profissional_vinculado'
+        perfil_data = validated_data.pop('perfil', {})
+        profissional = perfil_data.get('profissional_vinculado', None)
+
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data.get('email', ''),
@@ -891,54 +1161,81 @@ class OperadorSerializer(serializers.ModelSerializer):
             acesso_atendimento=atendimento,
             acesso_agendamento=agendamento,
             acesso_faturamento=faturamento,
-            force_password_change=force_change
+            force_password_change=force_change,
+            profissional_vinculado=profissional
         )
 
         return user
 
-    # --- LÓGICA DE ATUALIZAÇÃO (UPDATE - A CORREÇÃO ESTÁ AQUI) ---
     def update(self, instance, validated_data):
-        # 1. Separa os campos que não pertencem ao Model User diretamente
         password = validated_data.pop('password', None)
         
         atendimento = validated_data.pop('acesso_atendimento', None)
         agendamento = validated_data.pop('acesso_agendamento', None)
         faturamento = validated_data.pop('acesso_faturamento', None)
         force_change = validated_data.pop('force_password_change', None)
+        
+        perfil_data = validated_data.pop('perfil', {})
+        profissional = perfil_data.get('profissional_vinculado', None)
+        update_profissional = 'profissional_vinculado' in perfil_data
 
-        # 2. Atualiza os campos padrão do User (email, first_name, username, etc.)
         instance = super().update(instance, validated_data)
 
-        # 3. Se enviou senha, criptografa corretamente
         if password:
             instance.set_password(password)
             instance.save()
 
-        # 4. Atualiza o Perfil relacionado (permissões)
-        if hasattr(instance, 'perfil'):
-            perfil = instance.perfil
-            if atendimento is not None:
-                perfil.acesso_atendimento = atendimento
-            if agendamento is not None:
-                perfil.acesso_agendamento = agendamento
-            if faturamento is not None:
-                perfil.acesso_faturamento = faturamento
-            if force_change is not None:
-                perfil.force_password_change = force_change
-            perfil.save()
+        # Garante que o perfil existe ou cria um se não existir (para usuários antigos)
+        perfil, created = PerfilOperador.objects.get_or_create(user=instance)
+
+        if atendimento is not None: perfil.acesso_atendimento = atendimento
+        if agendamento is not None: perfil.acesso_agendamento = agendamento
+        if faturamento is not None: perfil.acesso_faturamento = faturamento
+        if force_change is not None: perfil.force_password_change = force_change
+        
+        if update_profissional:
+            perfil.profissional_vinculado = profissional
+
+        perfil.save()
 
         return instance
 
-# --- SERIALIZER DE LISTAGEM (Leitura Segura) ---
+# --- SERIALIZER DE LISTAGEM (CORRIGIDO E BLINDADO) ---
 class OperadorListSerializer(serializers.ModelSerializer):
-    acesso_atendimento = serializers.BooleanField(source='perfil.acesso_atendimento', read_only=True)
-    acesso_agendamento = serializers.BooleanField(source='perfil.acesso_agendamento', read_only=True)
-    acesso_faturamento = serializers.BooleanField(source='perfil.acesso_faturamento', read_only=True)
+    # Usamos SerializerMethodField para não quebrar se o usuário não tiver perfil
+    acesso_atendimento = serializers.SerializerMethodField()
+    acesso_agendamento = serializers.SerializerMethodField()
+    acesso_faturamento = serializers.SerializerMethodField()
+    is_medico = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'email', 'is_superuser', 
-                  'acesso_atendimento', 'acesso_agendamento', 'acesso_faturamento']
+                  'acesso_atendimento', 'acesso_agendamento', 'acesso_faturamento', 'is_medico']
+
+    def get_perfil(self, obj):
+        # Helper para evitar try/except repetitivo
+        try:
+            return obj.perfil
+        except:
+            return None
+
+    def get_acesso_atendimento(self, obj):
+        p = self.get_perfil(obj)
+        return p.acesso_atendimento if p else False
+
+    def get_acesso_agendamento(self, obj):
+        p = self.get_perfil(obj)
+        return p.acesso_agendamento if p else False
+
+    def get_acesso_faturamento(self, obj):
+        p = self.get_perfil(obj)
+        return p.acesso_faturamento if p else False
+
+    def get_is_medico(self, obj):
+        p = self.get_perfil(obj)
+        # Retorna True se tiver um profissional vinculado
+        return bool(p and p.profissional_vinculado)
 
 # --- SERIALIZER DE CONFIGURAÇÃO ---
 class ConfiguracaoSerializer(serializers.ModelSerializer):
@@ -1004,33 +1301,26 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-
-# --- ADICIONE ESTA IMPORTAÇÃO ---
 from usuarios.views import MeView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     
-    # Rotas de Autenticação (Login)
+    # --- AUTENTICAÇÃO ---
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    
-    # --- ROTA CORRIGIDA (Direta) ---
-    # Aponta direto para a View, garantindo que o endereço seja exatamente /api/me/
     path('api/me/', MeView.as_view(), name='me'),
 
-    # Rotas dos Módulos
+    # --- MÓDULOS ESPECÍFICOS (Devem vir ANTES de rotas genéricas) ---
     path('api/pacientes/', include('pacientes.urls')),
-    
-    # Rota para criar operadores (api/operadores/novo/)
     path('api/operadores/', include('usuarios.urls')), 
-
-    path('api/', include('profissionais.urls')),
-
     path('api/configuracoes/', include('configuracoes.urls')),
-
-    path('api/agendamento/', include('agendamento.urls')), # Marcação de consulta
+    
+    # Agendamento e Agendas
+    path('api/agendamento/', include('agendamento.urls')), 
     path('api/agendas/', include('agendas.urls')),
+
+    path('api/profissionais/', include('profissionais.urls')),
 ]
 
 if settings.DEBUG:
@@ -1259,9 +1549,7 @@ class Paciente(models.Model):
     ]
 
     nome = models.CharField(max_length=255)
-    # Novo Campo
     nome_mae = models.CharField(max_length=255, blank=True, null=True, verbose_name="Nome da Mãe")
-    # Novo Campo
     sexo = models.CharField(max_length=20, choices=SEXO_CHOICES, blank=True, null=True)
     
     cpf = models.CharField(max_length=14, unique=True)
@@ -1278,8 +1566,12 @@ class Paciente(models.Model):
     estado = models.CharField(max_length=2, blank=True)
 
     historico_medico = models.TextField(blank=True)
+    
     criado_em = models.DateTimeField(auto_now_add=True)
-    atualizado_em = models.DateTimeField(auto_now=True)
+    
+    # --- A CORREÇÃO É AQUI ---
+    # Mudamos de DateTimeField para DateField para compatibilidade com o banco
+    atualizado_em = models.DateField(auto_now=True) 
 
     def __str__(self):
         return f"{self.nome} ({self.cpf})"
@@ -1364,20 +1656,14 @@ from rest_framework import serializers
 from .models import Paciente
 
 class PacienteSerializer(serializers.ModelSerializer):
-    # 1. Correção do Nascimento (já tinhamos feito)
+    # Formato de entrada da data de nascimento
     data_nascimento = serializers.DateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d", "%d/%m/%Y"])
-
-    # 2. A CORREÇÃO DO ERRO 500:
-    # Definimos atualizado_em como DateField porque o banco está retornando apenas data.
-    # Isso impede que o Django tente calcular fuso horário (utcoffset).
-    atualizado_em = serializers.DateField(read_only=True, format="%Y-%m-%d")
-
-    # 3. Mantemos o criado_em como DateTime (pois o teste mostrou que ele está certo)
-    criado_em = serializers.DateTimeField(read_only=True, format="%d/%m/%Y %H:%M:%S")
 
     class Meta:
         model = Paciente
         fields = '__all__'
+        # Definimos esses campos como somente leitura aqui para segurança
+        read_only_fields = ['criado_em', 'atualizado_em']
 
 ============================================================
 ARQUIVO: pacientes/__init__.py
@@ -1792,7 +2078,6 @@ class AgendaConfigSerializer(serializers.ModelSerializer):
     nome_especialidade = serializers.CharField(source='especialidade.nome', read_only=True)
     nome_dia = serializers.CharField(source='get_dia_semana_display', read_only=True)
     
-    # --- CORREÇÃO: Renomeado para 'convenio_nome' para bater com o Frontend ---
     convenio_nome = serializers.SerializerMethodField()
     
     dias_vinculados = serializers.SerializerMethodField()
@@ -1803,11 +2088,10 @@ class AgendaConfigSerializer(serializers.ModelSerializer):
         model = AgendaConfig
         fields = '__all__'
 
-    # O método precisa chamar get_ + nome_do_campo
     def get_convenio_nome(self, obj):
         if obj.convenio:
             return obj.convenio.nome
-        return None # Retorna null para não mostrar nada no card se for livre
+        return None
 
     def get_dias_vinculados(self, obj):
         dias = AgendaConfig.objects.filter(group_id=obj.group_id).values_list('dia_semana', flat=True)
@@ -1831,18 +2115,25 @@ class AgendaConfigSerializer(serializers.ModelSerializer):
                 seen.add(chave)
         return sorted(unicos, key=lambda x: str(x['time']))
 
+    # --- CORREÇÃO AQUI ---
     def get_total_agendados(self, obj):
         try:
             Agendamento = apps.get_model('agendamento', 'Agendamento')
+            
+            # Conversão: No Model AgendaConfig 0=Domingo, mas no Django Query __week_day 1=Domingo
             target_day = obj.dia_semana + 1 
 
+            # Conta todos os agendamentos que NÃO foram cancelados dentro do período daquela agenda
+            # Isso contabiliza históricos de agendas encerradas também.
             return Agendamento.objects.filter(
                 profissional=obj.profissional,
                 data__range=(obj.data_inicio, obj.data_fim),
                 data__week_day=target_day,
-                status__in=['agendado', 'confirmado', 'concluido']
+                # Lista atualizada com TODOS os status que contam como "vaga ocupada" ou "paciente atendido"
+                status__in=['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou']
             ).count()
-        except Exception:
+        except Exception as e:
+            print(f"Erro ao contar agendados: {e}")
             return 0
 
 ============================================================
@@ -1854,7 +2145,6 @@ ARQUIVO: agendas/__init__.py
 ARQUIVO: financeiro/models.py
 ============================================================
 from django.db import models
-# Importe o model de Agendamento. Se der erro de ciclo, use string 'agendamento.Agendamento'
 from agendamento.models import Agendamento 
 
 class Fatura(models.Model):
@@ -1868,11 +2158,23 @@ class Fatura(models.Model):
     ]
 
     agendamento = models.OneToOneField(Agendamento, on_delete=models.CASCADE, related_name='fatura')
+    
+    # Valores monetários
     valor = models.DecimalField(max_digits=10, decimal_places=2)
+    desconto = models.DecimalField(max_digits=10, decimal_places=2, default=0.00) # Bom ter
+    
     forma_pagamento = models.CharField(max_length=20, choices=PAGAMENTO_CHOICES, default='pendente')
     pago = models.BooleanField(default=False)
     
+    # --- CAMPOS QUE FALTAVAM E CAUSAVAM O ERRO ---
+    data_vencimento = models.DateField(null=True, blank=True)
+    data_pagamento = models.DateField(null=True, blank=True)
+    
     criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Fatura #{self.id} - {self.agendamento}"
 
 ============================================================
 ARQUIVO: financeiro/apps.py
@@ -2088,6 +2390,7 @@ import Convenios from './pages/Convenios';
 import DadosClinica from './pages/DadosClinica';
 import MarcarConsulta from './pages/MarcarConsulta';
 import Recepcao from './pages/Recepcao';
+import Bloqueios from './pages/Bloqueios';
 
 const RotaPrivada = ({ children, adminOnly = false }) => {
   const { user, loading } = useAuth();
@@ -2122,6 +2425,7 @@ function App() {
               <Route path="/convenios" element={<RotaPrivada adminOnly><Convenios /></RotaPrivada>} />
               <Route path="/clinica" element={<RotaPrivada adminOnly><DadosClinica /></RotaPrivada>} />
               <Route path="/recepcao" element={<RotaPrivada><Recepcao /></RotaPrivada>} />
+              <Route path="/agenda/bloqueios" element={<RotaPrivada adminOnly><Bloqueios /></RotaPrivada>} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </NotificationProvider>
@@ -2284,6 +2588,7 @@ export default function Navbar() {
               <DropdownLink to="/recepcao" text="Recepção" />
               <DropdownLink to="/agenda/marcar" text="Marcar Consulta" />
               <div className="border-t border-slate-100 dark:border-slate-700 my-1"></div>
+              <DropdownLink to="/agenda/bloqueios" text="Bloqueios e Feriados" />
               <DropdownLink to="/agenda/configurar" text="Configurar Horários" />
             </NavItem>
           )}
@@ -2511,6 +2816,95 @@ export const generateAppointmentReceipt = async (agendamento) => {
     setNormal(); setSmall();
     doc.text("Emitido em: " + new Date().toLocaleString('pt-BR'), 10, y);
     doc.text("TheClinic", 170, y);
+
+    window.open(doc.output('bloburl'), '_blank');
+};
+
+============================================================
+ARQUIVO: clinica-front/src/utils/generateReport.js
+============================================================
+import jsPDF from 'jspdf';
+
+export const generateConflictReport = (pacientes, motivoBloqueio) => {
+    const doc = new jsPDF();
+    
+    // Configurações visuais
+    const primaryColor = [37, 99, 235]; // Azul
+    const lineColor = [220, 220, 220]; // Cinza claro
+
+    // Cabeçalho
+    doc.setFontSize(18);
+    doc.setTextColor(...primaryColor);
+    doc.text("Relatório de Conflitos de Agenda", 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Motivo do Bloqueio: ${motivoBloqueio}`, 14, 28);
+    doc.text(`Data de Emissão: ${new Date().toLocaleString()}`, 14, 34);
+
+    doc.setDrawColor(...primaryColor);
+    doc.line(14, 38, 196, 38);
+
+    let y = 45;
+
+    // Cabeçalho da Tabela
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0);
+    
+    doc.text("DATA/HORA", 14, y);
+    doc.text("MÉDICO", 45, y);
+    doc.text("PACIENTE / CPF", 95, y);
+    doc.text("CONTATO", 160, y);
+    
+    y += 4;
+    doc.setDrawColor(...lineColor);
+    doc.line(14, y, 196, y);
+    y += 6;
+
+    // Lista de Pacientes
+    doc.setFont("helvetica", "normal");
+    
+    pacientes.forEach((p) => {
+        // Verifica se precisa de nova página
+        if (y > 270) {
+            doc.addPage();
+            y = 20;
+        }
+
+        const dataF = new Date(p.data).toLocaleDateString('pt-BR');
+        const horaF = p.horario.substring(0, 5);
+        const nascimento = new Date(p.paciente_nascimento).toLocaleDateString('pt-BR');
+
+        doc.setFontSize(9);
+        doc.text(`${dataF} ${horaF}`, 14, y);
+        
+        // Médico (trunca se for longo)
+        const medico = p.medico.length > 25 ? p.medico.substring(0, 22) + '...' : p.medico;
+        doc.text(medico, 45, y);
+
+        // Paciente (Duas linhas: Nome e CPF/Nasc)
+        doc.setFont("helvetica", "bold");
+        doc.text(p.paciente_nome, 95, y);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.text(`CPF: ${p.paciente_cpf} - Nasc: ${nascimento}`, 95, y + 4);
+
+        // Telefone
+        doc.setFontSize(9);
+        doc.text(p.paciente_telefone || "Sem telefone", 160, y);
+
+        y += 8;
+        doc.setDrawColor(240); // Linha bem suave
+        doc.line(14, y, 196, y);
+        y += 6;
+    });
+
+    // Rodapé
+    const total = pacientes.length;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Total de Pacientes Afetados: ${total}`, 14, y + 5);
 
     window.open(doc.output('bloburl'), '_blank');
 };
@@ -4210,91 +4604,312 @@ export default function DadosClinica() {
 ============================================================
 ARQUIVO: clinica-front/src/pages/Dashboard.jsx
 ============================================================
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { useNotification } from '../context/NotificationContext';
+import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { Users, Calendar, DollarSign, Settings, Activity, ArrowRight } from 'lucide-react';
+import { 
+    Users, DollarSign, Activity, Clock, TrendingUp, 
+    CalendarCheck, AlertCircle, ChevronRight, Stethoscope 
+} from 'lucide-react';
 
 export default function Dashboard() {
-  const { user } = useAuth();
+    const { user, api } = useAuth();
+    const { notify } = useNotification();
+    const navigate = useNavigate();
 
-  const ShortcutCard = ({ to, title, description, icon: Icon, colorClass }) => (
-    <Link to={to} className="group relative bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md hover:-translate-y-1 transition-all overflow-hidden">
-      <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity ${colorClass.replace('bg-', 'text-')}`}>
-        <Icon size={80} />
-      </div>
-      <div className="relative z-10 flex items-start justify-between">
-        <div>
-          <div className={`p-3 rounded-lg inline-flex mb-4 ${colorClass} text-white shadow-lg`}>
-            <Icon size={24} />
-          </div>
-          <h3 className="text-lg font-bold text-slate-700 dark:text-white mb-1">{title}</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{description}</p>
+    // --- ESTADOS DOS FILTROS ---
+    const hoje = new Date().toISOString().split('T')[0];
+    const mesAtual = new Date().toISOString().slice(0, 7);
+
+    const [filtroDia, setFiltroDia] = useState(hoje);
+    const [filtroMes, setFiltroMes] = useState(mesAtual);
+
+    // --- ESTADOS DOS DADOS ---
+    const [statsDia, setStatsDia] = useState({ total: 0, aguardando: 0 });
+    const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0, receitaEstimada: 0 });
+    const [listaHoje, setListaHoje] = useState([]); 
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (api) {
+            carregarDados();
+        }
+    }, [api, filtroDia, filtroMes]);
+
+    const carregarDados = async () => {
+        setLoading(true);
+        try {
+            // 1. DADOS DO DIA
+            const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true`);
+            const dadosDia = resDia.data.results || resDia.data;
+            
+            // "Pacientes Agendados no Total" = Todos (independente do status)
+            const totalAgendadosDia = dadosDia.length;
+            const aguardando = dadosDia.filter(a => a.status === 'aguardando').length;
+
+            setStatsDia({ total: totalAgendadosDia, aguardando });
+            setListaHoje(dadosDia);
+
+            // 2. DADOS DO MÊS
+            const [ano, mes] = filtroMes.split('-');
+            const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
+            const dadosMes = resMes.data.results || resMes.data;
+
+            // "Total de pacientes no mês deve considerar a quantidade total de agendamento, independente da situação"
+            const totalPacientesMes = dadosMes.length;
+
+            // RECEITA CONFIRMADA: Apenas quem já pagou (fatura_pago = true)
+            // Precisamos garantir que o serializer esteja enviando 'fatura_pago'
+            const receitaConfirmada = dadosMes
+                .filter(a => a.fatura_pago === true)
+                .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+
+            // RECEITA ESTIMADA: Todos agendados - Faltosos - Cancelados
+            // (Assumindo que 'agendado', 'aguardando', 'em_atendimento', 'finalizado' contam)
+            const receitaEstimada = dadosMes
+                .filter(a => a.status !== 'faltou' && a.status !== 'cancelado')
+                .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+
+            setStatsMes({ 
+                totalPacientes: totalPacientesMes, 
+                receitaConfirmada: receitaConfirmada,
+                receitaEstimada: receitaEstimada
+            });
+
+        } catch (error) {
+            console.error("Erro dashboard", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRealizarAtendimento = () => {
+        // Redireciona para o Prontuário (que será criado no futuro)
+        // Por enquanto, podemos colocar um aviso ou redirecionar para uma rota placeholder
+        if (!user.profissional_id) {
+            notify.error("Apenas profissionais de saúde podem realizar atendimento.");
+            return;
+        }
+        // Exemplo: rota futura
+        navigate('/atendimento/prontuario'); 
+        // Como não existe ainda, vai cair no 404 ou dashboard, 
+        // ou você pode colocar um alert provisório:
+        notify.info("Módulo de Prontuário será implementado em breve.");
+    };
+
+    // --- COMPONENTES VISUAIS ---
+    
+    const FilterInput = ({ type, value, onChange, label }) => (
+        <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">{label}</span>
+            <input 
+                type={type} 
+                value={value} 
+                onChange={e => onChange(e.target.value)} 
+                className="bg-transparent border-b border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm py-1 outline-none focus:border-blue-500 transition-colors font-semibold"
+            />
         </div>
-      </div>
-      <div className="flex items-center text-sm font-medium text-blue-600 dark:text-blue-400">
-        Acessar <ArrowRight size={16} className="ml-1 group-hover:translate-x-1 transition-transform" />
-      </div>
-    </Link>
-  );
+    );
 
-  const StatWidget = ({ label, value, trend, positive }) => (
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-      <div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mb-1">{label}</p>
-        <h4 className="text-2xl font-bold text-slate-800 dark:text-white">{value}</h4>
-      </div>
-      <div className={`text-sm px-2 py-1 rounded-full ${positive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
-        {trend}
-      </div>
-    </div>
-  );
-
-  return (
-    <Layout>
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
-            Olá, <span className="text-blue-600 dark:text-blue-400">{user?.first_name || user?.username}</span>
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400">Resumo da clínica.</p>
+    const GradientCard = ({ title, value, subValue, icon: Icon, gradient, loading }) => (
+        <div className={`relative overflow-hidden rounded-3xl p-6 text-white shadow-xl ${gradient} transition-all hover:scale-[1.02]`}>
+            <div className="relative z-10">
+                <div className="flex justify-between items-start mb-4">
+                    <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md">
+                        <Icon size={24} className="text-white" />
+                    </div>
+                    {loading && <div className="h-6 w-16 bg-white/20 animate-pulse rounded-full"></div>}
+                </div>
+                <div>
+                    <p className="text-blue-100 font-medium text-sm mb-1">{title}</p>
+                    <h3 className="text-4xl font-bold tracking-tight">{loading ? '...' : value}</h3>
+                    {subValue && (
+                        <p className="text-white/80 text-xs mt-2 font-medium bg-black/10 inline-block px-2 py-1 rounded-lg">
+                            {subValue}
+                        </p>
+                    )}
+                </div>
+            </div>
+            <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
         </div>
+    );
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <StatWidget label="Pacientes Hoje" value="12" trend="+2 novos" positive={true} />
-          <StatWidget label="Consultas" value="4" trend="Pendentes" positive={false} />
-          <StatWidget label="Faturamento" value="R$ 1.250" trend="+15%" positive={true} />
-        </div>
+    const getStatusStyle = (status) => {
+        switch(status) {
+            case 'agendado': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
+            case 'aguardando': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 animate-pulse';
+            case 'em_atendimento': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
+            case 'finalizado': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+            case 'faltou': return 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400';
+            case 'cancelado': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+            default: return 'bg-gray-100 text-gray-600';
+        }
+    };
 
-        <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Acesso Rápido</h2>
+    return (
+        <Layout>
+            <div className="max-w-7xl mx-auto pb-10">
+                
+                {/* CABEÇALHO */}
+                <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">
+                            Dashboard
+                        </h1>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
+                            <Activity size={16} className="text-green-500"/> 
+                            Visão geral de <span className="font-bold text-slate-700 dark:text-slate-200">{user?.first_name || user?.username}</span>
+                        </p>
+                    </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {(user?.acesso_atendimento || user?.is_superuser) && (
-             <ShortcutCard to="/pacientes" title="Atendimento" description="Gestão de pacientes." icon={Users} colorClass="bg-blue-600"/>
-          )}
-          {(user?.acesso_agendamento || user?.is_superuser) && (
-             <ShortcutCard to="/agenda" title="Agendamento" description="Agenda médica." icon={Calendar} colorClass="bg-indigo-500"/>
-          )}
-          {(user?.acesso_faturamento || user?.is_superuser) && (
-             <ShortcutCard to="/faturamento" title="Financeiro" description="Notas e caixa." icon={DollarSign} colorClass="bg-emerald-500"/>
-          )}
-          {user?.is_superuser && (
-             <ShortcutCard to="/cadastro-operador" title="Configurações" description="Gestão do sistema." icon={Settings} colorClass="bg-slate-700"/>
-          )}
-        </div>
+                    <div className="flex gap-6 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                        <FilterInput label="Dia Referência" type="date" value={filtroDia} onChange={setFiltroDia} />
+                        <FilterInput label="Mês Financeiro" type="month" value={filtroMes} onChange={setFiltroMes} />
+                    </div>
+                </div>
 
-        <div className="mt-10 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800 rounded-2xl p-6 border border-blue-100 dark:border-slate-700">
-          <div className="flex items-center space-x-3 text-blue-800 dark:text-blue-300 mb-2">
-            <Activity size={20} />
-            <h3 className="font-bold">Status do Sistema</h3>
-          </div>
-          <p className="text-sm text-blue-600 dark:text-slate-400">
-            Todas as integrações operando normalmente.
-          </p>
-        </div>
-      </div>
-    </Layout>
-  );
+                {/* KPI CARDS */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                    <GradientCard 
+                        title="Agendamentos (Dia)"
+                        value={statsDia.total}
+                        subValue={`${statsDia.aguardando} Aguardando`}
+                        icon={CalendarCheck}
+                        gradient="bg-gradient-to-br from-blue-600 to-indigo-600"
+                        loading={loading}
+                    />
+
+                    <GradientCard 
+                        title="Total Agendamentos (Mês)"
+                        value={statsMes.totalPacientes}
+                        subValue={`Referente a ${filtroMes.split('-')[1]}/${filtroMes.split('-')[0]}`}
+                        icon={Users}
+                        gradient="bg-gradient-to-br from-violet-600 to-purple-600"
+                        loading={loading}
+                    />
+
+                    <GradientCard 
+                        title="Receita Confirmada (Paga)"
+                        value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
+                        subValue={`Est. Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
+                        icon={DollarSign}
+                        gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+                        loading={loading}
+                    />
+                </div>
+
+                {/* ÁREA PRINCIPAL: LISTA DE HOJE */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    
+                    {/* COLUNA ESQUERDA: AGENDA DE HOJE */}
+                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                                    <Clock className="text-blue-500" size={20}/> Agenda do Dia
+                                </h3>
+                                <p className="text-xs text-slate-500">Visualização rápida dos pacientes de hoje ({filtroDia.split('-')[2]}/{filtroDia.split('-')[1]})</p>
+                            </div>
+                            <Link to="/recepcao" className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg transition-colors">
+                                Ir para Recepção <ChevronRight size={16}/>
+                            </Link>
+                        </div>
+                        
+                        <div className="flex-1 overflow-auto max-h-[400px] p-2">
+                            {loading ? (
+                                <div className="text-center py-10 text-slate-400">Carregando...</div>
+                            ) : listaHoje.length === 0 ? (
+                                <div className="text-center py-12 flex flex-col items-center">
+                                    <div className="bg-slate-100 dark:bg-slate-700 p-4 rounded-full mb-3 text-slate-400"><CalendarCheck size={32}/></div>
+                                    <p className="text-slate-500 font-medium">Nenhum agendamento para este dia.</p>
+                                </div>
+                            ) : (
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="text-xs text-slate-400 uppercase tracking-wider bg-white dark:bg-slate-800 sticky top-0 z-10">
+                                        <tr>
+                                            <th className="px-6 py-3 font-bold">Horário</th>
+                                            <th className="px-6 py-3 font-bold">Paciente</th>
+                                            <th className="px-6 py-3 font-bold">Status</th>
+                                            <th className="px-6 py-3 font-bold text-right">Valor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+                                        {listaHoje.map((item) => (
+                                            <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                                <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.horario.slice(0,5)}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-slate-800 dark:text-white">{item.nome_paciente}</div>
+                                                    <div className="text-xs text-slate-500">{item.nome_profissional}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${getStatusStyle(item.status)}`}>
+                                                        {item.status.replace('_', ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-medium text-slate-600 dark:text-slate-400">
+                                                    {item.valor > 0 ? `R$ ${Number(item.valor).toFixed(2)}` : '-'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* COLUNA DIREITA: STATUS RÁPIDO & ATENDIMENTO */}
+                    <div className="flex flex-col gap-6">
+                        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-lg flex flex-col justify-center items-center text-center h-full min-h-[200px]">
+                            <div className="bg-white/10 p-4 rounded-full mb-4 animate-pulse">
+                                <AlertCircle size={32} className="text-yellow-400"/>
+                            </div>
+                            <h3 className="text-2xl font-bold">{statsDia.aguardando}</h3>
+                            <p className="text-slate-300 text-sm font-medium uppercase tracking-widest mt-1">Pacientes Aguardando</p>
+                            
+                            {/* BOTÃO REALIZAR ATENDIMENTO (CONDICIONAL) */}
+                            {user?.profissional_id && (
+                                <button 
+                                    onClick={handleRealizarAtendimento}
+                                    className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
+                                >
+                                    <Stethoscope size={20}/> Realizar Atendimento
+                                </button>
+                            )}
+                            
+                            {!user?.profissional_id && (
+                                <p className="text-xs text-slate-500 mt-4 bg-black/20 px-3 py-1 rounded-lg">
+                                    Acesso ao atendimento restrito a profissionais médicos vinculados.
+                                </p>
+                            )}
+                        </div>
+                        
+                        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+                            <h4 className="font-bold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
+                                <TrendingUp size={18} className="text-green-500"/> Performance
+                            </h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="flex justify-between text-xs mb-1 text-slate-500 dark:text-slate-400">
+                                        <span>Fluxo Diário</span>
+                                        <span>Normal</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">
+                                        <div className="bg-green-500 h-2 rounded-full" style={{width: '75%'}}></div>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                    Dados atualizados em tempo real conforme a movimentação da recepção.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </Layout>
+    );
 }
 
 ============================================================
@@ -4304,7 +4919,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import { useNavigate } from 'react-router-dom';
-import { Search, UserPlus, Pencil, Trash2, Stethoscope } from 'lucide-react';
+import { Search, UserPlus, Pencil, Trash2, Stethoscope, BriefcaseMedical } from 'lucide-react';
 
 export default function Profissionais() {
   const { api } = useAuth();
@@ -4315,18 +4930,27 @@ export default function Profissionais() {
   // --- FUNÇÃO AUXILIAR PARA FORMATAR O CPF NA TELA ---
   const formatCPF = (cpf) => {
     if (!cpf) return '';
-    const v = cpf.replace(/\D/g, ''); // Remove tudo que não é dígito
+    const v = cpf.replace(/\D/g, ''); 
     return v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
   };
 
   useEffect(() => {
-    if(api) api.get(`profissionais/?search=${search}`).then(res => setProfissionais(res.data.results || res.data));
+    // ROTA AJUSTADA: Agora chamamos 'profissionais/' (que no backend virou api/profissionais/)
+    if(api) {
+        api.get(`profissionais/?search=${search}`)
+           .then(res => setProfissionais(res.data.results || res.data))
+           .catch(err => console.error("Erro ao carregar profissionais", err));
+    }
   }, [api, search]);
 
   const handleExcluir = async (id) => {
-    if(confirm("Excluir profissional?")) {
-        await api.delete(`profissionais/${id}/`);
-        setProfissionais(prev => prev.filter(p => p.id !== id));
+    if(window.confirm("Excluir profissional?")) {
+        try {
+            await api.delete(`profissionais/${id}/`);
+            setProfissionais(prev => prev.filter(p => p.id !== id));
+        } catch (error) {
+            alert("Erro ao excluir. Verifique se existem vínculos.");
+        }
     }
   }
 
@@ -4338,41 +4962,52 @@ export default function Profissionais() {
     <Layout>
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex gap-2"><Stethoscope/> Profissionais</h1>
-            <button onClick={()=>navigate('/profissionais/novo')} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold flex gap-2"><UserPlus size={20}/> Novo Profissional</button>
+            <div className="flex items-center gap-3">
+                <div className="bg-blue-600 p-3 rounded-xl text-white shadow"><Stethoscope size={28}/></div>
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Profissionais</h1>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm">Gerencie sua equipe médica.</p>
+                </div>
+            </div>
+            <button onClick={()=>navigate('/profissionais/novo')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold flex gap-2 transition-colors"><UserPlus size={20}/> Novo Profissional</button>
         </div>
 
+        {/* --- BUSCA SIMPLES --- */}
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border mb-6 border-slate-200 dark:border-slate-700 relative">
             <Search className="absolute left-7 top-7 text-slate-400" size={18} />
-            <input placeholder="Buscar por nome ou CPF..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-10 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3 outline-none dark:text-white"/>
+            <input 
+                placeholder="Buscar por nome ou CPF..." 
+                value={search} 
+                onChange={e=>setSearch(e.target.value)} 
+                className="w-full pl-10 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3 outline-none dark:text-white focus:ring-2 focus:ring-blue-500 transition-all"
+            />
         </div>
 
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <table className="w-full text-left">
-                <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-300">
-                    <tr><th className="px-6 py-4">Nome</th><th className="px-6 py-4">Especialidades</th><th className="px-6 py-4 text-right">Ações</th></tr>
+                <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-300 uppercase text-xs font-bold">
+                    <tr><th className="px-6 py-4">Nome / CPF</th><th className="px-6 py-4">Especialidades</th><th className="px-6 py-4 text-right">Ações</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {profissionais.map(p => (
-                        <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                            <td className="px-6 py-4 font-medium text-slate-700 dark:text-white">
-                                {p.nome}
-                                <br/>
-                                {/* APLICAÇÃO DA MÁSCARA AQUI */}
-                                <span className="text-xs text-slate-400">{formatCPF(p.cpf)}</span>
+                        <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                            <td className="px-6 py-4">
+                                <div className="font-bold text-slate-700 dark:text-white">{p.nome}</div>
+                                <span className="text-xs text-slate-400 font-mono">{formatCPF(p.cpf)}</span>
                             </td>
                             <td className="px-6 py-4">
                                 <div className="flex flex-col gap-1">
                                     {p.especialidades.map((esp, i) => (
-                                        <span key={i} className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
-                                            <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                                {esp.nome_especialidade}
+                                        <div key={i} className="flex items-center gap-2 text-sm">
+                                            <span className="font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                                <BriefcaseMedical size={12}/> {esp.nome_especialidade}
                                             </span>
-                                            <span className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-600">
+                                            <span className="text-xs bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-300">
                                                 {esp.sigla_conselho}/{esp.uf_conselho}-{esp.registro_conselho}
                                             </span>
-                                        </span>
+                                        </div>
                                     ))}
+                                    {p.especialidades.length === 0 && <span className="text-xs text-slate-400 italic">Nenhuma especialidade</span>}
                                 </div>
                             </td>
                             <td className="px-6 py-4 text-right flex justify-end gap-2">
@@ -4393,54 +5028,126 @@ export default function Profissionais() {
 ============================================================
 ARQUIVO: clinica-front/src/pages/CadastroOperador.jsx
 ============================================================
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; // Adicione useRef
 import { useAuth } from '../context/AuthContext';
-import { useNotification } from '../context/NotificationContext'; // <--- NOVO
+import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2 
+  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X 
 } from 'lucide-react';
+
+// --- COMPONENTE SEARCHABLE SELECT (Reutilizado) ---
+const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const containerRef = useRef(null);
+
+    useEffect(() => { 
+        const selected = options.find(o => String(o.id) === String(value)); 
+        if (selected) setQuery(selected.label);
+        else if (!value) setQuery('');
+    }, [value, options]);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setIsOpen(false);
+                const selected = options.find(o => String(o.id) === String(value));
+                setQuery(selected ? selected.label : '');
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [containerRef, value, options]);
+
+    const filtered = (query === '' || query === (options.find(o => String(o.id) === String(value))?.label)) 
+        ? options 
+        : options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+    
+    return (
+        <div className="relative mb-4" ref={containerRef}>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+            <div className="relative">
+                <input 
+                    type="text"
+                    className="w-full pl-10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400" 
+                    value={query} 
+                    onFocus={() => setIsOpen(true)}
+                    onClick={() => setIsOpen(true)}
+                    onChange={e => { setQuery(e.target.value); setIsOpen(true); }} 
+                    placeholder={placeholder} autoComplete="off"
+                />
+                <div className="absolute left-3 top-3.5 text-slate-400"><Search size={18}/></div>
+                <div className="absolute right-2 top-3.5 flex items-center gap-1 text-slate-400">
+                    {value && <button type="button" onClick={(e)=>{e.stopPropagation(); onChange(null); setQuery('')}} className="hover:text-red-500"><X size={14}/></button>}
+                    <ChevronDown size={16}/>
+                </div>
+            </div>
+            {isOpen && (
+                <ul className="absolute z-[100] w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-auto mt-1 animate-in fade-in zoom-in duration-100">
+                    {filtered.length > 0 ? filtered.map(opt => (
+                        <li key={opt.id} onMouseDown={() => { onChange(opt.id); setQuery(opt.label); setIsOpen(false); }} className={`p-2.5 cursor-pointer text-sm border-b last:border-0 border-slate-100 dark:border-slate-700 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200`}>
+                            {opt.label}
+                            {String(value) === String(opt.id) && <Check size={14} className="text-blue-500"/>}
+                        </li>
+                    )) : <li className="p-3 text-sm text-slate-400 text-center">Nenhum resultado.</li>}
+                </ul>
+            )}
+        </div>
+    );
+};
 
 export default function CadastroOperador() {
   const { api } = useAuth();
-  const { notify } = useNotification(); // <--- HOOK
+  const { notify } = useNotification();
   const navigate = useNavigate();
   const { id } = useParams();
   
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(id ? true : false);
+  const [profissionais, setProfissionais] = useState([]); // Lista de profissionais
   
   const [formData, setFormData] = useState({
     username: '', password: '', first_name: '', email: '',
     acesso_atendimento: false, acesso_agendamento: false, 
     acesso_faturamento: false, is_superuser: false,
-    force_password_change: true
+    force_password_change: true,
+    profissional_id: null // Vinculo com médico
   });
 
   useEffect(() => {
-    if (id && api) {
-        api.get(`operadores/${id}/`)
-           .then(res => {
-                const data = res.data;
-                setFormData({
-                    username: data.username || '',
-                    first_name: data.first_name || '',
-                    email: data.email || '',
-                    acesso_atendimento: data.acesso_atendimento || false,
-                    acesso_agendamento: data.acesso_agendamento || false,
-                    acesso_faturamento: data.acesso_faturamento || false,
-                    is_superuser: data.is_superuser || false,
-                    force_password_change: data.force_password_change || false,
-                    password: ''
-                });
-           })
-           .catch(err => {
-               console.error(err);
-               if (err.response?.status === 401) notify.error("Sessão expirada. Faça login novamente.");
-               navigate('/operadores');
-           })
-           .finally(() => setFetching(false));
+    // 1. Carrega Profissionais para o Select
+    if (api) {
+        api.get('profissionais/').then(res => {
+            const lista = res.data.results || res.data;
+            setProfissionais(lista.map(p => ({ id: p.id, label: `${p.nome} (CPF: ${p.cpf})` })));
+        });
+
+        // 2. Carrega dados do Operador se for edição
+        if (id) {
+            api.get(`operadores/${id}/`)
+               .then(res => {
+                   const data = res.data;
+                   setFormData({
+                       username: data.username || '',
+                       first_name: data.first_name || '',
+                       email: data.email || '',
+                       acesso_atendimento: data.acesso_atendimento || false,
+                       acesso_agendamento: data.acesso_agendamento || false,
+                       acesso_faturamento: data.acesso_faturamento || false,
+                       is_superuser: data.is_superuser || false,
+                       force_password_change: data.force_password_change || false,
+                       profissional_id: data.profissional_id || null, // Carrega o ID
+                       password: ''
+                   });
+               })
+               .catch(err => {
+                   console.error(err);
+                   navigate('/operadores');
+               })
+               .finally(() => setFetching(false));
+        }
     }
   }, [id, api, navigate]);
 
@@ -4457,16 +5164,16 @@ export default function CadastroOperador() {
           const dadosParaEnviar = { ...formData };
           if (!dadosParaEnviar.password) delete dadosParaEnviar.password;
           await api.put(`operadores/${id}/`, dadosParaEnviar);
-          notify.success('Operador atualizado com sucesso!'); // <---
+          notify.success('Operador atualizado com sucesso!');
       } else {
           await api.post('operadores/novo/', formData);
-          notify.success('Operador criado com sucesso!'); // <---
+          notify.success('Operador criado com sucesso!');
       }
       navigate('/operadores');
     } catch (error) {
       console.error(error);
       const msg = error.response?.data?.error || 'Erro ao salvar operador.';
-      notify.error(msg); // <---
+      notify.error(msg);
     } finally {
       setLoading(false);
     }
@@ -4544,6 +5251,20 @@ export default function CadastroOperador() {
                     </div>
                   </div>
 
+                  {/* SELEÇÃO DE PROFISSIONAL VINCULADO */}
+                  <div className="col-span-2">
+                    <hr className="my-2 border-slate-100 dark:border-slate-700"/>
+                    <p className="text-xs text-blue-500 font-bold mb-2 uppercase tracking-wider flex items-center gap-1"><Stethoscope size={12}/> Vínculo Profissional (Médico)</p>
+                    <SearchableSelect 
+                        label="Este operador é um médico?" 
+                        placeholder="Pesquise o profissional..." 
+                        options={profissionais} 
+                        value={formData.profissional_id} 
+                        onChange={(val) => setFormData({...formData, profissional_id: val})}
+                    />
+                    <p className="text-xs text-slate-400">Ao vincular, este operador terá acesso ao Prontuário Eletrônico.</p>
+                  </div>
+
                   <div>
                     <label className={labelClass}>Nome de Usuário</label>
                     <div className="relative">
@@ -4562,12 +5283,12 @@ export default function CadastroOperador() {
                   
                    <div className="col-span-2 mt-2">
                      <PermissionToggle 
-                        name="force_password_change" 
-                        label="Forçar Troca de Senha" 
-                        icon={KeyRound} 
-                        checked={formData.force_password_change} 
-                        onChange={handleChange} 
-                      />
+                       name="force_password_change" 
+                       label="Forçar Troca de Senha" 
+                       icon={KeyRound} 
+                       checked={formData.force_password_change} 
+                       onChange={handleChange} 
+                     />
                    </div>
                 </div>
               </div>
@@ -5128,6 +5849,244 @@ export default function Configuracoes() {
 }
 
 ============================================================
+ARQUIVO: clinica-front/src/pages/Bloqueios.jsx
+============================================================
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
+import Layout from '../components/Layout';
+import { 
+    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2 
+} from 'lucide-react';
+import { generateConflictReport } from '../utils/generateReport';
+
+export default function Bloqueios() {
+    const { api } = useAuth();
+    const { notify, confirmDialog } = useNotification();
+    
+    const [bloqueios, setBloqueios] = useState([]);
+    const [profissionais, setProfissionais] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    // Form
+    const [form, setForm] = useState({
+        profissional: '', data_inicio: '', data_fim: '', 
+        hora_inicio: '00:00', hora_fim: '23:59', 
+        motivo: '', tipo: 'bloqueio', recorrente: false
+    });
+
+    // Modal de Conflito
+    const [conflictData, setConflictData] = useState(null);
+
+    useEffect(() => {
+        loadData();
+    }, [api]);
+
+    const loadData = async () => {
+        try {
+            const [resBloq, resProf] = await Promise.all([
+                api.get('agendamento/bloqueios/'),
+                api.get('profissionais/')
+            ]);
+            setBloqueios(resBloq.data.results || resBloq.data);
+            setProfissionais(resProf.data.results || resProf.data);
+        } catch (e) { notify.error("Erro ao carregar dados."); }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        
+        // 1. Verifica conflitos
+        try {
+            const res = await api.post('agendamento/bloqueios/verificar_conflitos/', form);
+            
+            if (res.data.conflito) {
+                setConflictData(res.data);
+                setLoading(false);
+                return; // Para aqui e abre o modal
+            }
+
+            // Se não tem conflito, cria direto
+            await api.post('agendamento/bloqueios/', { ...form, acao_conflito: 'manter' });
+            notify.success("Bloqueio criado com sucesso!");
+            setForm({ ...form, motivo: '', data_inicio: '', data_fim: '' });
+            loadData();
+
+        } catch (error) {
+            notify.error("Erro ao processar bloqueio.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const resolverConflito = async (acao) => {
+        // acao = 'cancelar' ou 'manter'
+        try {
+            await api.post('agendamento/bloqueios/', { ...form, acao_conflito: acao });
+            notify.success(`Bloqueio criado! Pacientes ${acao === 'cancelar' ? 'cancelados' : 'mantidos'}.`);
+            setConflictData(null);
+            setForm({ ...form, motivo: '', data_inicio: '', data_fim: '' });
+            loadData();
+        } catch (error) {
+            notify.error("Erro ao resolver conflito.");
+        }
+    };
+
+    const imprimirRelatorio = () => {
+        if (conflictData) {
+            generateConflictReport(conflictData.pacientes, form.motivo);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (await confirmDialog("Remover este bloqueio?", "Exclusão", "Sim, remover", "Cancelar")) {
+            await api.delete(`agendamento/bloqueios/${id}/`);
+            loadData();
+        }
+    }
+
+    const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-red-500 text-sm dark:text-white";
+
+    return (
+        <Layout>
+            <div className="max-w-6xl mx-auto pb-20">
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-6">
+                    <CalendarX className="text-red-500"/> Bloqueios e Feriados
+                </h1>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* FORMULÁRIO */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-fit">
+                        <h2 className="font-bold text-lg mb-4 dark:text-white">Novo Bloqueio</h2>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">Tipo</label>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={()=>setForm({...form, tipo: 'bloqueio'})} className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-colors ${form.tipo === 'bloqueio' ? 'bg-slate-700 text-white border-slate-700' : 'text-slate-500 border-slate-200'}`}>Bloqueio</button>
+                                    <button type="button" onClick={()=>setForm({...form, tipo: 'feriado', profissional: ''})} className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-colors ${form.tipo === 'feriado' ? 'bg-red-500 text-white border-red-500' : 'text-slate-500 border-slate-200'}`}>Feriado</button>
+                                </div>
+                            </div>
+
+                            {form.tipo === 'bloqueio' && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Profissional</label>
+                                    <select value={form.profissional} onChange={e=>setForm({...form, profissional: e.target.value})} className={inputClass}>
+                                        <option value="">Todos os Profissionais</option>
+                                        {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                                    </select>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <div><label className="block text-xs font-bold text-slate-500 mb-1">Início</label><input type="date" value={form.data_inicio} onChange={e=>setForm({...form, data_inicio: e.target.value})} className={inputClass} required/></div>
+                                <div><label className="block text-xs font-bold text-slate-500 mb-1">Fim</label><input type="date" value={form.data_fim} onChange={e=>setForm({...form, data_fim: e.target.value})} className={inputClass} required/></div>
+                            </div>
+                            
+                            {form.tipo === 'bloqueio' && (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">Hora Início</label><input type="time" value={form.hora_inicio} onChange={e=>setForm({...form, hora_inicio: e.target.value})} className={inputClass}/></div>
+                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">Hora Fim</label><input type="time" value={form.hora_fim} onChange={e=>setForm({...form, hora_fim: e.target.value})} className={inputClass}/></div>
+                                </div>
+                            )}
+
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1">Motivo</label><input value={form.motivo} onChange={e=>setForm({...form, motivo: e.target.value})} className={inputClass} placeholder="Ex: Férias, Natal..." required/></div>
+
+                            {form.tipo === 'feriado' && (
+                                <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                                    <input type="checkbox" checked={form.recorrente} onChange={e=>setForm({...form, recorrente: e.target.checked})}/>
+                                    Repetir todos os anos
+                                </label>
+                            )}
+
+                            <button type="submit" disabled={loading} className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
+                                {loading ? <Loader2 className="animate-spin"/> : <Save size={18}/>} Salvar Bloqueio
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* LISTA */}
+                    <div className="lg:col-span-2">
+                        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 text-xs uppercase font-bold">
+                                    <tr>
+                                        <th className="px-6 py-4">Tipo</th>
+                                        <th className="px-6 py-4">Data</th>
+                                        <th className="px-6 py-4">Motivo / Profissional</th>
+                                        <th className="px-6 py-4 text-right">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+                                    {bloqueios.map(b => (
+                                        <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                            <td className="px-6 py-4">
+                                                {b.tipo === 'feriado' 
+                                                    ? <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">FERIADO</span>
+                                                    : <span className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold">BLOQUEIO</span>
+                                                }
+                                                {b.recorrente && <span className="ml-2 text-xs text-blue-500 font-bold" title="Anual">↻</span>}
+                                            </td>
+                                            <td className="px-6 py-4 dark:text-white">
+                                                {new Date(b.data_inicio).toLocaleDateString()}
+                                                {b.data_inicio !== b.data_fim && ` até ${new Date(b.data_fim).toLocaleDateString()}`}
+                                                {b.tipo === 'bloqueio' && <div className="text-xs text-slate-400">{b.hora_inicio.slice(0,5)} - {b.hora_fim.slice(0,5)}</div>}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-slate-700 dark:text-white">{b.motivo}</div>
+                                                <div className="text-xs text-slate-500">{b.nome_profissional || "Todos os Profissionais"}</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button onClick={()=>handleDelete(b.id)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash2 size={16}/></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {bloqueios.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-slate-400">Nenhum bloqueio ativo.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {/* MODAL DE CONFLITO */}
+                {conflictData && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+                            <div className="bg-orange-500 p-5 text-white flex justify-between items-center">
+                                <h3 className="font-bold text-lg flex items-center gap-2"><AlertTriangle/> Conflitos Detectados</h3>
+                                <button onClick={() => setConflictData(null)}><X/></button>
+                            </div>
+                            <div className="p-6">
+                                <p className="text-slate-700 dark:text-slate-300 mb-4">
+                                    Existem <strong>{conflictData.total} pacientes</strong> agendados neste período. O que deseja fazer?
+                                </p>
+                                
+                                <button onClick={imprimirRelatorio} className="w-full mb-6 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700">
+                                    <FileDown size={20}/> Baixar Relatório de Afetados (PDF)
+                                </button>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button onClick={() => resolverConflito('manter')} className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-sm">
+                                        <CheckCircle2 size={20}/>
+                                        Bloquear e MANTER
+                                        <span className="text-[10px] font-normal opacity-70">Agenda bloqueada, pacientes continuam lá</span>
+                                    </button>
+                                    <button onClick={() => resolverConflito('cancelar')} className="bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-sm">
+                                        <Ban size={20}/>
+                                        Bloquear e CANCELAR
+                                        <span className="text-[10px] font-normal opacity-70">Cancela todos os agendamentos</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </Layout>
+    );
+}
+
+============================================================
 ARQUIVO: clinica-front/src/pages/Recepcao.jsx
 ============================================================
 import React, { useState, useEffect } from 'react';
@@ -5136,12 +6095,12 @@ import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
     Search, CalendarClock, User, CheckCircle2, 
-    Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil 
+    Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil, UserX, RotateCcw 
 } from 'lucide-react';
 
 export default function Recepcao() {
     const { api } = useAuth();
-    const { notify } = useNotification();
+    const { notify, confirmDialog } = useNotification();
 
     // --- ESTADOS ---
     const [loading, setLoading] = useState(false);
@@ -5154,7 +6113,7 @@ export default function Recepcao() {
     const [buscaTexto, setBuscaTexto] = useState('');
     
     // Filtro Visual (Legenda)
-    const [statusVisiveis, setStatusVisiveis] = useState(['agendado', 'aguardando', 'em_atendimento', 'finalizado']);
+    const [statusVisiveis, setStatusVisiveis] = useState(['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou']);
 
     // Modal de Check-in
     const [modalOpen, setModalOpen] = useState(false);
@@ -5177,13 +6136,12 @@ export default function Recepcao() {
 
     useEffect(() => {
         if(api) carregarAgenda();
-    }, [api, dataFiltro, profissionalFiltro]); // Recarrega se mudar data ou médico
+    }, [api, dataFiltro, profissionalFiltro]);
 
     // --- LÓGICA ---
     const carregarAgenda = async () => {
         setLoading(true);
         try {
-            // Passamos os filtros para o Backend
             const params = new URLSearchParams();
             if (dataFiltro) params.append('data', dataFiltro);
             if (profissionalFiltro) params.append('profissional', profissionalFiltro);
@@ -5200,15 +6158,12 @@ export default function Recepcao() {
 
     const verificarAtraso = (horario, status) => {
         if (status !== 'agendado') return false;
-        // Cria data do agendamento
         const dataAgendamento = new Date(`${dataFiltro}T${horario}`);
         const agora = new Date();
         
-        // Se for hoje e já passou do horário (tolerância 15 min)
         if (dataFiltro === agora.toISOString().split('T')[0]) {
            return agora > new Date(dataAgendamento.getTime() + 15*60000);
         }
-        // Se for data passada e ainda está 'agendado', está atrasado
         if (new Date(dataFiltro) < new Date(agora.setHours(0,0,0,0))) return true;
 
         return false;
@@ -5224,7 +6179,6 @@ export default function Recepcao() {
         return idade;
     };
 
-    // Filtro local para busca de texto e toggle de status
     const itensFiltrados = agendamentos.filter(item => {
         if (!statusVisiveis.includes(item.status)) return false;
         if (buscaTexto) {
@@ -5235,7 +6189,6 @@ export default function Recepcao() {
         return true;
     });
 
-    // --- MANIPULAÇÃO DO STATUS ---
     const toggleStatus = (status) => {
         if (statusVisiveis.includes(status)) {
             setStatusVisiveis(statusVisiveis.filter(s => s !== status));
@@ -5251,19 +6204,17 @@ export default function Recepcao() {
             case 'em_atendimento': return 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
             case 'finalizado': return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800';
             case 'cancelado': return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
+            case 'faltou': return 'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600';
             default: return 'bg-slate-100 text-slate-600';
         }
     };
 
-    // --- CHECK-IN / EDIÇÃO ---
+    // --- AÇÕES ---
     const abrirCheckin = (item) => {
         setSelectedItem(item);
-        
-        // Se já tiver dados de fatura (fatura_pago vem do serializer), usamos.
-        // Caso contrário, usamos o valor do agendamento.
         setFormCheckin({
             valor: item.valor || '',
-            forma_pagamento: 'dinheiro', // O ideal seria vir do backend se já foi salvo, mas por padrão 'dinheiro' serve para edição rápida
+            forma_pagamento: item.fatura_forma_pagamento || 'dinheiro',
             pago: item.fatura_pago || false
         });
         setModalOpen(true);
@@ -5272,14 +6223,11 @@ export default function Recepcao() {
     const confirmarCheckin = async () => {
         setLoadingCheckin(true);
         try {
-            // Este endpoint agora deve usar update_or_create no backend para suportar edições
             await api.post(`agendamento/${selectedItem.id}/confirmar_chegada/`, formCheckin);
-            
             const acao = selectedItem.status === 'agendado' ? 'Chegada confirmada' : 'Dados atualizados';
             notify.success(`${acao} com sucesso!`);
-            
             setModalOpen(false);
-            carregarAgenda(); // Atualiza a lista para refletir status e pagamento
+            carregarAgenda();
         } catch (error) {
             console.error(error);
             notify.error("Erro ao salvar dados.");
@@ -5288,7 +6236,57 @@ export default function Recepcao() {
         }
     };
 
-    // Classes CSS reutilizáveis
+    const handleMarcarFalta = async (item) => {
+        const confirm = await confirmDialog(
+            `Confirmar que o paciente ${item.nome_paciente} FALTOU à consulta?`,
+            "Registrar Falta",
+            "Sim, Faltou",
+            "Cancelar",
+            "danger"
+        );
+        if (confirm) {
+            try {
+                await api.post(`agendamento/${item.id}/marcar_falta/`);
+                notify.info("Falta registrada.");
+                carregarAgenda();
+            } catch (error) { notify.error("Erro ao registrar falta."); }
+        }
+    };
+
+    // --- REVERTER: AGORA SUPORTA "FALTOU" ---
+    const handleReverter = async (item) => {
+        let mensagem = "";
+        let titulo = "";
+        
+        if (item.status === 'aguardando') {
+            titulo = "Desfazer Recepção";
+            mensagem = `Deseja desfazer a recepção de ${item.nome_paciente}? Isso apagará os dados financeiros gerados para este atendimento.`;
+        } else if (item.status === 'faltou') {
+            titulo = "Remover Falta";
+            mensagem = `Deseja remover a falta de ${item.nome_paciente} e retorná-lo para a lista de agendados?`;
+        } else {
+            return; // Outros status não revertem por aqui
+        }
+
+        const confirm = await confirmDialog(
+            mensagem,
+            titulo,
+            "Sim, Reverter",
+            "Cancelar",
+            "warning"
+        );
+
+        if (confirm) {
+            try {
+                await api.post(`agendamento/${item.id}/reverter_chegada/`);
+                notify.info("Status revertido para 'Agendado'.");
+                carregarAgenda();
+            } catch (error) {
+                notify.error("Erro ao reverter status.");
+            }
+        }
+    };
+
     const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white transition-all";
 
     return (
@@ -5309,7 +6307,6 @@ export default function Recepcao() {
                         <label className="text-xs font-bold text-slate-500 mb-1 block">Data</label>
                         <input type="date" value={dataFiltro} onChange={e => setDataFiltro(e.target.value)} className={inputClass}/>
                     </div>
-                    
                     <div className="w-full lg:w-64">
                         <label className="text-xs font-bold text-slate-500 mb-1 block">Profissional</label>
                         <select value={profissionalFiltro} onChange={e => setProfissionalFiltro(e.target.value)} className={inputClass}>
@@ -5317,50 +6314,37 @@ export default function Recepcao() {
                             {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                         </select>
                     </div>
-
                     <div className="flex-1">
                         <label className="text-xs font-bold text-slate-500 mb-1 block">Buscar Paciente</label>
                         <div className="relative">
                             <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-                            <input 
-                                placeholder="Nome do paciente..." 
-                                value={buscaTexto} 
-                                onChange={e => setBuscaTexto(e.target.value)} 
-                                className={`${inputClass} pl-10`}
-                            />
+                            <input placeholder="Nome do paciente..." value={buscaTexto} onChange={e => setBuscaTexto(e.target.value)} className={`${inputClass} pl-10`}/>
                         </div>
                     </div>
                 </div>
 
-                {/* --- LEGENDA (BADGES CLICÁVEIS) --- */}
+                {/* --- LEGENDA --- */}
                 <div className="flex flex-wrap gap-2 mb-4 animate-in fade-in slide-in-from-top-2">
-                    {['agendado', 'aguardando', 'em_atendimento', 'finalizado'].map(status => (
-                        <button 
-                            key={status}
-                            onClick={() => toggleStatus(status)}
-                            className={`px-3 py-1 rounded-full text-xs font-bold border transition-all uppercase flex items-center gap-1 ${
-                                statusVisiveis.includes(status) 
-                                ? getStatusColor(status) + ' shadow-sm scale-105' 
-                                : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 opacity-60'
-                            }`}
-                        >
+                    {['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou'].map(status => (
+                        <button key={status} onClick={() => toggleStatus(status)} className={`px-3 py-1 rounded-full text-xs font-bold border transition-all uppercase flex items-center gap-1 ${statusVisiveis.includes(status) ? getStatusColor(status) + ' shadow-sm scale-105' : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 opacity-60'}`}>
                             {status === 'agendado' && <CalendarClock size={12}/>}
                             {status === 'aguardando' && <Clock size={12}/>}
+                            {status === 'faltou' && <UserX size={12}/>}
                             {status.replace('_', ' ')}
                         </button>
                     ))}
                 </div>
 
-                {/* --- TABELA DE PACIENTES --- */}
+                {/* --- TABELA --- */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden min-h-[400px]">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                                 <tr>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Horário</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Paciente</th>
                                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Profissional</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Status</th>
                                     <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase">Ação</th>
                                 </tr>
                             </thead>
@@ -5372,7 +6356,6 @@ export default function Recepcao() {
                                 ) : (
                                     itensFiltrados.map((item) => {
                                         const atrasado = verificarAtraso(item.horario, item.status);
-                                        // Pega idade do serializer (detalhes_pdf) se disponível
                                         const idade = item.detalhes_pdf?.paciente_nascimento ? calcularIdade(item.detalhes_pdf.paciente_nascimento) : '';
 
                                         return (
@@ -5384,6 +6367,13 @@ export default function Recepcao() {
                                                     </div>
                                                     {atrasado && <div className="text-[10px] text-red-500 font-bold uppercase">Atrasado</div>}
                                                 </td>
+
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(item.status)}`}>
+                                                        {item.status.replace('_', ' ').toUpperCase()}
+                                                    </span>
+                                                </td>
+
                                                 <td className="px-6 py-4">
                                                     <div className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                                         {item.nome_paciente}
@@ -5393,15 +6383,12 @@ export default function Recepcao() {
                                                         {item.nome_convenio && <span className="bg-slate-100 dark:bg-slate-700 px-1.5 rounded text-slate-600 dark:text-slate-300 font-medium">{item.nome_convenio}</span>}
                                                     </div>
                                                 </td>
+
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                                                     <div className="font-medium">{item.nome_profissional}</div>
                                                     <div className="text-xs text-slate-400">{item.nome_especialidade}</div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(item.status)}`}>
-                                                        {item.status.replace('_', ' ').toUpperCase()}
-                                                    </span>
-                                                </td>
+
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex justify-end items-center gap-2">
                                                         {/* Ícone de Pagamento */}
@@ -5411,25 +6398,30 @@ export default function Recepcao() {
                                                             <div title="Pagamento Pendente" className="text-slate-300 p-2"><DollarSign size={20}/></div>
                                                         )}
 
-                                                        {/* Botão Confirmar (Só se Agendado) */}
+                                                        {/* BOTOES AGENDADO */}
                                                         {item.status === 'agendado' && (
-                                                            <button 
-                                                                onClick={() => abrirCheckin(item)}
-                                                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
-                                                            >
-                                                                <CheckCircle2 size={16}/> Confirmar
-                                                            </button>
+                                                            <>
+                                                                <button onClick={() => handleMarcarFalta(item)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors border border-transparent" title="Marcar Falta"><UserX size={18}/></button>
+                                                                <button onClick={() => abrirCheckin(item)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"><CheckCircle2 size={16}/> Confirmar</button>
+                                                            </>
                                                         )}
 
-                                                        {/* Botão Editar (Se Aguardando ou Em Atendimento) */}
-                                                        {(item.status === 'aguardando' || item.status === 'em_atendimento') && (
-                                                            <button 
-                                                                onClick={() => abrirCheckin(item)} 
-                                                                className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200"
-                                                                title="Editar dados da recepção/pagamento"
-                                                            >
-                                                                <Pencil size={18}/>
-                                                            </button>
+                                                        {/* BOTOES AGUARDANDO (EDITAR E REVERTER) */}
+                                                        {(item.status === 'aguardando') && (
+                                                            <>
+                                                                <button onClick={() => handleReverter(item)} className="text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-orange-200" title="Desfazer Recepção"><RotateCcw size={18}/></button>
+                                                                <button onClick={() => abrirCheckin(item)} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200" title="Editar dados"><Pencil size={18}/></button>
+                                                            </>
+                                                        )}
+                                                        
+                                                        {/* BOTAO REVERTER FALTA */}
+                                                        {(item.status === 'faltou') && (
+                                                             <button onClick={() => handleReverter(item)} className="text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 p-2 rounded-lg transition-colors border border-transparent" title="Desfazer Falta"><RotateCcw size={18}/></button>
+                                                        )}
+
+                                                        {/* BOTAO EDITAR (EM ATENDIMENTO) */}
+                                                        {item.status === 'em_atendimento' && (
+                                                            <button onClick={() => abrirCheckin(item)} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200" title="Editar dados"><Pencil size={18}/></button>
                                                         )}
                                                     </div>
                                                 </td>
@@ -5442,41 +6434,26 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* --- MODAL DE CHECK-IN / EDIÇÃO --- */}
+                {/* --- MODAL DE CHECK-IN --- */}
                 {modalOpen && selectedItem && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                             <div className="bg-green-600 p-5 text-white flex justify-between items-center">
-                                <h3 className="font-bold text-lg flex items-center gap-2">
-                                    <CheckCircle2/> 
-                                    {selectedItem.status === 'agendado' ? 'Confirmar Chegada' : 'Editar Recepção'}
-                                </h3>
+                                <h3 className="font-bold text-lg flex items-center gap-2"><CheckCircle2/> {selectedItem.status === 'agendado' ? 'Confirmar Chegada' : 'Editar Recepção'}</h3>
                                 <button onClick={() => setModalOpen(false)}><X/></button>
                             </div>
-                            
                             <div className="p-6 space-y-4">
                                 <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg text-center mb-4">
                                     <p className="text-sm text-slate-500">Paciente</p>
                                     <p className="font-bold text-lg text-slate-800 dark:text-white">{selectedItem.nome_paciente}</p>
                                 </div>
-
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Valor da Consulta (R$)</label>
-                                    <input 
-                                        type="number" 
-                                        value={formCheckin.valor} 
-                                        onChange={e => setFormCheckin({...formCheckin, valor: e.target.value})}
-                                        className={inputClass}
-                                    />
+                                    <input type="number" value={formCheckin.valor} onChange={e => setFormCheckin({...formCheckin, valor: e.target.value})} className={inputClass}/>
                                 </div>
-
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Forma de Pagamento</label>
-                                    <select 
-                                        value={formCheckin.forma_pagamento} 
-                                        onChange={e => setFormCheckin({...formCheckin, forma_pagamento: e.target.value})}
-                                        className={inputClass}
-                                    >
+                                    <select value={formCheckin.forma_pagamento} onChange={e => setFormCheckin({...formCheckin, forma_pagamento: e.target.value})} className={inputClass}>
                                         <option value="dinheiro">Dinheiro</option>
                                         <option value="pix">Pix</option>
                                         <option value="cartao_credito">Cartão de Crédito</option>
@@ -5485,27 +6462,13 @@ export default function Recepcao() {
                                         <option value="pendente">A Definir / Pagar Depois</option>
                                     </select>
                                 </div>
-
                                 <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={formCheckin.pago}
-                                        onChange={e => setFormCheckin({...formCheckin, pago: e.target.checked})}
-                                        className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"
-                                    />
+                                    <input type="checkbox" checked={formCheckin.pago} onChange={e => setFormCheckin({...formCheckin, pago: e.target.checked})} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"/>
                                     <span className="text-sm font-bold text-slate-700 dark:text-white">Pagamento já realizado?</span>
                                 </label>
-
                                 <div className="pt-4 flex gap-3 justify-end">
                                     <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-lg">Cancelar</button>
-                                    <button 
-                                        onClick={confirmarCheckin} 
-                                        disabled={loadingCheckin}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg disabled:opacity-50"
-                                    >
-                                        {loadingCheckin ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
-                                        {selectedItem.status === 'agendado' ? 'Confirmar' : 'Salvar Alterações'}
-                                    </button>
+                                    <button onClick={confirmarCheckin} disabled={loadingCheckin} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg disabled:opacity-50">{loadingCheckin ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} {selectedItem.status === 'agendado' ? 'Confirmar' : 'Salvar Alterações'}</button>
                                 </div>
                             </div>
                         </div>
@@ -5526,14 +6489,22 @@ import Layout from '../components/Layout';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { 
-  Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, MapPin, ChevronDown, Check, AlertCircle, DollarSign, Printer, ShieldCheck 
+  Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, MapPin, ChevronDown, Check, AlertCircle, DollarSign, Printer, ShieldCheck, Lock 
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
 
 const calendarStyles = `
   .react-calendar { width: 100%; border: none; font-family: inherit; background: transparent; }
   .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 2px solid #2563eb !important; }
+  
+  /* ESTILOS NOVOS */
   .dia-livre { background-color: #dcfce7 !important; color: #166534 !important; border: 1px solid #bbf7d0 !important; font-weight: bold; }
+  .dia-feriado { background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fecaca !important; cursor: not-allowed !important; opacity: 0.8; }
+  .dia-bloqueado { background-color: #f1f5f9 !important; color: #64748b !important; border: 1px solid #cbd5e1 !important; cursor: not-allowed !important; text-decoration: line-through; }
+  
+  /* Agenda Encerrada (Visualização no Calendário) - Opcional, pode usar dia-livre também, mas aqui diferenciamos se quiser */
+  .dia-encerrado { background-color: #f3f4f6 !important; color: #6b7280 !important; border: 1px solid #e5e7eb !important; }
+
   .react-calendar__tile--active { background: #2563eb !important; color: white !important; border: none !important; }
   .react-calendar__tile:disabled { background-color: #f3f4f6 !important; color: #9ca3af !important; }
 `;
@@ -5543,14 +6514,12 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
 
-    // Sincroniza o texto do input com o valor selecionado externamente
     useEffect(() => { 
         const selected = options.find(o => String(o.id) === String(value)); 
         if (selected) setQuery(selected.label);
         else if (!value) setQuery('');
-    }, [value, options]);
+    }, [value, options]); 
 
-    // Fecha ao clicar fora
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
@@ -5563,7 +6532,6 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [containerRef, value, options]);
 
-    // Lógica de filtro que permite ver a lista toda se o texto for igual ao selecionado
     const filtered = (query === '' || query === (options.find(o => String(o.id) === String(value))?.label)) 
         ? options 
         : options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
@@ -5634,7 +6602,6 @@ export default function MarcarConsulta() {
   const [valorSelecionado, setValorSelecionado] = useState(''); 
   const [pacienteId, setPacienteId] = useState('');
   const [convenioId, setConvenioId] = useState('');
-  // Estado para travar o campo de convênio se a regra exigir
   const [convenioTravado, setConvenioTravado] = useState(false);
   
   const [encaixeHora, setEncaixeHora] = useState('');
@@ -5644,8 +6611,12 @@ export default function MarcarConsulta() {
 
   const [modalPacienteOpen, setModalPacienteOpen] = useState(false);
   const [loadingCep, setLoadingCep] = useState(false);
+  const [loadingPaciente, setLoadingPaciente] = useState(false);
+  
   const formInicialPaciente = { nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' };
   const [novoPaciente, setNovoPaciente] = useState(formInicialPaciente);
+
+  const [listaBloqueios, setListaBloqueios] = useState([]);
 
   const getLocalISODate = (date) => {
       const year = date.getFullYear();
@@ -5664,16 +6635,17 @@ export default function MarcarConsulta() {
   const [vagasDoDia, setVagasDoDia] = useState([]);
   const [regrasProfissional, setRegrasProfissional] = useState([]); 
 
-  // Carrega listas
+  // Carrega listas iniciais
   useEffect(() => {
     if (api) {
         api.get('profissionais/').then(res => setProfissionais(res.data.results?.map(p => ({ id: p.id, label: p.nome })) || []));
         api.get('pacientes/lista/').then(res => setPacientes(res.data.results?.map(p => ({ id: p.id, label: `${p.nome} - ${p.cpf}` })) || []));
         api.get('configuracoes/convenios/').then(res => setConvenios(res.data.results?.map(c => ({ id: c.id, label: c.nome })) || []));
+        
+        api.get('agendamento/bloqueios/').then(res => setListaBloqueios(res.data.results || res.data));
     }
   }, [api]);
 
-  // Carrega Especialidades e Regras quando o profissional muda
   useEffect(() => {
     if (profissionalId) {
         api.get(`profissionais/${profissionalId}/`).then(res => {
@@ -5683,7 +6655,8 @@ export default function MarcarConsulta() {
             else setEspecialidadeId('');
         });
         
-        api.get(`agendas/config/?status=ativos&profissional_id=${profissionalId}&nopage=true`)
+        // --- ALTERAÇÃO AQUI: STATUS 'TODOS' PARA TRAZER AGENDAS ENCERRADAS ---
+        api.get(`agendas/config/?status=todos&profissional_id=${profissionalId}&nopage=true`)
             .then(res => setRegrasProfissional(res.data))
             .catch(e => console.error(e));
     } else {
@@ -5693,7 +6666,6 @@ export default function MarcarConsulta() {
     }
   }, [profissionalId, api]);
 
-  // Recarrega agenda
   useEffect(() => {
     if (profissionalId && especialidadeId && dataApi) carregarAgenda();
     else setVagasDoDia([]);
@@ -5708,21 +6680,57 @@ export default function MarcarConsulta() {
   };
 
   const getTileClassName = ({ date, view }) => {
-    if (view !== 'month' || !especialidadeId) return null;
-    const dataString = getLocalISODate(date);
+    if (view !== 'month') return null;
+    
+    const dataIso = getLocalISODate(date);
+    const diaMes = dataIso.slice(5);
+
+    // 1. Bloqueios e Feriados
+    const bloqueio = listaBloqueios.find(b => {
+        const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
+        const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
+        const bateProf = !b.profissional || (profissionalId && b.profissional === parseInt(profissionalId));
+        return (bateData || bateRecorrente) && bateProf;
+    });
+
+    if (bloqueio) return bloqueio.tipo === 'feriado' ? 'dia-feriado' : 'dia-bloqueado';
+
+    // 2. Agendas
+    if (!especialidadeId) return null;
     const jsDay = date.getDay();
-    const temRegra = regrasProfissional.some(r => 
+    
+    // Procura alguma regra válida para o dia (ATIVA ou ENCERRADA)
+    const regraEncontrada = regrasProfissional.find(r => 
         (r.dia_semana === jsDay) && 
         String(r.especialidade) === String(especialidadeId) && 
-        (r.data_inicio <= dataString && r.data_fim >= dataString)
+        (r.data_inicio <= dataIso && r.data_fim >= dataIso)
     );
-    return temRegra ? 'dia-livre' : null;
+
+    if (regraEncontrada) {
+        // Se a regra existe mas está encerrada (situacao=false), pinta diferente (opcional)
+        // Se quiser que apareça verde igual, retorne 'dia-livre'. 
+        // Se quiser cinza, retorne 'dia-encerrado'.
+        // O pedido foi "aparecer no calendario", então vamos manter 'dia-livre' para indicar que "houve agenda"
+        return 'dia-livre'; 
+    }
+    
+    return null;
   };
 
   const gerarVisualizacao = (regras, agendamentos) => {
     let slots = [];
     const jsDay = dateValue.getDay(); 
     
+    // Verifica bloqueio explícito (Férias/Feriado)
+    const dataIso = getLocalISODate(dateValue);
+    const diaMes = dataIso.slice(5);
+    const bloqueioAtivo = listaBloqueios.find(b => {
+        const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
+        const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
+        const bateProf = !b.profissional || (profissionalId && b.profissional === parseInt(profissionalId));
+        return (bateData || bateRecorrente) && bateProf;
+    });
+
     const regrasFiltradas = regras.filter(r => 
         r.dia_semana === jsDay && 
         r.data_inicio <= dataApi && 
@@ -5730,11 +6738,15 @@ export default function MarcarConsulta() {
         String(r.especialidade) === String(especialidadeId)
     );
 
+    // Gera slots mesmo se tiver bloqueio ou agenda encerrada
+    // Apenas marcamos as flags para desabilitar depois
     regrasFiltradas.forEach(regra => {
         const valorRegra = parseFloat(regra.valor || 0);
-        // Pega o nome do convênio da REGRA (do backend corrigido)
         const convenioRegraNome = regra.convenio_nome; 
         const convenioRegraId = regra.convenio;
+        
+        // Flag para indicar que a agenda base está fechada/encerrada
+        const agendaEncerrada = (regra.situacao === false) || !!bloqueioAtivo;
 
         if (regra.tipo === 'fixo') {
             const qtd = regra.quantidade_atendimentos || 1;
@@ -5744,7 +6756,8 @@ export default function MarcarConsulta() {
                     valor: valorRegra, 
                     ocupado: false, 
                     convenio_regra_nome: convenioRegraNome,
-                    convenio_regra_id: convenioRegraId
+                    convenio_regra_id: convenioRegraId,
+                    agenda_fechada: agendaEncerrada // Nova prop
                 });
             }
         } else {
@@ -5761,7 +6774,8 @@ export default function MarcarConsulta() {
                         valor: valorRegra, 
                         ocupado: false, 
                         convenio_regra_nome: convenioRegraNome,
-                        convenio_regra_id: convenioRegraId
+                        convenio_regra_id: convenioRegraId,
+                        agenda_fechada: agendaEncerrada // Nova prop
                     });
                 }
                 atual += regra.intervalo_minutos;
@@ -5814,7 +6828,6 @@ export default function MarcarConsulta() {
       setPacienteId(''); 
       setObservacao('');
       
-      // Se a vaga tem convênio fixo, preenche e trava
       if (slot.convenio_regra_id) {
           setConvenioId(slot.convenio_regra_id);
           setConvenioTravado(true);
@@ -5835,7 +6848,7 @@ export default function MarcarConsulta() {
      setTipoModal('encaixe'); 
      setValorSelecionado(''); 
      setConvenioId('');
-     setConvenioTravado(false); // Encaixe é sempre livre
+     setConvenioTravado(false);
      setModalOpen(true); 
   };
 
@@ -5848,10 +6861,7 @@ export default function MarcarConsulta() {
       setObservacao(slot.observacoes || '');
       setTipoModal(slot.is_encaixe ? 'encaixe' : 'normal');
       if(slot.is_encaixe) setEncaixeHora(slot.hora);
-      
-      // Na edição, deixamos livre para correções
       setConvenioTravado(false);
-
       setModalOpen(true);
   };
 
@@ -5898,7 +6908,7 @@ export default function MarcarConsulta() {
         } else {
             const { data } = await api.post('agendamento/', payload);
             notify.success("Agendamento criado!");
-            generateAppointmentReceipt(data); // Imprime automático
+            generateAppointmentReceipt(data);
         }
         setModalOpen(false);
         carregarAgenda();
@@ -5942,34 +6952,43 @@ export default function MarcarConsulta() {
       } finally { setLoadingCep(false); }
   };
 
-  // --- FUNÇÃO CORRIGIDA AQUI ---
+  // --- FUNÇÃO CORRIGIDA E OTIMIZADA ---
   const salvarPacienteCompleto = async (e) => {
       e.preventDefault();
+      setLoadingPaciente(true); 
+      
       try {
-          // 1. Posta no backend
           const { data } = await api.post('pacientes/', novoPaciente);
           
-          notify.success("Paciente cadastrado!");
+          notify.success("Paciente cadastrado com sucesso!");
 
-          // 2. Cria objeto para lista local
-          const novoItemLista = { 
+          const novoItemParaLista = { 
               id: data.id, 
               label: `${data.nome} - ${data.cpf}` 
           };
 
-          // 3. Atualiza lista de opções imediatamente (sem GET)
-          setPacientes(listaAtual => [novoItemLista, ...listaAtual]);
-
-          // 4. Seleciona o ID no campo
-          setPacienteId(data.id); 
-          
-          // 5. Fecha modal e limpa form
+          setPacientes(prevLista => [novoItemParaLista, ...prevLista]);
           setModalPacienteOpen(false);
           setNovoPaciente(formInicialPaciente);
 
+          setTimeout(() => {
+              setPacienteId(data.id);
+          }, 100);
+
       } catch (error) { 
-          if (error.response?.data?.cpf) notify.warning("CPF já cadastrado!");
-          else notify.error("Erro ao cadastrar paciente."); 
+          console.error("Erro no cadastro:", error);
+          if (error.response?.data?.cpf) {
+              notify.warning("Atenção: Este CPF já está cadastrado!");
+          } 
+          else if (error.response?.data) {
+              const msg = Object.values(error.response.data).flat()[0];
+              notify.error(`Erro: ${msg || "Verifique os dados."}`);
+          }
+          else {
+              notify.error("Erro de conexão ou processamento."); 
+          }
+      } finally {
+          setLoadingPaciente(false);
       }
   };
 
@@ -6008,7 +7027,12 @@ export default function MarcarConsulta() {
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-4 h-4 rounded border" style={{backgroundColor: '#fee2e2', borderColor: '#fecaca'}}></div> 
-                                <span>Sem Vagas (Indisponível)</span>
+                                <span>Bloqueios / Feriados</span>
+                            </div>
+                            {/* ADICIONADO PARA CLAREZA */}
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded border" style={{backgroundColor: '#f3f4f6', borderColor: '#e5e7eb'}}></div> 
+                                <span>Sem Vagas / Encerrada</span>
                             </div>
                         </div>
                     </div>
@@ -6023,11 +7047,19 @@ export default function MarcarConsulta() {
                     <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-3 content-start">
                         {vagasDoDia.length > 0 ? vagasDoDia.map((slot, idx) => {
                             const isPast = isDateInPast(dateValue);
+                            // Se a agenda estiver fechada E não estiver ocupada, bloqueia
+                            const isLocked = slot.agenda_fechada && !slot.ocupado; 
+                            
                             return (
                                 <div 
                                     key={idx} 
                                     onClick={() => {
+                                        // TRAVAS DE CLIQUE
                                         if (slot.ocupado) return; 
+                                        if (isLocked) {
+                                            notify.warning("Esta agenda está encerrada ou bloqueada.");
+                                            return;
+                                        }
                                         if (isPast) {
                                             notify.warning("Não é possível agendar em datas passadas.");
                                             return;
@@ -6037,11 +7069,16 @@ export default function MarcarConsulta() {
                                     className={`relative p-3 rounded-xl border-2 flex justify-between items-center transition-all duration-200 ${
                                         slot.is_encaixe ? 'bg-yellow-50 border-yellow-200 hover:border-yellow-400' : 
                                         slot.ocupado ? 'bg-slate-50 border-slate-200 opacity-90' : 
+                                        isLocked ? 'bg-gray-100 border-gray-200 cursor-not-allowed opacity-70' : // ESTILO BLOQUEADO/ENCERRADO
                                         isPast ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-60' : 'bg-white border-green-200 hover:border-green-500 cursor-pointer hover:shadow-md'
                                     }`}
                                 >
                                     <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className={`text-lg font-bold w-16 text-center py-1 rounded-lg ${slot.is_encaixe ? 'bg-yellow-100 text-yellow-700' : slot.ocupado ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-700'}`}>
+                                        <div className={`text-lg font-bold w-16 text-center py-1 rounded-lg ${
+                                            slot.is_encaixe ? 'bg-yellow-100 text-yellow-700' : 
+                                            isLocked ? 'bg-gray-200 text-gray-500' : // Cor da hora se bloqueado
+                                            slot.ocupado ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-700'
+                                        }`}>
                                             {slot.hora}
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -6053,9 +7090,10 @@ export default function MarcarConsulta() {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <div className={`text-sm font-bold ${isPast ? 'text-slate-400' : 'text-green-600'}`}>{isPast ? 'Expirado' : 'Livre'}</div>
+                                                    <div className={`text-sm font-bold ${isLocked ? 'text-gray-500' : isPast ? 'text-slate-400' : 'text-green-600'}`}>
+                                                        {isLocked ? (slot.agenda_fechada ? 'Agenda Encerrada' : 'Bloqueado') : isPast ? 'Expirado' : 'Livre'}
+                                                    </div>
                                                     
-                                                    {/* MOSTRAR CONVÊNIO DA REGRA ANTES DO VALOR */}
                                                     {slot.convenio_regra_nome && (
                                                         <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1 truncate">
                                                             <ShieldCheck size={12}/> {slot.convenio_regra_nome}
@@ -6067,6 +7105,8 @@ export default function MarcarConsulta() {
                                             )}
                                         </div>
                                     </div>
+                                    
+                                    {isLocked && !slot.ocupado && <div className="absolute top-2 right-2 text-gray-400"><Lock size={14}/></div>}
 
                                     {slot.ocupado && (
                                         <div className="flex gap-1 ml-2">
@@ -6090,9 +7130,10 @@ export default function MarcarConsulta() {
             </div>
         )}
         
-        {/* MODAL DE AGENDAMENTO */}
+        {/* MODAL DE AGENDAMENTO (CÓDIGO ANTERIOR) */}
         {modalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            // ... (O código do modal permanece idêntico, apenas reusando a lógica)
+             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                     <div className="bg-blue-600 p-6 text-white flex justify-between items-center"><h2 className="text-xl font-bold">{agendamentoIdEditar ? 'Editar Agendamento' : 'Novo Agendamento'}</h2><button onClick={() => setModalOpen(false)}><X/></button></div>
                     <div className="p-6 space-y-4">
@@ -6120,14 +7161,13 @@ export default function MarcarConsulta() {
                             <SearchableSelect label="" options={pacientes} value={pacienteId} onChange={setPacienteId} placeholder="Pesquisar..." />
                         </div>
                         
-                        {/* CONVÊNIO: TRAVADO SE FOR FIXO DA AGENDA */}
                         <SearchableSelect 
                             label="Convênio (Opcional)" 
                             options={convenios} 
                             value={convenioId} 
                             onChange={setConvenioId} 
                             placeholder="Particular..."
-                            disabled={convenioTravado} // TRAVA O CAMPO
+                            disabled={convenioTravado}
                         />
                         
                         {tipoModal === 'encaixe' && <div><label className="block text-sm font-bold mb-1">Horário</label><input type="time" className="w-full border p-3 rounded-lg dark:bg-slate-900 dark:text-white" value={encaixeHora} onChange={e => setEncaixeHora(e.target.value)} /></div>}
@@ -6149,9 +7189,9 @@ export default function MarcarConsulta() {
             </div>
         )}
         
-        {/* MODAL DE NOVO PACIENTE (MANTIDO) */}
+        {/* MODAL DE NOVO PACIENTE (CÓDIGO ANTERIOR) */}
         {modalPacienteOpen && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl animate-in fade-in zoom-in duration-200 my-10">
                     <div className="bg-slate-800 p-5 text-white flex justify-between items-center rounded-t-2xl"><h3 className="font-bold flex items-center gap-2 text-lg"><UserPlus size={20}/> Novo Paciente</h3><button onClick={() => setModalPacienteOpen(false)} className="text-slate-400 hover:text-white"><X size={24}/></button></div>
                     <form onSubmit={salvarPacienteCompleto} className="p-6">
@@ -6174,7 +7214,10 @@ export default function MarcarConsulta() {
                         </div>
                         <div className="pt-8 flex gap-3 justify-end">
                             <button type="button" onClick={() => setModalPacienteOpen(false)} className="px-6 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-lg hover:bg-slate-200">Cancelar</button>
-                            <button type="submit" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"><Save size={18}/> Salvar e Usar</button>
+                            <button type="submit" disabled={loadingPaciente} className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50">
+                                {loadingPaciente ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
+                                Salvar e Usar
+                            </button>
                         </div>
                     </form>
                 </div>
