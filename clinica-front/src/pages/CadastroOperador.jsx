@@ -7,7 +7,6 @@ import {
   UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, Users 
 } from 'lucide-react';
 
-// --- COMPONENTE SEARCHABLE SELECT (Reutilizado) ---
 const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -76,20 +75,19 @@ export default function CadastroOperador() {
   
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(id ? true : false);
-  const [profissionais, setProfissionais] = useState([]); // Lista de profissionais
+  const [profissionais, setProfissionais] = useState([]);
   
   const [formData, setFormData] = useState({
     username: '', password: '', first_name: '', email: '',
     acesso_atendimento: false, acesso_agendamento: false, 
-    acesso_faturamento: false, acesso_cadastros: false, // <--- ADICIONEI AQUI
+    acesso_faturamento: false, acesso_cadastros: false,
     is_superuser: false,
     force_password_change: true,
-    profissional: null
+    profissional: null // <--- NOME CORRETO
   });
 
   useEffect(() => {
     if (api) {
-        // Carrega profissionais (opcional, mantido do seu código)
         api.get('profissionais/').then(res => {
             const lista = res.data.results || res.data;
             setProfissionais(lista.map(p => ({ id: p.id, label: `${p.nome} (CPF: ${p.cpf})` })));
@@ -106,10 +104,10 @@ export default function CadastroOperador() {
                         acesso_atendimento: data.acesso_atendimento || false,
                         acesso_agendamento: data.acesso_agendamento || false,
                         acesso_faturamento: data.acesso_faturamento || false,
-                        acesso_cadastros: data.acesso_cadastros || false, // <--- CARREGA AQUI
+                        acesso_cadastros: data.acesso_cadastros || false,
                         is_superuser: data.is_superuser || false,
                         force_password_change: data.force_password_change || false,
-                        profissional: data.profissional || null,
+                        profissional: data.profissional || null, // <--- NOME CORRETO
                         password: ''
                     });
                 })
@@ -131,14 +129,20 @@ export default function CadastroOperador() {
     e.preventDefault();
     setLoading(true);
     try {
+      const dadosParaEnviar = { ...formData };
+      
+      if (!dadosParaEnviar.password) delete dadosParaEnviar.password;
+      
+      // Garante envio de null se vazio
+      if (!dadosParaEnviar.profissional) {
+          dadosParaEnviar.profissional = null;
+      }
+
       if (id) {
-          const dadosParaEnviar = { ...formData };
-          if (!dadosParaEnviar.password) delete dadosParaEnviar.password;
           await api.put(`operadores/${id}/`, dadosParaEnviar);
           notify.success('Operador atualizado com sucesso!');
       } else {
-          // Ajustado para o padrão REST do ViewSet
-          await api.post('operadores/', formData);
+          await api.post('operadores/', dadosParaEnviar);
           notify.success('Operador criado com sucesso!');
       }
       navigate('/operadores');
@@ -231,8 +235,8 @@ export default function CadastroOperador() {
                         label="Este operador é um médico?" 
                         placeholder="Pesquise o profissional..." 
                         options={profissionais} 
-                        value={formData.profissional} 
-                        onChange={(val) => setFormData({...formData, profissional_id: val})}
+                        value={formData.profissional} // <--- NOME CORRETO
+                        onChange={(val) => setFormData({...formData, profissional: val})}
                     />
                     <p className="text-xs text-slate-400">Ao vincular, este operador terá acesso ao Prontuário Eletrônico.</p>
                   </div>
@@ -272,9 +276,7 @@ export default function CadastroOperador() {
                 <p className="text-sm text-slate-400 mb-6">Selecione os módulos liberados:</p>
 
                 <div className="space-y-4 flex-grow">
-                   {/* NOVA PERMISSÃO AQUI */}
                   <PermissionToggle name="acesso_cadastros" label="Gestão de Cadastros" icon={Users} checked={formData.acesso_cadastros} onChange={handleChange} />
-                  
                   <PermissionToggle name="acesso_atendimento" label="Atendimento" icon={Stethoscope} checked={formData.acesso_atendimento} onChange={handleChange} />
                   <PermissionToggle name="acesso_agendamento" label="Agendamento" icon={CalendarDays} checked={formData.acesso_agendamento} onChange={handleChange} />
                   <PermissionToggle name="acesso_faturamento" label="Financeiro" icon={DollarSign} checked={formData.acesso_faturamento} onChange={handleChange} />

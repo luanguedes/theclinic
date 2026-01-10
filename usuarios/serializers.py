@@ -2,8 +2,9 @@ from rest_framework import serializers
 from .models import Operador
 
 class OperadorSerializer(serializers.ModelSerializer):
-    # Senha é write_only (só aceita na escrita, não retorna na leitura por segurança)
     password = serializers.CharField(write_only=True, required=False)
+    
+    # Campo extra apenas para leitura (mostra o nome na lista)
     profissional_nome = serializers.CharField(source='profissional.nome', read_only=True)
 
     class Meta:
@@ -11,17 +12,16 @@ class OperadorSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'first_name', 'last_name', 'email', 'password',
             'is_superuser', 
-            'profissional',
-            'profissional_nome',
+            'profissional',       # <--- CAMPO PARA SALVAR O ID (CORRIGIDO)
+            'profissional_nome',  # <--- CAMPO PARA MOSTRAR O NOME
             'acesso_agendamento', 
             'acesso_atendimento', 
             'acesso_faturamento', 
-            'acesso_cadastros',      # Novo campo
-            'acesso_configuracoes'   # Novo campo
+            'acesso_cadastros',      
+            'acesso_configuracoes'   
         ]
 
     def create(self, validated_data):
-        # Precisamos interceptar a criação para criptografar a senha
         password = validated_data.pop('password', None)
         user = Operador(**validated_data)
         if password:
@@ -30,15 +30,10 @@ class OperadorSerializer(serializers.ModelSerializer):
         return user
 
     def update(self, instance, validated_data):
-        # Precisamos interceptar a atualização para criptografar a senha (se houver)
         password = validated_data.pop('password', None)
-        
-        # Atualiza os outros campos
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-            
         if password:
             instance.set_password(password)
-            
         instance.save()
         return instance

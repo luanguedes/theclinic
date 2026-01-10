@@ -4,7 +4,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-    Users, UserPlus, Pencil, Trash2, Shield, Search 
+    Users, UserPlus, Pencil, Trash2, Shield, Stethoscope
 } from 'lucide-react';
 
 export default function Operadores() {
@@ -55,7 +55,6 @@ export default function Operadores() {
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 text-sm">Gerencie o acesso e permissões da equipe.</p>
                     </div>
-                    {/* BOTÃO QUE NAVEGA PARA A PÁGINA DE CADASTRO */}
                     <button onClick={() => navigate('/operadores/novo')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-transform active:scale-95">
                         <UserPlus size={20}/> Novo Operador
                     </button>
@@ -66,7 +65,7 @@ export default function Operadores() {
                         <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 text-xs uppercase font-bold">
                             <tr>
                                 <th className="px-6 py-4">Nome / Usuário</th>
-                                <th className="px-6 py-4">Profissional Vinculado</th>
+                                <th className="px-6 py-4">Médico Vinculado</th>
                                 <th className="px-6 py-4">Permissões</th>
                                 <th className="px-6 py-4 text-right">Ações</th>
                             </tr>
@@ -78,13 +77,14 @@ export default function Operadores() {
                                         <div className="font-bold text-slate-700 dark:text-white">{op.first_name || 'Sem nome'}</div>
                                         <div className="text-xs text-slate-500">{op.username}</div>
                                     </td>
+                                    {/* COLUNA DO MÉDICO */}
                                     <td className="px-6 py-4">
-                                    {op.profissional_nome ? (
-                                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs font-bold border border-blue-100 flex items-center gap-1 w-fit">
-                                            <Stethoscope size={12}/> {op.profissional_nome}
-                                        </span>
+                                        {op.profissional_nome ? (
+                                            <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs font-bold border border-blue-100 flex items-center gap-1 w-fit">
+                                                <Stethoscope size={12}/> {op.profissional_nome}
+                                            </span>
                                         ) : (
-                                        <span className="text-slate-400 text-xs">-</span>
+                                            <span className="text-slate-400 text-xs">-</span>
                                         )}
                                     </td>
                                     <td className="px-6 py-4">
@@ -95,7 +95,7 @@ export default function Operadores() {
                                                 <>
                                                     {op.acesso_cadastros && <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">Cadastros</span>}
                                                     {op.acesso_agendamento && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Recepção</span>}
-                                                    {op.acesso_atendimento && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold">Atendimento</span>}
+                                                    {op.acesso_atendimento && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold">Médico</span>}
                                                     {op.acesso_faturamento && <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Financeiro</span>}
                                                 </>
                                             )}
