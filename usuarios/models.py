@@ -1,37 +1,24 @@
+from django.contrib.auth.models import AbstractUser
 from django.db import models
-from django.contrib.auth.models import User
 
-class PerfilOperador(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
+class Operador(AbstractUser):
+    telefone = models.CharField(max_length=20, blank=True, null=True)
     
-    profissional_vinculado = models.ForeignKey(
-        'profissionais.Profissional', 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='usuario_sistema'
-    )
-    acesso_atendimento = models.BooleanField(default=False)
-    acesso_agendamento = models.BooleanField(default=False)
-    acesso_faturamento = models.BooleanField(default=False)
-    force_password_change = models.BooleanField(default=True)
-
+    # PERMISSÕES
+    acesso_agendamento = models.BooleanField(default=False, verbose_name="Acesso à Recepção/Agenda")
+    acesso_atendimento = models.BooleanField(default=False, verbose_name="Acesso Médico/Prontuário")
+    acesso_faturamento = models.BooleanField(default=False, verbose_name="Acesso Financeiro")
+    
+    # NOVAS PERMISSÕES QUE ADICIONAMOS HOJE
     acesso_cadastros = models.BooleanField(
         default=False, 
         verbose_name="Acesso a Cadastros Gerais"
     )
+    
+    acesso_configuracoes = models.BooleanField(
+        default=False, 
+        verbose_name="Acesso a Configurações do Sistema"
+    )
 
     def __str__(self):
-        return f"Perfil de {self.user.username}"
-
-class ConfiguracaoSistema(models.Model):
-    itens_por_pagina = models.IntegerField(default=15)
-    
-    def save(self, *args, **kwargs):
-        self.pk = 1
-        super(ConfiguracaoSistema, self).save(*args, **kwargs)
-
-    @classmethod
-    def load(cls):
-        obj, created = cls.objects.get_or_create(pk=1)
-        return obj
+        return self.first_name or self.username
