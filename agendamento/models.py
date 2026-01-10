@@ -50,14 +50,12 @@ class Agendamento(models.Model):
 
     class Meta:
         ordering = ['data', 'horario']
-        # --- CORREÇÃO DE LÓGICA ---
-        # Removemos a restrição de horário único global.
-        # Adicionamos restrição para o MESMO PACIENTE não duplicar no mesmo horário.
         constraints = [
             models.UniqueConstraint(
+                # AQUI: Garante que O MESMO PACIENTE não tenha dois agendamentos iguais
                 fields=['profissional', 'data', 'horario', 'paciente'], 
                 condition=Q(status__in=['agendado', 'aguardando', 'em_atendimento']),
-                name='unique_paciente_horario'
+                name='unique_paciente_horario' # Nome diferente do anterior para forçar recriação
             )
         ]
 
