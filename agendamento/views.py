@@ -6,8 +6,8 @@ from django.db.models import Case, When, Value, IntegerField
 from django.db import transaction # <--- IMPORTANTE
 from datetime import date
 
-from .models import Agendamento, BloqueioAgenda
-from .serializers import AgendamentoSerializer, BloqueioAgendaSerializer
+from .models import BloqueioAgenda, Agendamento
+from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
 
 # Tenta importar o modelo de Fatura
 try:
