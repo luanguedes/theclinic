@@ -21,6 +21,7 @@ import Convenios from './pages/Convenios';
 import DadosClinica from './pages/DadosClinica';
 import MarcarConsulta from './pages/MarcarConsulta';
 import Recepcao from './pages/Recepcao';
+import Bloqueios from './pages/Bloqueios';
 
 const RotaPrivada = ({ children, adminOnly = false }) => {
   const { user, loading } = useAuth();
