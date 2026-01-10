@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'; // Adicione useRef
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X 
+  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, Users 
 } from 'lucide-react';
 
 // --- COMPONENTE SEARCHABLE SELECT (Reutilizado) ---
@@ -81,42 +81,43 @@ export default function CadastroOperador() {
   const [formData, setFormData] = useState({
     username: '', password: '', first_name: '', email: '',
     acesso_atendimento: false, acesso_agendamento: false, 
-    acesso_faturamento: false, is_superuser: false,
+    acesso_faturamento: false, acesso_cadastros: false, // <--- ADICIONEI AQUI
+    is_superuser: false,
     force_password_change: true,
-    profissional_id: null // Vinculo com médico
+    profissional_id: null
   });
 
   useEffect(() => {
-    // 1. Carrega Profissionais para o Select
     if (api) {
+        // Carrega profissionais (opcional, mantido do seu código)
         api.get('profissionais/').then(res => {
             const lista = res.data.results || res.data;
             setProfissionais(lista.map(p => ({ id: p.id, label: `${p.nome} (CPF: ${p.cpf})` })));
-        });
+        }).catch(() => {});
 
-        // 2. Carrega dados do Operador se for edição
         if (id) {
             api.get(`operadores/${id}/`)
-               .then(res => {
-                   const data = res.data;
-                   setFormData({
-                       username: data.username || '',
-                       first_name: data.first_name || '',
-                       email: data.email || '',
-                       acesso_atendimento: data.acesso_atendimento || false,
-                       acesso_agendamento: data.acesso_agendamento || false,
-                       acesso_faturamento: data.acesso_faturamento || false,
-                       is_superuser: data.is_superuser || false,
-                       force_password_change: data.force_password_change || false,
-                       profissional_id: data.profissional_id || null, // Carrega o ID
-                       password: ''
-                   });
-               })
-               .catch(err => {
-                   console.error(err);
-                   navigate('/operadores');
-               })
-               .finally(() => setFetching(false));
+                .then(res => {
+                    const data = res.data;
+                    setFormData({
+                        username: data.username || '',
+                        first_name: data.first_name || '',
+                        email: data.email || '',
+                        acesso_atendimento: data.acesso_atendimento || false,
+                        acesso_agendamento: data.acesso_agendamento || false,
+                        acesso_faturamento: data.acesso_faturamento || false,
+                        acesso_cadastros: data.acesso_cadastros || false, // <--- CARREGA AQUI
+                        is_superuser: data.is_superuser || false,
+                        force_password_change: data.force_password_change || false,
+                        profissional_id: data.profissional_id || null,
+                        password: ''
+                    });
+                })
+                .catch(err => {
+                    console.error(err);
+                    navigate('/operadores');
+                })
+                .finally(() => setFetching(false));
         }
     }
   }, [id, api, navigate]);
@@ -136,7 +137,8 @@ export default function CadastroOperador() {
           await api.put(`operadores/${id}/`, dadosParaEnviar);
           notify.success('Operador atualizado com sucesso!');
       } else {
-          await api.post('operadores/novo/', formData);
+          // Ajustado para o padrão REST do ViewSet
+          await api.post('operadores/', formData);
           notify.success('Operador criado com sucesso!');
       }
       navigate('/operadores');
@@ -184,7 +186,7 @@ export default function CadastroOperador() {
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-5xl mx-auto pb-20">
         <button onClick={() => navigate('/operadores')} className={backButtonClass}>
             <ArrowLeft size={18}/> Voltar
         </button>
@@ -270,6 +272,9 @@ export default function CadastroOperador() {
                 <p className="text-sm text-slate-400 mb-6">Selecione os módulos liberados:</p>
 
                 <div className="space-y-4 flex-grow">
+                   {/* NOVA PERMISSÃO AQUI */}
+                  <PermissionToggle name="acesso_cadastros" label="Gestão de Cadastros" icon={Users} checked={formData.acesso_cadastros} onChange={handleChange} />
+                  
                   <PermissionToggle name="acesso_atendimento" label="Atendimento" icon={Stethoscope} checked={formData.acesso_atendimento} onChange={handleChange} />
                   <PermissionToggle name="acesso_agendamento" label="Agendamento" icon={CalendarDays} checked={formData.acesso_agendamento} onChange={handleChange} />
                   <PermissionToggle name="acesso_faturamento" label="Financeiro" icon={DollarSign} checked={formData.acesso_faturamento} onChange={handleChange} />
@@ -282,7 +287,7 @@ export default function CadastroOperador() {
                       {loading ? <Loader2 className="animate-spin" size={20}/> : <Save size={20} />}
                       {loading ? 'Salvando...' : 'Salvar Operador'}
                     </button>
-                     <button type="button" onClick={() => navigate('/operadores')} className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-xl transition-colors">
+                     <button type="button" onClick={() => navigate('/operadores')} className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-xl transition-colors hover:bg-slate-200">
                         Cancelar
                     </button>
                 </div>

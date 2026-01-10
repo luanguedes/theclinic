@@ -43,9 +43,9 @@ function App() {
               <Route path="/" element={<Login />} />
               <Route path="/dashboard" element={<RotaPrivada><Dashboard /></RotaPrivada>} />
               <Route path="/pacientes" element={<RotaPrivada><Pacientes /></RotaPrivada>} />
-              <Route path="/operadores" element={<RotaPrivada adminOnly><Operadores /></RotaPrivada>} />
-              <Route path="/operadores/novo" element={<RotaPrivada adminOnly><CadastroOperador /></RotaPrivada>} />
-              <Route path="/operadores/:id" element={<RotaPrivada adminOnly><CadastroOperador /></RotaPrivada>} />
+              <Route path="/operadores" element={<RotaPrivada><Operadores /></RotaPrivada>} />
+              <Route path="/operadores/novo" element={<RotaPrivada><CadastroOperador /></RotaPrivada>} />
+              <Route path="/operadores/editar/:id" element={<RotaPrivada><CadastroOperador /></RotaPrivada>} />
               <Route path="/especialidades" element={<RotaPrivada adminOnly><Especialidades /></RotaPrivada>} />
               <Route path="/profissionais" element={<RotaPrivada><Profissionais /></RotaPrivada>} />
               <Route path="/profissionais/novo" element={<RotaPrivada><ProfissionalForm /></RotaPrivada>} />
