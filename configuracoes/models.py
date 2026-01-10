@@ -36,3 +36,25 @@ class DadosClinica(models.Model):
     def load(cls):
         obj, created = cls.objects.get_or_create(pk=1, defaults={'nome_fantasia': 'Minha Clínica'})
         return obj
+
+class ConfiguracaoSistema(models.Model):
+    # 1. Interface
+    itens_por_pagina = models.IntegerField(default=10, help_text="Paginação padrão das tabelas")
+    modo_manutencao = models.BooleanField(default=False, help_text="Bloqueia acesso de não-admins")
+
+    # 2. Segurança
+    max_tentativas_login = models.IntegerField(default=5, help_text="Bloqueia após X tentativas")
+    tempo_bloqueio_minutos = models.IntegerField(default=15, help_text="Tempo de bloqueio após errar senha")
+    tempo_sessao_minutos = models.IntegerField(default=60, help_text="Deslogar após inatividade")
+
+    # 3. Regras de Negócio
+    janela_agendamento_meses = models.IntegerField(default=6, help_text="Meses à frente liberados na agenda")
+
+    class Meta:
+        verbose_name = "Configuração do Sistema"
+        verbose_name_plural = "Configurações do Sistema"
+
+    @classmethod
+    def load(cls):
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj

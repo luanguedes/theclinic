@@ -131,7 +131,7 @@ class OperadorListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'email', 'is_superuser', 
-                  'acesso_atendimento', 'acesso_agendamento', 'acesso_faturamento', 'is_medico']
+                  'acesso_atendimento', 'acesso_agendamento', 'acesso_faturamento', 'acesso_cadastros', 'is_medico']
 
     def get_perfil(self, obj):
         # Helper para evitar try/except repetitivo

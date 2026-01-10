@@ -34,7 +34,7 @@ export default function Navbar() {
     </Link>
   );
 
-  const topButtonClass = "p-2 rounded-lg bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white transition-colors";
+  const topButtonClass = "p-2 rounded-lg bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white transition-colors relative group";
 
   return (
     <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm h-20 relative z-40 transition-colors duration-300">
@@ -66,7 +66,6 @@ export default function Navbar() {
               <DropdownLink to="/agenda/marcar" text="Marcar Consulta" />
               <div className="border-t border-slate-100 dark:border-slate-700 my-1"></div>
               <DropdownLink to="/agenda/bloqueios" text="Bloqueios e Feriados" />
-              <DropdownLink to="/agenda/configurar" text="Configurar Horários" />
             </NavItem>
           )}
 
@@ -77,29 +76,37 @@ export default function Navbar() {
             </NavItem>
           )}
 
-          {user?.is_superuser && (
+          {/* MENU SISTEMA - LOGICA APLICADA AQUI */}
+          {(user?.acesso_cadastros || user?.is_superuser) && (
             <NavItem icon={Settings} title="Sistema">
               <DropdownLink to="/pacientes" text="Pacientes" />
               <DropdownLink to="/operadores" text="Operadores" />
               <DropdownLink to="/profissionais" text="Profissionais" />
               <DropdownLink to="/especialidades" text="Especialidades" />
               
-              {/* NOVOS LINKS ADICIONADOS AQUI */}
               <div className="border-t border-slate-100 dark:border-slate-700 my-1"></div>
               <DropdownLink to="/convenios" text="Convênios" icon={ShieldCheck} />
               <DropdownLink to="/clinica" text="Dados da Clínica" icon={Building2} />
-              
-              <div className="border-t border-slate-100 dark:border-slate-700 my-1"></div>
-              <DropdownLink to="/configuracoes" text="Configurações Gerais" />
             </NavItem>
           )}
         </div>
 
         {/* ÁREA DIREITA */}
         <div className="flex items-center space-x-3">
-          <button onClick={toggleTheme} className={topButtonClass}>
+          
+          <button onClick={toggleTheme} className={topButtonClass} title="Alternar Tema">
             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
           </button>
+
+          {/* BOTÃO DE CONFIGURAÇÕES (Engrenagem) - SÓ ADMIN */}
+          {user?.is_superuser && (
+            <Link to="/configuracoes" className={topButtonClass} title="Configurações do Sistema">
+               <Settings size={20} />
+               <span className="absolute top-12 right-0 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                  Configurações
+               </span>
+            </Link>
+          )}
 
           <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden lg:block"></div>
 
@@ -110,7 +117,7 @@ export default function Navbar() {
             </p>
           </div>
           
-          <button onClick={handleLogout} className={`${topButtonClass} hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20`}>
+          <button onClick={handleLogout} className={`${topButtonClass} hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20`} title="Sair">
             <LogOut size={20} />
           </button>
         </div>

@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ConvenioViewSet, DadosClinicaView
+from .views import ConvenioViewSet, DadosClinicaView, ConfiguracaoSistemaView
 
 router = DefaultRouter()
 router.register(r'convenios', ConvenioViewSet)
@@ -8,4 +8,5 @@ router.register(r'convenios', ConvenioViewSet)
 urlpatterns = [
     path('', include(router.urls)),
     path('clinica/', DadosClinicaView.as_view()),
+    path('sistema/', ConfiguracaoSistemaView.as_view(), name='config-sistema'),
 ]

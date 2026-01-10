@@ -1,295 +1,196 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    Building2, Users, CreditCard, Save, Plus, Trash2, Pencil, 
-    Shield, Check, X, Loader2 
+    Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, Lock
 } from 'lucide-react';
 
 export default function Configuracoes() {
     const { api, user } = useAuth();
-    const [activeTab, setActiveTab] = useState('clinica');
+    const { notify } = useNotification();
+    
+    const [activeTab, setActiveTab] = useState('seguranca');
     const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
 
-    // --- ESTADOS: DADOS DA CLÍNICA ---
-    const [clinica, setClinica] = useState({
-        nome_fantasia: '', razao_social: '', cnpj: '',
-        telefone: '', email: '',
-        logradouro: '', numero: '', bairro: '', cidade: '', estado: '', cep: ''
+    const [config, setConfig] = useState({
+        // Segurança
+        max_tentativas_login: 5,
+        tempo_bloqueio_minutos: 15,
+        tempo_sessao_minutos: 60,
+        // Interface
+        itens_por_pagina: 10,
+        modo_manutencao: false,
+        // Agendamento
+        janela_agendamento_meses: 6
     });
-    const [logoPreview, setLogoPreview] = useState(null);
-    const [logoFile, setLogoFile] = useState(null);
 
-    // --- ESTADOS: CONVÊNIOS ---
-    const [convenios, setConvenios] = useState([]);
-    const [modalConvenioOpen, setModalConvenioOpen] = useState(false);
-    const [editConvenio, setEditConvenio] = useState(null);
-    const [nomeConvenio, setNomeConvenio] = useState('');
+    // Se não for admin, nem carrega
+    if (user && !user.is_superuser) {
+        return (
+            <Layout>
+                <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
+                    <Lock size={48} className="mb-4"/>
+                    <h2 className="text-xl font-bold">Acesso Restrito</h2>
+                    <p>Apenas administradores podem acessar as configurações do sistema.</p>
+                </div>
+            </Layout>
+        );
+    }
 
-    // --- ESTADOS: OPERADORES ---
-    const [operadores, setOperadores] = useState([]);
-
-    // --- CARREGAMENTO INICIAL ---
     useEffect(() => {
-        if (api) {
-            if (activeTab === 'clinica') loadClinica();
-            if (activeTab === 'convenios') loadConvenios();
-            if (activeTab === 'operadores') loadOperadores();
-        }
-    }, [api, activeTab]);
+        if (api) loadConfig();
+    }, [api]);
 
-    // --- FUNÇÕES DE CARREGAMENTO (BLINDADAS) ---
-    const loadClinica = async () => {
+    const loadConfig = async () => {
         setLoading(true);
         try {
-            const res = await api.get('configuracoes/clinica/');
-            if (res.data) {
-                setClinica(res.data);
-                if (res.data.logo) setLogoPreview(res.data.logo);
-            }
+            const res = await api.get('configuracoes/sistema/');
+            if(res.data) setConfig(res.data);
         } catch (error) {
-            console.log("Dados da clínica ainda não configurados ou erro API.");
+            console.error(error);
+            notify.error("Erro ao carregar configurações.");
         } finally {
             setLoading(false);
         }
     };
 
-    const loadConvenios = async () => {
-        setLoading(true);
-        try {
-            const res = await api.get('configuracoes/convenios/');
-            const data = res.data.results || res.data;
-            setConvenios(Array.isArray(data) ? data : []);
-        } catch (error) {
-            setConvenios([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const loadOperadores = async () => {
-        setLoading(true);
-        try {
-            const res = await api.get('operadores/');
-            const data = res.data.results || res.data;
-            setOperadores(Array.isArray(data) ? data : []);
-        } catch (error) {
-            setOperadores([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // --- SALVAR CLÍNICA ---
-    const handleSaveClinica = async (e) => {
+    const handleSave = async (e) => {
         e.preventDefault();
-        setLoading(true);
+        setSaving(true);
         try {
-            const formData = new FormData();
-            Object.keys(clinica).forEach(key => {
-                if(clinica[key]) formData.append(key, clinica[key]);
-            });
-            if (logoFile) {
-                formData.append('logo', logoFile);
-            }
-
-            // Tenta POST, se der erro tenta PUT (ou vice-versa dependendo da sua API)
-            // Geralmente se usa um endpoint que aceita POST para criar/atualizar
-            try {
-                await api.post('configuracoes/clinica/', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-            } catch (err) {
-                 await api.put('configuracoes/clinica/', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-            }
-            alert("Dados salvos com sucesso!");
+            await api.put('configuracoes/sistema/', config);
+            notify.success("Configurações atualizadas com sucesso!");
         } catch (error) {
-            alert("Erro ao salvar dados da clínica.");
+            notify.error("Erro ao salvar.");
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
     };
 
-    const handleLogoChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setLogoFile(file);
-            setLogoPreview(URL.createObjectURL(file));
-        }
-    };
+    const tabClass = (tab) => `
+        flex items-center gap-2 px-6 py-4 font-bold border-b-2 transition-all
+        ${activeTab === tab 
+            ? 'border-blue-600 text-blue-600 bg-blue-50/50 dark:bg-blue-900/20' 
+            : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:text-slate-300 dark:hover:bg-slate-800'}
+    `;
 
-    // --- AÇÕES CONVÊNIOS ---
-    const handleSaveConvenio = async (e) => {
-        e.preventDefault();
-        try {
-            if (editConvenio) {
-                await api.put(`configuracoes/convenios/${editConvenio.id}/`, { nome: nomeConvenio });
-            } else {
-                await api.post('configuracoes/convenios/', { nome: nomeConvenio });
-            }
-            setModalConvenioOpen(false);
-            setNomeConvenio('');
-            setEditConvenio(null);
-            loadConvenios();
-        } catch (error) {
-            alert("Erro ao salvar convênio.");
-        }
-    };
-
-    const handleDeleteConvenio = async (id) => {
-        if (window.confirm("Excluir convênio?")) {
-            try {
-                await api.delete(`configuracoes/convenios/${id}/`);
-                loadConvenios();
-            } catch (error) {
-                alert("Erro ao excluir.");
-            }
-        }
-    };
-
-    const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white";
+    const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white transition-all";
+    const labelClass = "block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide";
 
     return (
         <Layout>
-            <div className="max-w-5xl mx-auto pb-20">
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">Configurações</h1>
-
-                {/* ABAS */}
-                <div className="flex overflow-x-auto gap-2 mb-6 border-b border-slate-200 dark:border-slate-700 pb-1">
-                    <button onClick={()=>setActiveTab('clinica')} className={`px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2 transition-colors ${activeTab==='clinica' ? 'bg-white dark:bg-slate-800 text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
-                        <Building2 size={16}/> Dados da Clínica
-                    </button>
-                    <button onClick={()=>setActiveTab('convenios')} className={`px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2 transition-colors ${activeTab==='convenios' ? 'bg-white dark:bg-slate-800 text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
-                        <CreditCard size={16}/> Convênios
-                    </button>
-                    <button onClick={()=>setActiveTab('operadores')} className={`px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2 transition-colors ${activeTab==='operadores' ? 'bg-white dark:bg-slate-800 text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
-                        <Users size={16}/> Operadores
-                    </button>
+            <div className="max-w-4xl mx-auto pb-20">
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+                        <Settings className="text-blue-600" size={32}/> Configurações do Sistema
+                    </h1>
+                    <p className="text-slate-500 dark:text-slate-400 mt-2">
+                        Defina as regras globais de comportamento, segurança e interface da plataforma.
+                    </p>
                 </div>
 
-                {/* CONTEÚDO: DADOS DA CLÍNICA */}
-                {activeTab === 'clinica' && (
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-                        <form onSubmit={handleSaveClinica} className="space-y-4">
-                            <div className="flex items-center gap-6 mb-6">
-                                <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden border border-slate-200 relative group">
-                                    {logoPreview ? <img src={logoPreview} alt="Logo" className="w-full h-full object-cover"/> : <Building2 className="text-slate-300" size={32}/>}
-                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                                        <label htmlFor="logo-upload" className="cursor-pointer text-white text-xs font-bold">Alterar</label>
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    
+                    {/* ABAS */}
+                    <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
+                        <button onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}>
+                            <Shield size={18}/> Segurança
+                        </button>
+                        <button onClick={()=>setActiveTab('interface')} className={tabClass('interface')}>
+                            <LayoutIcon size={18}/> Interface
+                        </button>
+                        <button onClick={()=>setActiveTab('agendamento')} className={tabClass('agendamento')}>
+                            <CalendarClock size={18}/> Regras de Negócio
+                        </button>
+                    </div>
+
+                    {/* CONTEÚDO */}
+                    <div className="p-8">
+                        {loading ? (
+                            <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={32}/></div>
+                        ) : (
+                            <form onSubmit={handleSave} className="space-y-8">
+                                
+                                {/* ABA SEGURANÇA */}
+                                {activeTab === 'seguranca' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className={labelClass}>Max. Tentativas de Login</label>
+                                                <input type="number" min="1" max="10" value={config.max_tentativas_login} onChange={e=>setConfig({...config, max_tentativas_login: e.target.value})} className={inputClass}/>
+                                                <p className="text-xs text-slate-400 mt-1.5">Bloqueia o usuário após X erros consecutivos.</p>
+                                            </div>
+                                            <div>
+                                                <label className={labelClass}>Tempo de Bloqueio (Min)</label>
+                                                <input type="number" min="1" max="1440" value={config.tempo_bloqueio_minutos} onChange={e=>setConfig({...config, tempo_bloqueio_minutos: e.target.value})} className={inputClass}/>
+                                                <p className="text-xs text-slate-400 mt-1.5">Duração do bloqueio por excesso de tentativas.</p>
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className={labelClass}>Expiração de Sessão (Minutos)</label>
+                                                <input type="number" min="5" max="1440" value={config.tempo_sessao_minutos} onChange={e=>setConfig({...config, tempo_sessao_minutos: e.target.value})} className={inputClass}/>
+                                                <p className="text-xs text-slate-400 mt-1.5">Desloga automaticamente por inatividade (Compliance LGPD).</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <input id="logo-upload" type="file" accept="image/*" className="hidden" onChange={handleLogoChange}/>
+                                )}
+
+                                {/* ABA INTERFACE */}
+                                {activeTab === 'interface' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                                        <div>
+                                            <label className={labelClass}>Paginação Padrão (Itens por Página)</label>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <input type="number" min="5" max="100" value={config.itens_por_pagina} onChange={e=>setConfig({...config, itens_por_pagina: e.target.value})} className={inputClass}/>
+                                            </div>
+                                            <p className="text-xs text-slate-400 mt-1.5">Define quantos registros aparecem nas tabelas de listagem.</p>
+                                        </div>
+
+                                        <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 p-5 rounded-xl">
+                                            <div className="flex items-center gap-2 mb-3 text-red-700 dark:text-red-400 font-bold">
+                                                <AlertTriangle size={20}/> Modo Manutenção
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <div className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" className="sr-only peer" checked={config.modo_manutencao} onChange={e=>setConfig({...config, modo_manutencao: e.target.checked})} />
+                                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 dark:peer-focus:ring-red-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-red-600"></div>
+                                                </div>
+                                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                                    {config.modo_manutencao ? 'SISTEMA BLOQUEADO' : 'Operação Normal'}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-red-600/80 mt-3 leading-relaxed">
+                                                Ao ativar, <strong>apenas administradores</strong> conseguirão fazer login. Use durante atualizações críticas.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ABA AGENDAMENTO */}
+                                {activeTab === 'agendamento' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                                        <div>
+                                            <label className={labelClass}>Janela de Agendamento Futuro (Meses)</label>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <input type="number" min="1" max="24" value={config.janela_agendamento_meses} onChange={e=>setConfig({...config, janela_agendamento_meses: e.target.value})} className={inputClass}/>
+                                            </div>
+                                            <p className="text-xs text-slate-400 mt-1.5">Define até quantos meses à frente a agenda fica aberta para marcação.</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="pt-6 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                                    <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 transition-transform active:scale-95">
+                                        {saving ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>} 
+                                        Salvar Configurações
+                                    </button>
                                 </div>
-                                <div>
-                                    <h3 className="font-bold text-lg dark:text-white">Logotipo</h3>
-                                    <p className="text-sm text-slate-500">Recomendado: 500x500px (PNG ou JPG)</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="text-xs font-bold text-slate-500">Nome Fantasia</label><input value={clinica.nome_fantasia || ''} onChange={e=>setClinica({...clinica, nome_fantasia: e.target.value})} className={inputClass}/></div>
-                                <div><label className="text-xs font-bold text-slate-500">Razão Social</label><input value={clinica.razao_social || ''} onChange={e=>setClinica({...clinica, razao_social: e.target.value})} className={inputClass}/></div>
-                                <div><label className="text-xs font-bold text-slate-500">CNPJ</label><input value={clinica.cnpj || ''} onChange={e=>setClinica({...clinica, cnpj: e.target.value})} className={inputClass}/></div>
-                                <div><label className="text-xs font-bold text-slate-500">Telefone</label><input value={clinica.telefone || ''} onChange={e=>setClinica({...clinica, telefone: e.target.value})} className={inputClass}/></div>
-                                <div className="md:col-span-2"><label className="text-xs font-bold text-slate-500">Email</label><input value={clinica.email || ''} onChange={e=>setClinica({...clinica, email: e.target.value})} className={inputClass}/></div>
-                            </div>
-
-                            <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-                                <h4 className="font-bold mb-3 dark:text-white">Endereço</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div className="md:col-span-1"><label className="text-xs font-bold text-slate-500">CEP</label><input value={clinica.cep || ''} onChange={e=>setClinica({...clinica, cep: e.target.value})} className={inputClass}/></div>
-                                    <div className="md:col-span-3"><label className="text-xs font-bold text-slate-500">Logradouro</label><input value={clinica.logradouro || ''} onChange={e=>setClinica({...clinica, logradouro: e.target.value})} className={inputClass}/></div>
-                                    <div className="md:col-span-1"><label className="text-xs font-bold text-slate-500">Número</label><input value={clinica.numero || ''} onChange={e=>setClinica({...clinica, numero: e.target.value})} className={inputClass}/></div>
-                                    <div className="md:col-span-1"><label className="text-xs font-bold text-slate-500">Bairro</label><input value={clinica.bairro || ''} onChange={e=>setClinica({...clinica, bairro: e.target.value})} className={inputClass}/></div>
-                                    <div className="md:col-span-1"><label className="text-xs font-bold text-slate-500">Cidade</label><input value={clinica.cidade || ''} onChange={e=>setClinica({...clinica, cidade: e.target.value})} className={inputClass}/></div>
-                                    <div className="md:col-span-1"><label className="text-xs font-bold text-slate-500">Estado</label><input value={clinica.estado || ''} onChange={e=>setClinica({...clinica, estado: e.target.value})} className={inputClass}/></div>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end pt-4">
-                                <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 disabled:opacity-50">
-                                    {loading ? <Loader2 className="animate-spin"/> : <Save size={18}/>} Salvar Alterações
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                {/* CONTEÚDO: CONVÊNIOS */}
-                {activeTab === 'convenios' && (
-                    <div className="space-y-4">
-                        <div className="flex justify-end">
-                            <button onClick={()=>{setEditConvenio(null); setNomeConvenio(''); setModalConvenioOpen(true)}} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex gap-2">
-                                <Plus size={18}/> Novo Convênio
-                            </button>
-                        </div>
-                        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                            <table className="w-full text-left">
-                                <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 text-xs uppercase font-bold">
-                                    <tr><th className="px-6 py-4">Nome</th><th className="px-6 py-4 text-right">Ações</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                    {Array.isArray(convenios) && convenios.length > 0 ? convenios.map(c => (
-                                        <tr key={c.id}>
-                                            <td className="px-6 py-4 font-bold text-slate-700 dark:text-white">{c.nome}</td>
-                                            <td className="px-6 py-4 text-right flex justify-end gap-2">
-                                                <button onClick={()=>{setEditConvenio(c); setNomeConvenio(c.nome); setModalConvenioOpen(true)}} className="text-blue-600 p-2 hover:bg-slate-50 rounded"><Pencil size={16}/></button>
-                                                <button onClick={()=>handleDeleteConvenio(c.id)} className="text-red-600 p-2 hover:bg-slate-50 rounded"><Trash2 size={16}/></button>
-                                            </td>
-                                        </tr>
-                                    )) : <tr><td colSpan="2" className="p-8 text-center text-slate-400">Nenhum convênio cadastrado.</td></tr>}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-
-                {/* CONTEÚDO: OPERADORES */}
-                {activeTab === 'operadores' && (
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                         <table className="w-full text-left">
-                                <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 text-xs uppercase font-bold">
-                                    <tr><th className="px-6 py-4">Nome</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Tipo</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                    {Array.isArray(operadores) && operadores.map(op => (
-                                        <tr key={op.id}>
-                                            <td className="px-6 py-4 font-bold text-slate-700 dark:text-white">{op.first_name || op.username}</td>
-                                            <td className="px-6 py-4 text-slate-500">{op.email}</td>
-                                            <td className="px-6 py-4">
-                                                {op.is_superuser ? 
-                                                    <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 w-fit"><Shield size={12}/> Admin</span> : 
-                                                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold">Operador</span>
-                                                }
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            {/* MODAL CONVÊNIO */}
-            {modalConvenioOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-sm p-6">
-                        <h3 className="font-bold text-lg mb-4 dark:text-white">{editConvenio ? 'Editar Convênio' : 'Novo Convênio'}</h3>
-                        <input 
-                            value={nomeConvenio} 
-                            onChange={e=>setNomeConvenio(e.target.value)} 
-                            placeholder="Nome do Convênio (Ex: Unimed)"
-                            className={inputClass}
-                            autoFocus
-                        />
-                        <div className="flex justify-end gap-2 mt-4">
-                            <button onClick={()=>setModalConvenioOpen(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-bold">Cancelar</button>
-                            <button onClick={handleSaveConvenio} className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-bold">Salvar</button>
-                        </div>
+                            </form>
+                        )}
                     </div>
                 </div>
-            )}
+            </div>
         </Layout>
     );
 }

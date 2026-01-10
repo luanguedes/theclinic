@@ -16,6 +16,11 @@ class PerfilOperador(models.Model):
     acesso_faturamento = models.BooleanField(default=False)
     force_password_change = models.BooleanField(default=True)
 
+    acesso_cadastros = models.BooleanField(
+        default=False, 
+        verbose_name="Acesso a Cadastros Gerais"
+    )
+
     def __str__(self):
         return f"Perfil de {self.user.username}"
 
