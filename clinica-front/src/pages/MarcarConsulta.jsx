@@ -9,23 +9,33 @@ import {
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
 
+// --- ESTILOS DO CALENDÁRIO ATUALIZADOS ---
 const calendarStyles = `
   .react-calendar { width: 100%; border: none; font-family: inherit; background: transparent; }
   .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 2px solid #2563eb !important; }
+  
+  /* 1. DISPONÍVEL (Verde) */
   .dia-livre { background-color: #dcfce7 !important; color: #166534 !important; border: 1px solid #bbf7d0 !important; font-weight: bold; }
-  .dia-feriado { background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fecaca !important; cursor: not-allowed !important; opacity: 0.8; }
-  .dia-bloqueado { background-color: #f1f5f9 !important; color: #64748b !important; border: 1px solid #cbd5e1 !important; cursor: not-allowed !important; text-decoration: line-through; }
+  
+  /* 2. FERIADO (Roxo) */
+  .dia-feriado { background-color: #f3e8ff !important; color: #6b21a8 !important; border: 1px solid #d8b4fe !important; cursor: not-allowed !important; opacity: 0.9; font-weight: bold; }
+  
+  /* 3. BLOQUEIO (Laranja) */
+  .dia-bloqueado { background-color: #ffedd5 !important; color: #c2410c !important; border: 1px solid #fed7aa !important; cursor: not-allowed !important; text-decoration: line-through; }
+  
+  /* 4. SEM VAGAS / ENCERRADA (Vermelho) */
+  .dia-sem-vagas { background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fecaca !important; cursor: not-allowed !important; opacity: 0.8; }
+
   .react-calendar__tile--active { background: #2563eb !important; color: white !important; border: none !important; }
   .react-calendar__tile:disabled { background-color: #f3f4f6 !important; color: #9ca3af !important; }
 `;
 
-// --- COMPONENTE BLINDADO CONTRA ERROS DE ARRAY ---
-const SearchableSelect = ({ label, options = [], value, onChange, placeholder, disabled }) => {
+const SearchableSelect = ({ label, options, value, onChange, placeholder, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
 
-    // Garante que options seja sempre um array
+    // Proteção de array
     const safeOptions = Array.isArray(options) ? options : [];
 
     useEffect(() => { 
@@ -152,33 +162,21 @@ export default function MarcarConsulta() {
   // Carrega listas iniciais (COM PROTEÇÃO)
   useEffect(() => {
     if (api) {
-        // Carrega Profissionais
         api.get('profissionais/').then(res => {
             const data = res.data.results || res.data;
-            if (Array.isArray(data)) {
-                setProfissionais(data.map(p => ({ id: p.id, label: p.nome })));
-            } else {
-                setProfissionais([]);
-            }
-        }).catch(err => setProfissionais([]));
+            setProfissionais(Array.isArray(data) ? data.map(p => ({ id: p.id, label: p.nome })) : []);
+        }).catch(() => setProfissionais([]));
 
-        // Carrega Pacientes
         api.get('pacientes/lista/').then(res => {
             const data = res.data.results || res.data;
-            if (Array.isArray(data)) {
-                setPacientes(data.map(p => ({ id: p.id, label: `${p.nome} - ${p.cpf}` })));
-            } else { setPacientes([]); }
+            setPacientes(Array.isArray(data) ? data.map(p => ({ id: p.id, label: `${p.nome} - ${p.cpf}` })) : []);
         }).catch(() => setPacientes([]));
 
-        // Carrega Convenios
         api.get('configuracoes/convenios/').then(res => {
             const data = res.data.results || res.data;
-            if (Array.isArray(data)) {
-                setConvenios(data.map(c => ({ id: c.id, label: c.nome })));
-            } else { setConvenios([]); }
+            setConvenios(Array.isArray(data) ? data.map(c => ({ id: c.id, label: c.nome })) : []);
         }).catch(() => setConvenios([]));
         
-        // Carrega Bloqueios
         api.get('agendamento/bloqueios/').then(res => {
             const data = res.data.results || res.data;
             setListaBloqueios(Array.isArray(data) ? data : []);
@@ -189,7 +187,6 @@ export default function MarcarConsulta() {
   useEffect(() => {
     if (profissionalId) {
         api.get(`profissionais/${profissionalId}/`).then(res => {
-            // Proteção aqui também
             if (res.data && Array.isArray(res.data.especialidades)) {
                 const specs = res.data.especialidades.map(v => ({ id: v.especialidade_leitura || v.especialidade_id, label: v.nome_especialidade }));
                 setEspecialidades(specs);
@@ -226,16 +223,14 @@ export default function MarcarConsulta() {
     } catch (e) { console.error(e); setVagasDoDia([]); }
   };
 
-  // ... (o restante da lógica de calendário e modais permanece idêntico, apenas o carregamento precisava de proteção)
-  // Vou manter o resto do código da lógica inalterado abaixo para economizar espaço e evitar erros de cópia
-  // ...
-
+  // --- NOVA LÓGICA DE CORES NO CALENDÁRIO ---
   const getTileClassName = ({ date, view }) => {
     if (view !== 'month') return null;
     
     const dataIso = getLocalISODate(date);
     const diaMes = dataIso.slice(5);
 
+    // 1. Bloqueios e Feriados (Têm prioridade sobre a regra de agenda)
     const bloqueio = listaBloqueios.find(b => {
         const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
         const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
@@ -243,8 +238,11 @@ export default function MarcarConsulta() {
         return (bateData || bateRecorrente) && bateProf;
     });
 
-    if (bloqueio) return bloqueio.tipo === 'feriado' ? 'dia-feriado' : 'dia-bloqueado';
+    if (bloqueio) {
+        return bloqueio.tipo === 'feriado' ? 'dia-feriado' : 'dia-bloqueado';
+    }
 
+    // 2. Agendas (Verifica se existe regra para o dia)
     if (!especialidadeId) return null;
     const jsDay = date.getDay();
     
@@ -254,7 +252,15 @@ export default function MarcarConsulta() {
         (r.data_inicio <= dataIso && r.data_fim >= dataIso)
     );
 
-    if (regraEncontrada) return 'dia-livre'; 
+    if (regraEncontrada) {
+        // Se a agenda existe, mas foi marcada como encerrada/inativa, usa VERMELHO
+        if (regraEncontrada.situacao === false) {
+            return 'dia-sem-vagas';
+        }
+        // Se está ativa, usa VERDE
+        return 'dia-livre'; 
+    }
+    
     return null;
   };
 
@@ -539,11 +545,15 @@ export default function MarcarConsulta() {
                                 <span>Dias com Vagas</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded border" style={{backgroundColor: '#fee2e2', borderColor: '#fecaca'}}></div> 
-                                <span>Bloqueios / Feriados</span>
+                                <div className="w-4 h-4 rounded border" style={{backgroundColor: '#ffedd5', borderColor: '#fed7aa', textDecoration: 'line-through', color: '#c2410c'}}></div> 
+                                <span>Bloqueio (Férias/Manual)</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded border" style={{backgroundColor: '#f3f4f6', borderColor: '#e5e7eb'}}></div> 
+                                <div className="w-4 h-4 rounded border" style={{backgroundColor: '#f3e8ff', borderColor: '#d8b4fe'}}></div> 
+                                <span>Feriado</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded border" style={{backgroundColor: '#fee2e2', borderColor: '#fecaca'}}></div> 
                                 <span>Sem Vagas / Encerrada</span>
                             </div>
                         </div>
@@ -611,6 +621,7 @@ export default function MarcarConsulta() {
                                                     <div className={`text-sm font-bold ${isLocked ? 'text-gray-500' : isBloqueadoTemporal ? 'text-slate-400' : 'text-green-600'}`}>
                                                         {isLocked ? (slot.agenda_fechada ? 'Agenda Encerrada' : 'Bloqueado') : isBloqueadoTemporal ? 'Expirado' : 'Livre'}
                                                     </div>
+                                                    
                                                     {slot.convenio_regra_nome && (
                                                         <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1 truncate">
                                                             <ShieldCheck size={12}/> {slot.convenio_regra_nome}
@@ -621,7 +632,9 @@ export default function MarcarConsulta() {
                                             )}
                                         </div>
                                     </div>
+                                    
                                     {isLocked && !slot.ocupado && <div className="absolute top-2 right-2 text-gray-400"><Lock size={14}/></div>}
+
                                     {slot.ocupado && (
                                         <div className="flex gap-1 ml-2">
                                             <button onClick={(e) => handleImprimirSlot(e, slot.agendamento_id)} className="p-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors shadow-sm" title="Imprimir"><Printer size={14}/></button>
@@ -643,6 +656,7 @@ export default function MarcarConsulta() {
             </div>
         )}
         
+        {/* MODAL DE AGENDAMENTO */}
         {modalOpen && (
              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -700,13 +714,13 @@ export default function MarcarConsulta() {
             </div>
         )}
         
+        {/* MODAL DE NOVO PACIENTE */}
         {modalPacienteOpen && (
              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl animate-in fade-in zoom-in duration-200 my-10">
                     <div className="bg-slate-800 p-5 text-white flex justify-between items-center rounded-t-2xl"><h3 className="font-bold flex items-center gap-2 text-lg"><UserPlus size={20}/> Novo Paciente</h3><button onClick={() => setModalPacienteOpen(false)} className="text-slate-400 hover:text-white"><X size={24}/></button></div>
                     <form onSubmit={salvarPacienteCompleto} className="p-6">
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                            {/* ... (campos do formulário de paciente mantidos iguais) ... */}
                             <div className="md:col-span-12 border-b pb-2 mb-2 font-bold text-slate-700 dark:text-white uppercase text-xs tracking-wider">Dados Pessoais</div>
                             <div className="md:col-span-6"><label className="block text-xs mb-1">Nome Completo</label><input name="nome" required value={novoPaciente.nome} onChange={handlePacienteChange} className={inputClass} /></div>
                             <div className="md:col-span-3"><label className="block text-xs mb-1">CPF</label><input name="cpf" required value={novoPaciente.cpf} onChange={handlePacienteChange} className={inputClass} placeholder="000.000.000-00"/></div>
