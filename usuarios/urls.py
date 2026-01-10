@@ -8,11 +8,10 @@ from .views import (
     DetalheOperadorView
 )
 
+router = DefaultRouter()
+
+router.register(r'', OperadorViewSet, basename='operador')
+
 urlpatterns = [
-    path('novo/', NovoOperadorView.as_view()),
-    path('me/', MeView.as_view()),
-    path('listar/', ListarOperadoresView.as_view()),
-    path('config/', ConfiguracaoView.as_view()),
-    path('trocar-senha/', TrocarSenhaView.as_view()),
-    path('<int:pk>/', DetalheOperadorView.as_view()),
+    path('', include(router.urls)),
 ]

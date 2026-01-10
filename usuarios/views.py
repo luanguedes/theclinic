@@ -1,99 +1,65 @@
-from rest_framework import generics, permissions, filters
+from rest_framework import viewsets, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.contrib.auth.models import User
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.permissions import IsAuthenticated
+from .models import Operador
+from .serializers import OperadorSerializer
 
-from .models import ConfiguracaoSistema
-from .serializers import OperadorSerializer, OperadorListSerializer, ConfiguracaoSerializer
-
-class NovoOperadorView(generics.CreateAPIView):
-    queryset = User.objects.all()
+# --- VIEWSET UNIFICADO (Substitui Novo, Detalhe e Listar) ---
+class OperadorViewSet(viewsets.ModelViewSet):
+    queryset = Operador.objects.all().order_by('first_name')
     serializer_class = OperadorSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
-
-class DetalheOperadorView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = User.objects.all()
-    serializer_class = OperadorSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated] # Ou IsAdminUser se preferir
+    permission_classes = [IsAuthenticated] # Você pode restringir mais se quiser
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['username', 'first_name', 'email']
 
     def update(self, request, *args, **kwargs):
-        # Lógica especial para update: se a senha não vier, não muda
+        # Lógica para não obrigar senha na edição
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         
-        # Removemos a senha do request se ela vier vazia
+        # Se a senha vier vazia, remove do request para não salvar string vazia
         if 'password' in request.data and not request.data['password']:
-            request.data._mutable = True
-            request.data.pop('password')
-            request.data._mutable = False
-            
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
+            if hasattr(request.data, '_mutable'):
+                request.data._mutable = True
+                request.data.pop('password')
+                request.data._mutable = False
+            else:
+                # Caso seja um dict normal
+                new_data = request.data.copy()
+                del new_data['password']
+                request._full_data = new_data
 
-        # Atualiza campos do Perfil Manualmente
-        if hasattr(instance, 'perfil'):
-            p = instance.perfil
-            p.acesso_atendimento = request.data.get('acesso_atendimento', p.acesso_atendimento)
-            p.acesso_agendamento = request.data.get('acesso_agendamento', p.acesso_agendamento)
-            p.acesso_faturamento = request.data.get('acesso_faturamento', p.acesso_faturamento)
-            p.force_password_change = request.data.get('force_password_change', p.force_password_change)
-            p.save()
+        return super().update(request, *args, **kwargs)
 
-        return Response(serializer.data)
-
+# --- ME VIEW (Dados do usuário logado) ---
 class MeView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
-        try: perfil = user.perfil 
-        except: perfil = None
-
+        
+        # Como estamos usando o modelo Operador customizado, 
+        # os campos estão DIRETO no usuário, não precisa de .perfil
         data = {
             "id": user.id,
             "username": user.username,
             "first_name": user.first_name,
+            "email": user.email,
             "is_superuser": user.is_superuser,
-            "acesso_atendimento": perfil.acesso_atendimento if perfil else False,
-            "acesso_agendamento": perfil.acesso_agendamento if perfil else False,
-            "acesso_faturamento": perfil.acesso_faturamento if perfil else False,
-            "force_password_change": perfil.force_password_change if perfil else False,
+            
+            # Permissões
+            "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
+            "acesso_atendimento": getattr(user, 'acesso_atendimento', False),
+            "acesso_faturamento": getattr(user, 'acesso_faturamento', False),
+            "acesso_cadastros": getattr(user, 'acesso_cadastros', False),     # <--- NOVO
+            "acesso_configuracoes": getattr(user, 'acesso_configuracoes', False),
         }
         return Response(data)
 
-class ListarOperadoresView(generics.ListAPIView):
-    queryset = User.objects.all().order_by('first_name')
-    serializer_class = OperadorListSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
-    search_fields = ['username', 'first_name', 'email']
-
-class ConfiguracaoView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAdminUser]
-
-    def get(self, request):
-        try: config = ConfiguracaoSistema.load()
-        except: config = ConfiguracaoSistema(itens_por_pagina=15)
-        return Response(ConfiguracaoSerializer(config).data)
-
-    def put(self, request):
-        config = ConfiguracaoSistema.load()
-        serializer = ConfiguracaoSerializer(config, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
-
+# --- TROCA DE SENHA (Mantido) ---
 class TrocarSenhaView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         nova_senha = request.data.get('nova_senha')
@@ -103,9 +69,5 @@ class TrocarSenhaView(APIView):
         user = request.user
         user.set_password(nova_senha)
         user.save()
-
-        if hasattr(user, 'perfil'):
-            user.perfil.force_password_change = False
-            user.perfil.save()
 
         return Response({'message': 'Senha alterada com sucesso!'})
