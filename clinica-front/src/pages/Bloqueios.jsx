@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
+// CORREÇÃO AQUI: Adicionei o 'X' na lista de imports
 import { 
-    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2 
+    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X 
 } from 'lucide-react';
 import { generateConflictReport } from '../utils/generateReport';
 
@@ -11,7 +12,7 @@ export default function Bloqueios() {
     const { api } = useAuth();
     const { notify, confirmDialog } = useNotification();
     
-    // Inicializa explicitamente como arrays vazios
+    // Inicializa explicitamente como arrays vazios para evitar erro de .map
     const [bloqueios, setBloqueios] = useState([]);
     const [profissionais, setProfissionais] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -37,18 +38,16 @@ export default function Bloqueios() {
                 api.get('profissionais/')
             ]);
 
-            // --- CORREÇÃO: Tratamento seguro dos dados ---
+            // Tratamento seguro dos dados
             const dadosBloqueios = resBloq.data.results || resBloq.data;
             const dadosProfissionais = resProf.data.results || resProf.data;
 
-            // Só atualiza o estado se for realmente um Array, senão usa []
             setBloqueios(Array.isArray(dadosBloqueios) ? dadosBloqueios : []);
             setProfissionais(Array.isArray(dadosProfissionais) ? dadosProfissionais : []);
 
         } catch (e) { 
             console.error("Erro loadData:", e);
             notify.error("Erro ao carregar dados."); 
-            // Em caso de erro, garante listas vazias para não travar a tela
             setBloqueios([]);
         }
     };
@@ -184,7 +183,6 @@ export default function Bloqueios() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
-                                    {/* CORREÇÃO AQUI: Verificação de Array antes do Map */}
                                     {Array.isArray(bloqueios) && bloqueios.length > 0 ? (
                                         bloqueios.map(b => (
                                             <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
@@ -224,6 +222,7 @@ export default function Bloqueios() {
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
                             <div className="bg-orange-500 p-5 text-white flex justify-between items-center">
                                 <h3 className="font-bold text-lg flex items-center gap-2"><AlertTriangle/> Conflitos Detectados</h3>
+                                {/* AGORA O X VAI FUNCIONAR POIS FOI IMPORTADO */}
                                 <button onClick={() => setConflictData(null)}><X/></button>
                             </div>
                             <div className="p-6">
