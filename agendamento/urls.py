@@ -1,10 +1,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AgendamentoViewSet
+from .views import AgendamentoViewSet, BloqueioAgendaViewSet # <--- Importe aqui
 
 router = DefaultRouter()
-# Isso vai gerar a rota: /api/agendamentos/ (vazia pois o prefixo já está no include principal)
+
 router.register(r'', AgendamentoViewSet, basename='agendamento')
+
+router.register(r'bloqueios', BloqueioAgendaViewSet, basename='bloqueios') 
 
 urlpatterns = [
     path('', include(router.urls)),
