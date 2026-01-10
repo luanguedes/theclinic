@@ -47,6 +47,36 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
 
         return Response({'conflito': True, 'total': len(dados_pacientes), 'pacientes': dados_pacientes})
 
+    @action(detail=True, methods=['get'])
+    def relatorio(self, request, pk=None):
+        bloqueio = self.get_object()
+        
+        # Busca agendamentos que coincidem com o período do bloqueio
+        conflitos = Agendamento.objects.filter(
+            data__range=[bloqueio.data_inicio, bloqueio.data_fim],
+            horario__gte=bloqueio.hora_inicio,
+            horario__lte=bloqueio.hora_fim
+        )
+        
+        if bloqueio.profissional:
+            conflitos = conflitos.filter(profissional=bloqueio.profissional)
+
+        dados_pacientes = []
+        for c in conflitos:
+            dados_pacientes.append({
+                'id': c.id,
+                'paciente_nome': c.paciente.nome,
+                'paciente_cpf': c.paciente.cpf,
+                'paciente_nascimento': c.paciente.data_nascimento,
+                'paciente_telefone': c.paciente.telefone,
+                'medico': c.profissional.nome,
+                'data': c.data,
+                'horario': c.horario,
+                'status': c.get_status_display() # Mostra se está Agendado ou Cancelado
+            })
+
+        return Response(dados_pacientes)
+
     def create(self, request, *args, **kwargs):
         acao_conflito = request.data.pop('acao_conflito', 'manter')
         serializer = self.get_serializer(data=request.data)
@@ -72,6 +102,8 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
+
+    
 
     def get_queryset(self):
         queryset = Agendamento.objects.all()

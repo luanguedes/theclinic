@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
-// CORREÇÃO AQUI: Adicionei o 'X' na lista de imports
 import { 
-    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X 
+    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X, Pencil, Printer, FileText, RotateCcw
 } from 'lucide-react';
 import { generateConflictReport } from '../utils/generateReport';
 
@@ -12,19 +11,21 @@ export default function Bloqueios() {
     const { api } = useAuth();
     const { notify, confirmDialog } = useNotification();
     
-    // Inicializa explicitamente como arrays vazios para evitar erro de .map
     const [bloqueios, setBloqueios] = useState([]);
     const [profissionais, setProfissionais] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Form
-    const [form, setForm] = useState({
+    // Estado de Edição
+    const [editingId, setEditingId] = useState(null);
+
+    const formInicial = {
         profissional: '', data_inicio: '', data_fim: '', 
         hora_inicio: '00:00', hora_fim: '23:59', 
         motivo: '', tipo: 'bloqueio', recorrente: false
-    });
+    };
+    const [form, setForm] = useState(formInicial);
 
-    // Modal de Conflito
+    // Modal de Conflito (Apenas na criação)
     const [conflictData, setConflictData] = useState(null);
 
     useEffect(() => {
@@ -37,19 +38,32 @@ export default function Bloqueios() {
                 api.get('agendamento/bloqueios/'),
                 api.get('profissionais/')
             ]);
-
-            // Tratamento seguro dos dados
-            const dadosBloqueios = resBloq.data.results || resBloq.data;
-            const dadosProfissionais = resProf.data.results || resProf.data;
-
-            setBloqueios(Array.isArray(dadosBloqueios) ? dadosBloqueios : []);
-            setProfissionais(Array.isArray(dadosProfissionais) ? dadosProfissionais : []);
-
+            setBloqueios(Array.isArray(resBloq.data.results || resBloq.data) ? (resBloq.data.results || resBloq.data) : []);
+            setProfissionais(Array.isArray(resProf.data.results || resProf.data) ? (resProf.data.results || resProf.data) : []);
         } catch (e) { 
-            console.error("Erro loadData:", e);
             notify.error("Erro ao carregar dados."); 
             setBloqueios([]);
         }
+    };
+
+    const handleEdit = (bloqueio) => {
+        setEditingId(bloqueio.id);
+        setForm({
+            profissional: bloqueio.profissional || '',
+            data_inicio: bloqueio.data_inicio,
+            data_fim: bloqueio.data_fim,
+            hora_inicio: bloqueio.hora_inicio,
+            hora_fim: bloqueio.hora_fim,
+            motivo: bloqueio.motivo,
+            tipo: bloqueio.tipo,
+            recorrente: bloqueio.recorrente
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingId(null);
+        setForm(formInicial);
     };
 
     const handleSubmit = async (e) => {
@@ -57,24 +71,32 @@ export default function Bloqueios() {
         setLoading(true);
         
         try {
-            // Verifica conflitos
-            const res = await api.post('agendamento/bloqueios/verificar_conflitos/', form);
-            
-            if (res.data.conflito) {
-                setConflictData(res.data);
-                setLoading(false);
-                return; // Para aqui e abre o modal
+            if (editingId) {
+                // --- MODO EDIÇÃO (PUT) ---
+                // Na edição, não verificamos conflitos automaticamente para não travar o fluxo,
+                // assume-se que o gestor sabe o que está fazendo ao alterar datas.
+                await api.put(`agendamento/bloqueios/${editingId}/`, form);
+                notify.success("Bloqueio atualizado com sucesso!");
+                handleCancelEdit();
+                loadData();
+            } else {
+                // --- MODO CRIAÇÃO (POST) com Verificação ---
+                const res = await api.post('agendamento/bloqueios/verificar_conflitos/', form);
+                
+                if (res.data.conflito) {
+                    setConflictData(res.data);
+                    setLoading(false);
+                    return; 
+                }
+
+                await api.post('agendamento/bloqueios/', { ...form, acao_conflito: 'manter' });
+                notify.success("Bloqueio criado com sucesso!");
+                setForm(formInicial);
+                loadData();
             }
-
-            // Se não tem conflito, cria direto
-            await api.post('agendamento/bloqueios/', { ...form, acao_conflito: 'manter' });
-            notify.success("Bloqueio criado com sucesso!");
-            setForm({ ...form, motivo: '', data_inicio: '', data_fim: '' });
-            loadData();
-
         } catch (error) {
             console.error(error);
-            notify.error("Erro ao processar bloqueio.");
+            notify.error("Erro ao salvar bloqueio.");
         } finally {
             setLoading(false);
         }
@@ -83,30 +105,38 @@ export default function Bloqueios() {
     const resolverConflito = async (acao) => {
         try {
             await api.post('agendamento/bloqueios/', { ...form, acao_conflito: acao });
-            notify.success(`Bloqueio criado! Pacientes ${acao === 'cancelar' ? 'cancelados' : 'mantidos'}.`);
+            notify.success(`Bloqueio criado!`);
             setConflictData(null);
-            setForm({ ...form, motivo: '', data_inicio: '', data_fim: '' });
+            setForm(formInicial);
             loadData();
+        } catch (error) { notify.error("Erro ao resolver conflito."); }
+    };
+
+    const baixarRelatorioAfetados = async (bloqueio) => {
+        try {
+            const res = await api.get(`agendamento/bloqueios/${bloqueio.id}/relatorio/`);
+            const pacientes = res.data;
+            if (pacientes.length === 0) {
+                notify.info("Nenhum paciente afetado neste período.");
+                return;
+            }
+            generateConflictReport(pacientes, bloqueio.motivo);
         } catch (error) {
-            notify.error("Erro ao resolver conflito.");
+            notify.error("Erro ao gerar relatório.");
         }
     };
 
-    const imprimirRelatorio = () => {
-        if (conflictData) {
-            generateConflictReport(conflictData.pacientes, form.motivo);
-        }
+    const imprimirRelatorioModal = () => {
+        if (conflictData) generateConflictReport(conflictData.pacientes, form.motivo);
     };
 
     const handleDelete = async (id) => {
-        if (await confirmDialog("Remover este bloqueio?", "Exclusão", "Sim, remover", "Cancelar")) {
+        if (await confirmDialog("Remover este bloqueio? As agendas voltarão a ficar disponíveis.", "Exclusão", "Sim, remover", "Cancelar")) {
             try {
                 await api.delete(`agendamento/bloqueios/${id}/`);
                 loadData();
                 notify.success("Bloqueio removido.");
-            } catch (error) {
-                notify.error("Erro ao remover.");
-            }
+            } catch (error) { notify.error("Erro ao remover."); }
         }
     }
 
@@ -122,7 +152,15 @@ export default function Bloqueios() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* FORMULÁRIO */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-fit">
-                        <h2 className="font-bold text-lg mb-4 dark:text-white">Novo Bloqueio</h2>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="font-bold text-lg dark:text-white">{editingId ? 'Editar Bloqueio' : 'Novo Bloqueio'}</h2>
+                            {editingId && (
+                                <button onClick={handleCancelEdit} className="text-xs flex items-center gap-1 text-slate-500 hover:text-slate-800 bg-slate-100 px-2 py-1 rounded">
+                                    <RotateCcw size={12}/> Cancelar
+                                </button>
+                            )}
+                        </div>
+                        
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1">Tipo</label>
@@ -137,7 +175,6 @@ export default function Bloqueios() {
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Profissional</label>
                                     <select value={form.profissional} onChange={e=>setForm({...form, profissional: e.target.value})} className={inputClass}>
                                         <option value="">Todos os Profissionais</option>
-                                        {/* Proteção no map de profissionais */}
                                         {Array.isArray(profissionais) && profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                                     </select>
                                 </div>
@@ -164,8 +201,9 @@ export default function Bloqueios() {
                                 </label>
                             )}
 
-                            <button type="submit" disabled={loading} className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50">
-                                {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save size={18}/>} Salvar Bloqueio
+                            <button type="submit" disabled={loading} className={`w-full text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-800 hover:bg-slate-900'}`}>
+                                {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save size={18}/>} 
+                                {editingId ? 'Atualizar Bloqueio' : 'Salvar Bloqueio'}
                             </button>
                         </form>
                     </div>
@@ -179,7 +217,7 @@ export default function Bloqueios() {
                                         <th className="px-6 py-4">Tipo</th>
                                         <th className="px-6 py-4">Data</th>
                                         <th className="px-6 py-4">Motivo / Profissional</th>
-                                        <th className="px-6 py-4 text-right">Ação</th>
+                                        <th className="px-6 py-4 text-right">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
@@ -203,7 +241,17 @@ export default function Bloqueios() {
                                                     <div className="text-xs text-slate-500">{b.nome_profissional || "Todos os Profissionais"}</div>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <button onClick={()=>handleDelete(b.id)} className="text-red-500 hover:bg-red-50 p-2 rounded transition-colors"><Trash2 size={16}/></button>
+                                                    <div className="flex justify-end gap-1">
+                                                        <button onClick={()=>baixarRelatorioAfetados(b)} className="text-slate-500 hover:bg-slate-100 p-2 rounded transition-colors" title="Relatório de Afetados">
+                                                            <FileText size={16}/>
+                                                        </button>
+                                                        <button onClick={()=>handleEdit(b)} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition-colors" title="Editar">
+                                                            <Pencil size={16}/>
+                                                        </button>
+                                                        <button onClick={()=>handleDelete(b.id)} className="text-red-500 hover:bg-red-50 p-2 rounded transition-colors" title="Excluir">
+                                                            <Trash2 size={16}/>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))
@@ -222,7 +270,6 @@ export default function Bloqueios() {
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
                             <div className="bg-orange-500 p-5 text-white flex justify-between items-center">
                                 <h3 className="font-bold text-lg flex items-center gap-2"><AlertTriangle/> Conflitos Detectados</h3>
-                                {/* AGORA O X VAI FUNCIONAR POIS FOI IMPORTADO */}
                                 <button onClick={() => setConflictData(null)}><X/></button>
                             </div>
                             <div className="p-6">
@@ -230,7 +277,7 @@ export default function Bloqueios() {
                                     Existem <strong>{conflictData.total} pacientes</strong> agendados neste período. O que deseja fazer?
                                 </p>
                                 
-                                <button onClick={imprimirRelatorio} className="w-full mb-6 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                                <button onClick={imprimirRelatorioModal} className="w-full mb-6 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                                     <FileDown size={20}/> Baixar Relatório de Afetados (PDF)
                                 </button>
 
