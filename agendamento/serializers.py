@@ -4,9 +4,8 @@ from configuracoes.models import DadosClinica
 from profissionais.models import ProfissionalEspecialidade
 from agendas.models import AgendaConfig
 
-# --- SERIALIZER DE BLOQUEIO (COM TRATAMENTO DE ERRO) ---
 class BloqueioAgendaSerializer(serializers.ModelSerializer):
-    # Usamos SerializerMethodField para evitar erro quando for Null (Todos)
+    # Usamos SerializerMethodField para evitar erro quando for Null
     nome_profissional = serializers.SerializerMethodField()
     
     class Meta:
@@ -14,13 +13,10 @@ class BloqueioAgendaSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_nome_profissional(self, obj):
-        # Se tiver profissional vinculado, retorna o nome
         if obj.profissional:
             return obj.profissional.nome
-        # Se for None, significa bloqueio geral
         return "Todos os Profissionais"
 
-# --- SERIALIZER DE AGENDAMENTO ---
 class AgendamentoSerializer(serializers.ModelSerializer):
     # Campos de leitura simples
     nome_paciente = serializers.CharField(source='paciente.nome', read_only=True)
@@ -84,7 +80,7 @@ class AgendamentoSerializer(serializers.ModelSerializer):
 
         if agendados >= limite_vagas:
             raise serializers.ValidationError(
-                f"Limite de vagas excedido para este horário! (Máximo: {limite_vagas}, Agendados: {agendados}). Use a opção 'Encaixe' se necessário."
+                f"Limite de vagas excedido! Máx: {limite_vagas}, Agendados: {agendados}"
             )
 
         return data     
