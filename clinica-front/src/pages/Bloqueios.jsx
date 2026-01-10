@@ -11,6 +11,7 @@ export default function Bloqueios() {
     const { api } = useAuth();
     const { notify, confirmDialog } = useNotification();
     
+    // Inicializa explicitamente como arrays vazios
     const [bloqueios, setBloqueios] = useState([]);
     const [profissionais, setProfissionais] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -26,7 +27,7 @@ export default function Bloqueios() {
     const [conflictData, setConflictData] = useState(null);
 
     useEffect(() => {
-        loadData();
+        if (api) loadData();
     }, [api]);
 
     const loadData = async () => {
@@ -35,17 +36,29 @@ export default function Bloqueios() {
                 api.get('agendamento/bloqueios/'),
                 api.get('profissionais/')
             ]);
-            setBloqueios(resBloq.data.results || resBloq.data);
-            setProfissionais(resProf.data.results || resProf.data);
-        } catch (e) { notify.error("Erro ao carregar dados."); }
+
+            // --- CORREÇÃO: Tratamento seguro dos dados ---
+            const dadosBloqueios = resBloq.data.results || resBloq.data;
+            const dadosProfissionais = resProf.data.results || resProf.data;
+
+            // Só atualiza o estado se for realmente um Array, senão usa []
+            setBloqueios(Array.isArray(dadosBloqueios) ? dadosBloqueios : []);
+            setProfissionais(Array.isArray(dadosProfissionais) ? dadosProfissionais : []);
+
+        } catch (e) { 
+            console.error("Erro loadData:", e);
+            notify.error("Erro ao carregar dados."); 
+            // Em caso de erro, garante listas vazias para não travar a tela
+            setBloqueios([]);
+        }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         
-        // 1. Verifica conflitos
         try {
+            // Verifica conflitos
             const res = await api.post('agendamento/bloqueios/verificar_conflitos/', form);
             
             if (res.data.conflito) {
@@ -61,6 +74,7 @@ export default function Bloqueios() {
             loadData();
 
         } catch (error) {
+            console.error(error);
             notify.error("Erro ao processar bloqueio.");
         } finally {
             setLoading(false);
@@ -68,7 +82,6 @@ export default function Bloqueios() {
     };
 
     const resolverConflito = async (acao) => {
-        // acao = 'cancelar' ou 'manter'
         try {
             await api.post('agendamento/bloqueios/', { ...form, acao_conflito: acao });
             notify.success(`Bloqueio criado! Pacientes ${acao === 'cancelar' ? 'cancelados' : 'mantidos'}.`);
@@ -88,8 +101,13 @@ export default function Bloqueios() {
 
     const handleDelete = async (id) => {
         if (await confirmDialog("Remover este bloqueio?", "Exclusão", "Sim, remover", "Cancelar")) {
-            await api.delete(`agendamento/bloqueios/${id}/`);
-            loadData();
+            try {
+                await api.delete(`agendamento/bloqueios/${id}/`);
+                loadData();
+                notify.success("Bloqueio removido.");
+            } catch (error) {
+                notify.error("Erro ao remover.");
+            }
         }
     }
 
@@ -120,7 +138,8 @@ export default function Bloqueios() {
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Profissional</label>
                                     <select value={form.profissional} onChange={e=>setForm({...form, profissional: e.target.value})} className={inputClass}>
                                         <option value="">Todos os Profissionais</option>
-                                        {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                                        {/* Proteção no map de profissionais */}
+                                        {Array.isArray(profissionais) && profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                                     </select>
                                 </div>
                             )}
@@ -146,8 +165,8 @@ export default function Bloqueios() {
                                 </label>
                             )}
 
-                            <button type="submit" disabled={loading} className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
-                                {loading ? <Loader2 className="animate-spin"/> : <Save size={18}/>} Salvar Bloqueio
+                            <button type="submit" disabled={loading} className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50">
+                                {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save size={18}/>} Salvar Bloqueio
                             </button>
                         </form>
                     </div>
@@ -165,30 +184,34 @@ export default function Bloqueios() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
-                                    {bloqueios.map(b => (
-                                        <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                            <td className="px-6 py-4">
-                                                {b.tipo === 'feriado' 
-                                                    ? <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">FERIADO</span>
-                                                    : <span className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold">BLOQUEIO</span>
-                                                }
-                                                {b.recorrente && <span className="ml-2 text-xs text-blue-500 font-bold" title="Anual">↻</span>}
-                                            </td>
-                                            <td className="px-6 py-4 dark:text-white">
-                                                {new Date(b.data_inicio).toLocaleDateString()}
-                                                {b.data_inicio !== b.data_fim && ` até ${new Date(b.data_fim).toLocaleDateString()}`}
-                                                {b.tipo === 'bloqueio' && <div className="text-xs text-slate-400">{b.hora_inicio.slice(0,5)} - {b.hora_fim.slice(0,5)}</div>}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-slate-700 dark:text-white">{b.motivo}</div>
-                                                <div className="text-xs text-slate-500">{b.nome_profissional || "Todos os Profissionais"}</div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <button onClick={()=>handleDelete(b.id)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash2 size={16}/></button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {bloqueios.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-slate-400">Nenhum bloqueio ativo.</td></tr>}
+                                    {/* CORREÇÃO AQUI: Verificação de Array antes do Map */}
+                                    {Array.isArray(bloqueios) && bloqueios.length > 0 ? (
+                                        bloqueios.map(b => (
+                                            <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                                <td className="px-6 py-4">
+                                                    {b.tipo === 'feriado' 
+                                                        ? <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">FERIADO</span>
+                                                        : <span className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold">BLOQUEIO</span>
+                                                    }
+                                                    {b.recorrente && <span className="ml-2 text-xs text-blue-500 font-bold" title="Anual">↻</span>}
+                                                </td>
+                                                <td className="px-6 py-4 dark:text-white">
+                                                    {new Date(b.data_inicio).toLocaleDateString()}
+                                                    {b.data_inicio !== b.data_fim && ` até ${new Date(b.data_fim).toLocaleDateString()}`}
+                                                    {b.tipo === 'bloqueio' && <div className="text-xs text-slate-400">{String(b.hora_inicio).slice(0,5)} - {String(b.hora_fim).slice(0,5)}</div>}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-slate-700 dark:text-white">{b.motivo}</div>
+                                                    <div className="text-xs text-slate-500">{b.nome_profissional || "Todos os Profissionais"}</div>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button onClick={()=>handleDelete(b.id)} className="text-red-500 hover:bg-red-50 p-2 rounded transition-colors"><Trash2 size={16}/></button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr><td colSpan="4" className="p-8 text-center text-slate-400">Nenhum bloqueio encontrado.</td></tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -208,17 +231,17 @@ export default function Bloqueios() {
                                     Existem <strong>{conflictData.total} pacientes</strong> agendados neste período. O que deseja fazer?
                                 </p>
                                 
-                                <button onClick={imprimirRelatorio} className="w-full mb-6 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700">
+                                <button onClick={imprimirRelatorio} className="w-full mb-6 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                                     <FileDown size={20}/> Baixar Relatório de Afetados (PDF)
                                 </button>
 
                                 <div className="grid grid-cols-2 gap-3">
-                                    <button onClick={() => resolverConflito('manter')} className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-sm">
+                                    <button onClick={() => resolverConflito('manter')} className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-sm transition-colors">
                                         <CheckCircle2 size={20}/>
                                         Bloquear e MANTER
                                         <span className="text-[10px] font-normal opacity-70">Agenda bloqueada, pacientes continuam lá</span>
                                     </button>
-                                    <button onClick={() => resolverConflito('cancelar')} className="bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-sm">
+                                    <button onClick={() => resolverConflito('cancelar')} className="bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-sm transition-colors">
                                         <Ban size={20}/>
                                         Bloquear e CANCELAR
                                         <span className="text-[10px] font-normal opacity-70">Cancela todos os agendamentos</span>
