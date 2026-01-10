@@ -2,7 +2,7 @@ from rest_framework import viewsets, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from .models import Convenio, DadosClinica
+from .models import Convenio, DadosClinica, ConfiguracaoSistema
 from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer
 
 class ConvenioViewSet(viewsets.ModelViewSet):
