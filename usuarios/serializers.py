@@ -10,6 +10,7 @@ class OperadorSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'first_name', 'last_name', 'email', 'password',
             'is_superuser', 
+            'profissional',
             'acesso_agendamento', 
             'acesso_atendimento', 
             'acesso_faturamento', 

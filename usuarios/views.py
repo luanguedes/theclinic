@@ -47,6 +47,7 @@ class MeView(APIView):
             "first_name": user.first_name,
             "email": user.email,
             "is_superuser": user.is_superuser,
+            "profissional_id": getattr(user, 'profissional_id', None),
             
             # Permissões
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
