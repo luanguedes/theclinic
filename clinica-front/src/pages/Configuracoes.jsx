@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, Lock
+    Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, Lock, MessageCircle
 } from 'lucide-react';
 
 export default function Configuracoes() {
@@ -23,7 +23,9 @@ export default function Configuracoes() {
         itens_por_pagina: 10,
         modo_manutencao: false,
         // Agendamento
-        janela_agendamento_meses: 6
+        janela_agendamento_meses: 6,
+        // Comunicação (NOVO)
+        enviar_whatsapp_global: true
     });
 
     // Se não for admin, nem carrega
@@ -70,7 +72,7 @@ export default function Configuracoes() {
     };
 
     const tabClass = (tab) => `
-        flex items-center gap-2 px-6 py-4 font-bold border-b-2 transition-all
+        flex items-center gap-2 px-6 py-4 font-bold border-b-2 transition-all whitespace-nowrap
         ${activeTab === tab 
             ? 'border-blue-600 text-blue-600 bg-blue-50/50 dark:bg-blue-900/20' 
             : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:text-slate-300 dark:hover:bg-slate-800'}
@@ -94,7 +96,7 @@ export default function Configuracoes() {
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                     
                     {/* ABAS */}
-                    <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
+                    <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto scrollbar-hide">
                         <button onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}>
                             <Shield size={18}/> Segurança
                         </button>
@@ -103,6 +105,9 @@ export default function Configuracoes() {
                         </button>
                         <button onClick={()=>setActiveTab('agendamento')} className={tabClass('agendamento')}>
                             <CalendarClock size={18}/> Regras de Negócio
+                        </button>
+                        <button onClick={()=>setActiveTab('comunicacao')} className={tabClass('comunicacao')}>
+                            <MessageCircle size={18}/> Comunicação
                         </button>
                     </div>
 
@@ -176,6 +181,29 @@ export default function Configuracoes() {
                                                 <input type="number" min="1" max="24" value={config.janela_agendamento_meses} onChange={e=>setConfig({...config, janela_agendamento_meses: e.target.value})} className={inputClass}/>
                                             </div>
                                             <p className="text-xs text-slate-400 mt-1.5">Define até quantos meses à frente a agenda fica aberta para marcação.</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ABA COMUNICAÇÃO (NOVO) */}
+                                {activeTab === 'comunicacao' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                                        <div className="bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 p-5 rounded-xl">
+                                            <div className="flex items-center gap-2 mb-3 text-green-700 dark:text-green-400 font-bold">
+                                                <MessageCircle size={20}/> Disparos de WhatsApp
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <div className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" className="sr-only peer" checked={config.enviar_whatsapp_global} onChange={e=>setConfig({...config, enviar_whatsapp_global: e.target.checked})} />
+                                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
+                                                </div>
+                                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                                    {config.enviar_whatsapp_global ? 'ENVIO ATIVADO' : 'ENVIO DESATIVADO'}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-green-600/80 mt-3 leading-relaxed">
+                                                Controle Mestre: Se desativado aqui, <strong>nenhuma</strong> mensagem será enviada pelo sistema, independente da configuração individual do agendamento.
+                                            </p>
                                         </div>
                                     </div>
                                 )}
