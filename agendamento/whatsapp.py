@@ -2,7 +2,8 @@ import requests
 import logging
 import re
 from django.conf import settings
-from cadastro.models import DadosClinica 
+# CORREÇÃO AQUI 👇 (Era 'cadastro', mudamos para 'configuracoes')
+from configuracoes.models import DadosClinica 
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +16,8 @@ def formatar_telefone(telefone):
     return nums
 
 def get_dados_clinica():
-    """
-    Busca o primeiro cadastro de clínica encontrado no banco.
-    Retorna um dicionário com nome e endereço formatado.
-    """
     try:
-        # Pega o primeiro registro (geralmente só tem um configurado)
+        # Busca o primeiro registro em configuracoes
         clinica = DadosClinica.objects.first()
         
         if not clinica:
@@ -29,18 +26,15 @@ def get_dados_clinica():
                 "endereco": "Endereço não cadastrado"
             }
         
-        # Monta o endereço completo
-        # Ex: Av. Paulista, 1000 - Bela Vista (Sala 10)
+        # Verifica se os campos existem no seu model (ajuste se for diferente)
+        # Geralmente é logradouro, numero, bairro...
         endereco_completo = f"{clinica.logradouro}, {clinica.numero}"
         
-        if clinica.bairro:
+        if hasattr(clinica, 'bairro') and clinica.bairro:
             endereco_completo += f" - {clinica.bairro}"
             
-        if clinica.complemento:
-            endereco_completo += f" ({clinica.complemento})"
-            
         return {
-            "nome": clinica.nome_fantasia or clinica.razao_social or "A Clínica",
+            "nome": clinica.nome_fantasia or "A Clínica",
             "endereco": endereco_completo
         }
     except Exception as e:
@@ -52,7 +46,6 @@ def enviar_mensagem_agendamento(agendamento):
         paciente = agendamento.paciente
         profissional = agendamento.profissional
         
-        # 1. Busca os dados dinâmicos da clínica
         dados_clinica = get_dados_clinica()
         
         telefone = formatar_telefone(paciente.telefone)
@@ -63,7 +56,6 @@ def enviar_mensagem_agendamento(agendamento):
         data_fmt = agendamento.data.strftime('%d/%m/%Y')
         hora_fmt = agendamento.horario.strftime('%H:%M')
 
-        # 2. Monta a mensagem usando os dados do banco
         mensagem = (
             f"Olá, *{paciente.nome}*! 👋\n\n"
             f"Sua consulta na *{dados_clinica['nome']}* está confirmada!\n\n"
