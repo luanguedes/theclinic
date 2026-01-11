@@ -1,6 +1,5 @@
 from rest_framework import viewsets, permissions, status, filters
-# Adicionei 'permission_classes' aqui nos imports 👇
-from rest_framework.decorators import action, permission_classes
+from rest_framework.decorators import action # Removi o permission_classes daqui para não confundir
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -105,13 +104,15 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     queryset = Agendamento.objects.all()
     serializer_class = AgendamentoSerializer
     authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
+    # Esta linha abaixo criava o conflito com o decorator de mesmo nome
+    permission_classes = [permissions.IsAuthenticated] 
+    
     filter_backends = [filters.SearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
 
-    # --- MÉTODO DE TESTE (Liberado sem login) ---
-    @action(detail=False, methods=['get'])
-    @permission_classes([AllowAny]) # <--- AQUI ESTÁ A CORREÇÃO MÁGICA
+    # --- MÉTODO DE TESTE (CORRIGIDO) ---
+    # Colocamos o permission_classes DENTRO do action. Isso é o correto.
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny]) 
     def testar_conexao(self, request):
         """
         Rota de teste manual: /api/agendamento/testar_conexao/?numero=5511999999999
@@ -138,14 +139,13 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         }
 
         try:
-            # Envia sem Thread para vermos o resultado NA HORA
             print(f"Testando envio para {url} com key {settings.EVOLUTION_API_KEY[:5]}...")
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             
             return Response({
                 "status_django": "Enviado",
                 "status_code_whatsapp": response.status_code,
-                "resposta_whatsapp": response.json() if response.status_code == 201 else response.text,
+                "resposta_whatsapp": response.json() if response.status_code in [200, 201] else response.text,
                 "url_usada": url
             })
 
