@@ -5,7 +5,7 @@ import sys
 from django.conf import settings
 from configuracoes.models import DadosClinica
 
-# Configura logs para aparecerem no terminal do Railway
+# Logs no terminal do Railway
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -36,11 +36,39 @@ def get_dados_clinica():
         return {"nome": "Clínica", "endereco": ""}
 
 def get_dia_semana(data_obj):
-    dias = {0: "Segunda", 1: "Terça", 2: "Quarta", 3: "Quinta", 4: "Sexta", 5: "Sábado", 6: "Domingo"}
+    dias = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado", 6: "Domingo"}
     return dias.get(data_obj.weekday(), "")
 
+def get_nome_especialidade(agendamento, profissional):
+    """
+    Busca o nome da especialidade respeitando seus Models.
+    """
+    try:
+        # 1. Se o agendamento já tiver a especialidade definida, usa ela (Prioridade)
+        if hasattr(agendamento, 'especialidade') and agendamento.especialidade:
+            return getattr(agendamento.especialidade, 'nome', str(agendamento.especialidade))
+
+        # 2. Se não, busca na lista de especialidades do Profissional
+        # Usamos o 'related_name' definido no seu model: especialidades_vinculo
+        if hasattr(profissional, 'especialidades_vinculo'):
+            vinculos = profissional.especialidades_vinculo.all()
+            
+            if vinculos.exists():
+                # Pega os nomes de todas as especialidades vinculadas
+                # Ex: ["Cardiologia", "Clínica Médica"]
+                nomes = [v.especialidade.nome for v in vinculos if v.especialidade]
+                
+                # Junta com uma barra: "Cardiologia / Clínica Médica"
+                return " / ".join(nomes)
+
+        return "Especialista"
+
+    except Exception as e:
+        print(f"⚠️ Erro ao ler especialidade: {e}")
+        return "Especialista"
+
 def enviar_mensagem_agendamento(agendamento):
-    print(f"🚀 [WHATSAPP REAL] Iniciando envio para Agendamento ID: {agendamento.id}")
+    print(f"🚀 [WHATSAPP] Iniciando envio para Agendamento ID: {agendamento.id}")
     
     try:
         paciente = agendamento.paciente
@@ -49,31 +77,29 @@ def enviar_mensagem_agendamento(agendamento):
         
         telefone = formatar_telefone(paciente.telefone)
         if not telefone:
-            print("❌ Telefone do paciente inválido ou vazio.")
+            print("❌ Telefone inválido.")
             return
 
         data_fmt = agendamento.data.strftime('%d/%m/%Y')
         dia_semana = get_dia_semana(agendamento.data)
         hora_fmt = agendamento.horario.strftime('%H:%M')
         
-        # Tratamento seguro para especialidade
-        try:
-            nome_especialidade = getattr(profissional.especialidade, 'nome', str(profissional.especialidade))
-        except:
-            nome_especialidade = "Especialista"
+        # Agora passamos o agendamento E o profissional para buscar certo
+        nome_especialidade = get_nome_especialidade(agendamento, profissional)
 
         mensagem = (
             f"Olá, *{paciente.nome}*! 👋\n\n"
             f"Sua consulta na *{dados_clinica['nome']}* está confirmada!\n\n"
-            f"📅 Data: *{data_fmt} ({dia_semana})*\n"
+            f"📅 Data: *{data_fmt}* - _{dia_semana}_\n"
             f"⏰ Horário: *{hora_fmt}*\n"
-            f"👨‍⚕️ Profissional: {profissional.nome} - _{nome_especialidade}_\n\n"
+            f"👨‍⚕️ Profissional: {profissional.nome}\n"
+            f"🩺 Especialidade: *{nome_especialidade}*\n\n"
             f"📍 Endereço: {dados_clinica['endereco']}\n\n"
+            f"Por favor, responda SIM para confirmar."
         )
 
         url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
         
-        # --- AQUI ESTÁ O SEGREDO (Igual ao Teste) ---
         payload = {
             "number": telefone,
             "textMessage": {
@@ -84,18 +110,19 @@ def enviar_mensagem_agendamento(agendamento):
                 "linkPreview": False
             }
         }
-        # --------------------------------------------
         
         headers = {
             "apikey": settings.EVOLUTION_API_KEY,
             "Content-Type": "application/json"
         }
 
-        print(f"📤 Enviando POST para o número {telefone}...")
+        print(f"📤 Enviando para {telefone}...")
         response = requests.post(url, json=payload, headers=headers, timeout=15)
         
-        print(f"📡 Status Code: {response.status_code}")
-        print(f"📩 Resposta: {response.text}") # Mostra o erro se houver
+        if response.status_code in [200, 201]:
+            print("✅ SUCESSO! Mensagem entregue.")
+        else:
+            print(f"⚠️ FALHA: {response.text}")
 
     except Exception as e:
-        print(f"🔥 ERRO CRÍTICO NO ENVIO: {e}")
+        print(f"🔥 ERRO CRÍTICO: {e}")
