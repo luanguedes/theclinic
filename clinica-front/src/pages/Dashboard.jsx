@@ -23,6 +23,8 @@ const RestrictedOverlay = ({ label }) => (
 
 export default function Dashboard() {
     const { user, api } = useAuth();
+    console.log("DEBUG USUÁRIO:", user);
+    console.log("TIPO USUÁRIO:", user?.tipo_usuario);
     const { notify } = useNotification();
     const navigate = useNavigate();
 
