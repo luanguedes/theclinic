@@ -129,8 +129,14 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         
         payload = {
             "number": numero_destino,
-            "textMessage": "🤖 Teste de Conexão: O Django conseguiu falar com o WhatsApp!",
-            "options": {"delay": 0, "linkPreview": False}
+            # CORREÇÃO AQUI: Colocamos o texto DENTRO de um objeto
+            "textMessage": {
+                "text": "🤖 Teste de Conexão: O Django conseguiu falar com o WhatsApp!"
+            },
+            "options": {
+                "delay": 0,
+                "linkPreview": False
+            }
         }
         
         headers = {
