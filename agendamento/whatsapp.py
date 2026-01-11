@@ -5,6 +5,7 @@ import sys
 from django.conf import settings
 from configuracoes.models import DadosClinica
 
+# Configura logs para aparecerem no terminal do Railway
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ def get_dia_semana(data_obj):
     return dias.get(data_obj.weekday(), "")
 
 def enviar_mensagem_agendamento(agendamento):
-    print(f"🚀 INICIANDO ENVIO: Agendamento ID {agendamento.id}")
+    print(f"🚀 [WHATSAPP REAL] Iniciando envio para Agendamento ID: {agendamento.id}")
     
     try:
         paciente = agendamento.paciente
@@ -48,14 +49,18 @@ def enviar_mensagem_agendamento(agendamento):
         
         telefone = formatar_telefone(paciente.telefone)
         if not telefone:
-            print("❌ Telefone inválido.")
+            print("❌ Telefone do paciente inválido ou vazio.")
             return
 
         data_fmt = agendamento.data.strftime('%d/%m/%Y')
         dia_semana = get_dia_semana(agendamento.data)
         hora_fmt = agendamento.horario.strftime('%H:%M')
         
-        nome_especialidade = getattr(profissional.especialidade, 'nome', str(profissional.especialidade)) if profissional.especialidade else "Especialista"
+        # Tratamento seguro para especialidade
+        try:
+            nome_especialidade = getattr(profissional.especialidade, 'nome', str(profissional.especialidade))
+        except:
+            nome_especialidade = "Especialista"
 
         mensagem = (
             f"Olá, *{paciente.nome}*! 👋\n\n"
@@ -64,12 +69,11 @@ def enviar_mensagem_agendamento(agendamento):
             f"⏰ Horário: *{hora_fmt}*\n"
             f"👨‍⚕️ Profissional: {profissional.nome} - _{nome_especialidade}_\n\n"
             f"📍 Endereço: {dados_clinica['endereco']}\n\n"
-            f"Por favor, responda SIM para confirmar."
         )
 
         url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
         
-        # --- AQUI ESTÁ A CORREÇÃO PRINCIPAL ---
+        # --- AQUI ESTÁ O SEGREDO (Igual ao Teste) ---
         payload = {
             "number": telefone,
             "textMessage": {
@@ -80,22 +84,18 @@ def enviar_mensagem_agendamento(agendamento):
                 "linkPreview": False
             }
         }
-        # --------------------------------------
+        # --------------------------------------------
         
         headers = {
             "apikey": settings.EVOLUTION_API_KEY,
             "Content-Type": "application/json"
         }
 
-        print(f"📤 Enviando para WhatsApp...")
+        print(f"📤 Enviando POST para o número {telefone}...")
         response = requests.post(url, json=payload, headers=headers, timeout=15)
         
         print(f"📡 Status Code: {response.status_code}")
-        
-        if response.status_code in [200, 201]:
-            print("✅ SUCESSO! Mensagem entregue.")
-        else:
-            print(f"⚠️ FALHA: {response.text}")
+        print(f"📩 Resposta: {response.text}") # Mostra o erro se houver
 
     except Exception as e:
-        print(f"🔥 ERRO CRÍTICO: {e}")
+        print(f"🔥 ERRO CRÍTICO NO ENVIO: {e}")
