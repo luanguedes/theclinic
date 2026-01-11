@@ -35,16 +35,26 @@ class MeView(APIView):
     def get(self, request):
         user = request.user
         
-        # Tenta pegar o ID do profissional com segurança
+        # 1. Tenta carregar o ID do profissional com segurança máxima
         prof_id = None
         try:
-            if hasattr(user, 'profissional') and user.profissional:
-                prof_id = user.profissional.id
+            # Verifica se o atributo existe E se tem valor associado
+            if hasattr(user, 'profissional') and user.profissional_id:
+                prof_id = user.profissional_id
         except Exception as e:
-            # Se der erro no banco ou vínculo, segue como None para não travar o login
-            print(f"Erro ao carregar profissional: {e}")
+            print(f"Aviso: Erro ao ler profissional do usuário {user.id}: {e}")
             prof_id = None
 
+        # 2. Tenta carregar o status de senha com segurança
+        force_change = False
+        try:
+            # Usa getattr para evitar erro se o campo não for reconhecido pelo Django no momento
+            force_change = getattr(user, 'force_password_change', False)
+        except Exception as e:
+            print(f"Aviso: Erro ao ler force_password_change: {e}")
+            force_change = False
+
+        # 3. Monta a resposta
         data = {
             "id": user.id,
             "username": user.username,
@@ -52,10 +62,9 @@ class MeView(APIView):
             "email": user.email,
             "is_superuser": user.is_superuser,
             "profissional_id": prof_id,
-            
-            # Use getattr para evitar erro se o campo não existir no objeto user em memória
-            "force_password_change": getattr(user, 'force_password_change', False),
+            "force_password_change": force_change,
 
+            # Permissões (seguras com getattr)
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
             "acesso_atendimento": getattr(user, 'acesso_atendimento', False),
             "acesso_faturamento": getattr(user, 'acesso_faturamento', False),
