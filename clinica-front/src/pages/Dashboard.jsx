@@ -281,7 +281,7 @@ export default function Dashboard() {
                                         {isRecepcao ? <Plus size={18}/> : <Lock size={18}/>} 
                                         
                                         {/* Troca o texto */}
-                                        {isRecepcao ? "Novo Agendamento" : "Apenas Recepção"}
+                                        {isRecepcao ? "Novo Agendamento" : "Apenas Recepção/Agendamento"}
                                     </button>
                                 </div>
                             ) : (
