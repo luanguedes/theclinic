@@ -14,18 +14,15 @@ export default function Configuracoes() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
+    // Estado inicial com valores padrão
     const [config, setConfig] = useState({
-        // Segurança
         max_tentativas_login: 5,
         tempo_bloqueio_minutos: 15,
         tempo_sessao_minutos: 60,
-        // Interface
         itens_por_pagina: 10,
         modo_manutencao: false,
-        // Agendamento
         janela_agendamento_meses: 6,
-        // Comunicação (NOVO)
-        enviar_whatsapp_global: true
+        enviar_whatsapp_global: true // Padrão ligado
     });
 
     // Se não for admin, nem carrega
@@ -49,7 +46,11 @@ export default function Configuracoes() {
         setLoading(true);
         try {
             const res = await api.get('configuracoes/sistema/');
-            if(res.data) setConfig(res.data);
+            if(res.data) {
+                // Merge seguro: Mantém o estado atual e sobrescreve com o que veio da API
+                // Isso evita que o toggle trave se o campo vier null ou undefined
+                setConfig(prev => ({ ...prev, ...res.data }));
+            }
         } catch (error) {
             console.error(error);
             notify.error("Erro ao carregar configurações.");
@@ -69,6 +70,15 @@ export default function Configuracoes() {
         } finally {
             setSaving(false);
         }
+    };
+
+    // Handler genérico para inputs de texto/numero
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setConfig(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
     };
 
     const tabClass = (tab) => `
@@ -97,16 +107,16 @@ export default function Configuracoes() {
                     
                     {/* ABAS */}
                     <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto scrollbar-hide">
-                        <button onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}>
+                        <button type="button" onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}>
                             <Shield size={18}/> Segurança
                         </button>
-                        <button onClick={()=>setActiveTab('interface')} className={tabClass('interface')}>
+                        <button type="button" onClick={()=>setActiveTab('interface')} className={tabClass('interface')}>
                             <LayoutIcon size={18}/> Interface
                         </button>
-                        <button onClick={()=>setActiveTab('agendamento')} className={tabClass('agendamento')}>
+                        <button type="button" onClick={()=>setActiveTab('agendamento')} className={tabClass('agendamento')}>
                             <CalendarClock size={18}/> Regras de Negócio
                         </button>
-                        <button onClick={()=>setActiveTab('comunicacao')} className={tabClass('comunicacao')}>
+                        <button type="button" onClick={()=>setActiveTab('comunicacao')} className={tabClass('comunicacao')}>
                             <MessageCircle size={18}/> Comunicação
                         </button>
                     </div>
@@ -124,17 +134,17 @@ export default function Configuracoes() {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
                                                 <label className={labelClass}>Max. Tentativas de Login</label>
-                                                <input type="number" min="1" max="10" value={config.max_tentativas_login} onChange={e=>setConfig({...config, max_tentativas_login: e.target.value})} className={inputClass}/>
+                                                <input type="number" name="max_tentativas_login" min="1" max="10" value={config.max_tentativas_login} onChange={handleChange} className={inputClass}/>
                                                 <p className="text-xs text-slate-400 mt-1.5">Bloqueia o usuário após X erros consecutivos.</p>
                                             </div>
                                             <div>
                                                 <label className={labelClass}>Tempo de Bloqueio (Min)</label>
-                                                <input type="number" min="1" max="1440" value={config.tempo_bloqueio_minutos} onChange={e=>setConfig({...config, tempo_bloqueio_minutos: e.target.value})} className={inputClass}/>
+                                                <input type="number" name="tempo_bloqueio_minutos" min="1" max="1440" value={config.tempo_bloqueio_minutos} onChange={handleChange} className={inputClass}/>
                                                 <p className="text-xs text-slate-400 mt-1.5">Duração do bloqueio por excesso de tentativas.</p>
                                             </div>
                                             <div className="md:col-span-2">
                                                 <label className={labelClass}>Expiração de Sessão (Minutos)</label>
-                                                <input type="number" min="5" max="1440" value={config.tempo_sessao_minutos} onChange={e=>setConfig({...config, tempo_sessao_minutos: e.target.value})} className={inputClass}/>
+                                                <input type="number" name="tempo_sessao_minutos" min="5" max="1440" value={config.tempo_sessao_minutos} onChange={handleChange} className={inputClass}/>
                                                 <p className="text-xs text-slate-400 mt-1.5">Desloga automaticamente por inatividade (Compliance LGPD).</p>
                                             </div>
                                         </div>
@@ -147,7 +157,7 @@ export default function Configuracoes() {
                                         <div>
                                             <label className={labelClass}>Paginação Padrão (Itens por Página)</label>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <input type="number" min="5" max="100" value={config.itens_por_pagina} onChange={e=>setConfig({...config, itens_por_pagina: e.target.value})} className={inputClass}/>
+                                                <input type="number" name="itens_por_pagina" min="5" max="100" value={config.itens_por_pagina} onChange={handleChange} className={inputClass}/>
                                             </div>
                                             <p className="text-xs text-slate-400 mt-1.5">Define quantos registros aparecem nas tabelas de listagem.</p>
                                         </div>
@@ -157,11 +167,18 @@ export default function Configuracoes() {
                                                 <AlertTriangle size={20}/> Modo Manutenção
                                             </div>
                                             <div className="flex items-center gap-4">
-                                                <div className="relative inline-flex items-center cursor-pointer">
-                                                    <input type="checkbox" className="sr-only peer" checked={config.modo_manutencao} onChange={e=>setConfig({...config, modo_manutencao: e.target.checked})} />
+                                                {/* CORREÇÃO AQUI: Trocado div por label */}
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        name="modo_manutencao"
+                                                        className="sr-only peer" 
+                                                        checked={config.modo_manutencao} 
+                                                        onChange={handleChange} 
+                                                    />
                                                     <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 dark:peer-focus:ring-red-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-red-600"></div>
-                                                </div>
-                                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                                </label>
+                                                <span className="font-bold text-slate-700 dark:text-slate-300 select-none">
                                                     {config.modo_manutencao ? 'SISTEMA BLOQUEADO' : 'Operação Normal'}
                                                 </span>
                                             </div>
@@ -178,14 +195,14 @@ export default function Configuracoes() {
                                         <div>
                                             <label className={labelClass}>Janela de Agendamento Futuro (Meses)</label>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <input type="number" min="1" max="24" value={config.janela_agendamento_meses} onChange={e=>setConfig({...config, janela_agendamento_meses: e.target.value})} className={inputClass}/>
+                                                <input type="number" name="janela_agendamento_meses" min="1" max="24" value={config.janela_agendamento_meses} onChange={handleChange} className={inputClass}/>
                                             </div>
                                             <p className="text-xs text-slate-400 mt-1.5">Define até quantos meses à frente a agenda fica aberta para marcação.</p>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* ABA COMUNICAÇÃO (NOVO) */}
+                                {/* ABA COMUNICAÇÃO */}
                                 {activeTab === 'comunicacao' && (
                                     <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
                                         <div className="bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 p-5 rounded-xl">
@@ -193,11 +210,18 @@ export default function Configuracoes() {
                                                 <MessageCircle size={20}/> Disparos de WhatsApp
                                             </div>
                                             <div className="flex items-center gap-4">
-                                                <div className="relative inline-flex items-center cursor-pointer">
-                                                    <input type="checkbox" className="sr-only peer" checked={config.enviar_whatsapp_global} onChange={e=>setConfig({...config, enviar_whatsapp_global: e.target.checked})} />
+                                                {/* CORREÇÃO AQUI: Trocado div por label e input verificado */}
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        name="enviar_whatsapp_global"
+                                                        className="sr-only peer" 
+                                                        checked={!!config.enviar_whatsapp_global} // Força boolean
+                                                        onChange={handleChange} 
+                                                    />
                                                     <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
-                                                </div>
-                                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                                </label>
+                                                <span className="font-bold text-slate-700 dark:text-slate-300 select-none">
                                                     {config.enviar_whatsapp_global ? 'ENVIO ATIVADO' : 'ENVIO DESATIVADO'}
                                                 </span>
                                             </div>
