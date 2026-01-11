@@ -7,6 +7,8 @@ class ConvenioSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class DadosClinicaSerializer(serializers.ModelSerializer):
+    logo = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = DadosClinica
         fields = '__all__'
@@ -14,4 +16,4 @@ class DadosClinicaSerializer(serializers.ModelSerializer):
 class ConfiguracaoSistemaSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfiguracaoSistema
-        fields = '__all__'        
+        fields = '__all__'

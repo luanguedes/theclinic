@@ -17,19 +17,21 @@ class DadosClinica(models.Model):
     cnpj = models.CharField(max_length=18, blank=True, null=True)
     telefone = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
+    
+    # Campo de Imagem (Requer: pip install Pillow)
     logo = models.ImageField(upload_to='clinica_logos/', blank=True, null=True)
     
     # Endereço
     logradouro = models.CharField(max_length=255, blank=True, null=True)
     numero = models.CharField(max_length=20, blank=True, null=True)
-    complemento = models.CharField(max_length=100, blank=True, null=True) # <-- Novo campo
+    complemento = models.CharField(max_length=100, blank=True, null=True)
     bairro = models.CharField(max_length=100, blank=True, null=True)
     cidade = models.CharField(max_length=100, blank=True, null=True)
     estado = models.CharField(max_length=2, blank=True, null=True)
     cep = models.CharField(max_length=10, blank=True, null=True)
 
     def save(self, *args, **kwargs):
-        self.pk = 1 # Garante que só exista um registro
+        self.pk = 1 # Trava o ID em 1
         super().save(*args, **kwargs)
 
     @classmethod
@@ -53,6 +55,11 @@ class ConfiguracaoSistema(models.Model):
     class Meta:
         verbose_name = "Configuração do Sistema"
         verbose_name_plural = "Configurações do Sistema"
+
+    # --- SUGESTÃO: Adicionei o save aqui também para padronizar ---
+    def save(self, *args, **kwargs):
+        self.pk = 1 
+        super().save(*args, **kwargs)
 
     @classmethod
     def load(cls):
