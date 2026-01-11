@@ -187,6 +187,10 @@ SIMPLE_JWT = {
     'JTI_CLAIM': 'jti',
 }
 
+# Configurações Evolution API (WhatsApp)
+EVOLUTION_API_URL = "https://theclinic-api.up.railway.app"
+EVOLUTION_API_KEY = "Luan@4957"
+EVOLUTION_INSTANCE_NAME = "zap_turbo"
 
 
 
@@ -203,7 +207,3 @@ CSRF_TRUSTED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-# Configurações Evolution API (WhatsApp)
-EVOLUTION_API_URL = "https://theclinic-api.up.railway.app"
-EVOLUTION_API_KEY = "Luan@4957"
-EVOLUTION_INSTANCE_NAME = "zap_turbo"
