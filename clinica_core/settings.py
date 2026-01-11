@@ -197,13 +197,18 @@ EVOLUTION_INSTANCE_NAME = "zap_turbo"
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media' 
 
-CORS_ALLOW_ALL_ORIGINS = True # Pode restringir depois
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",          # Para seus testes locais (Vite/React)
+    "http://localhost:3000",          # Caso use outra porta local
+    "https://theclinic.up.railway.app", # SEU FRONTEND EM PRODUÇÃO (Sem barra no final)
+]
 
+CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "https://theclinic.up.railway.app", # Frontend
     "https://theclinic-production.up.railway.app", # Backend
 ]
 
-CORS_ALLOW_CREDENTIALS = True
+
 
