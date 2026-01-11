@@ -35,7 +35,7 @@ class Agendamento(models.Model):
     especialidade = models.ForeignKey(Especialidade, on_delete=models.CASCADE)
     paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE)
     convenio = models.ForeignKey(Convenio, on_delete=models.SET_NULL, null=True, blank=True)
-    
+    enviar_whatsapp = models.BooleanField(default=True, verbose_name="Enviar Confirmação?")
     data = models.DateField()
     horario = models.TimeField()
     is_encaixe = models.BooleanField(default=False)

@@ -71,6 +71,16 @@ def enviar_mensagem_agendamento(agendamento):
     print(f"🚀 [WHATSAPP] Iniciando envio para Agendamento ID: {agendamento.id}")
     
     try:
+        # --- VALIDAÇÃO 1: TRAVA GLOBAL ---
+        config = ConfiguracaoSistema.load()
+        if not config.enviar_whatsapp_global:
+            print("🛑 ENVIO CANCELADO: O envio de WhatsApp está desativado globalmente nas configurações.")
+            return
+
+        # --- VALIDAÇÃO 2: TRAVA INDIVIDUAL ---
+        if not agendamento.enviar_whatsapp:
+            print("🛑 ENVIO CANCELADO: A recepcionista desmarcou o envio para este agendamento.")
+            return
         paciente = agendamento.paciente
         profissional = agendamento.profissional
         dados_clinica = get_dados_clinica()

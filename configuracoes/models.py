@@ -50,6 +50,10 @@ class ConfiguracaoSistema(models.Model):
     tempo_sessao_minutos = models.IntegerField(default=60, help_text="Deslogar após inatividade")
 
     # 3. Regras de Negócio
+    enviar_whatsapp_global = models.BooleanField(
+        default=True, 
+        help_text="Se desmarcado, NENHUMA  mensagem será enviado pelo sistema."
+    )
     janela_agendamento_meses = models.IntegerField(default=6, help_text="Meses à frente liberados na agenda")
 
     class Meta:

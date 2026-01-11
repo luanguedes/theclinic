@@ -5,7 +5,7 @@ import Layout from '../components/Layout';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { 
-  Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, MapPin, ChevronDown, Check, AlertCircle, DollarSign, Printer, ShieldCheck, Lock 
+  Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, MapPin, ChevronDown, Check, AlertCircle, DollarSign, Printer, ShieldCheck, Lock, MessageCircle 
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
 
@@ -35,7 +35,6 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
 
-    // Proteção de array
     const safeOptions = Array.isArray(options) ? options : [];
 
     useEffect(() => { 
@@ -127,6 +126,7 @@ export default function MarcarConsulta() {
   const [pacienteId, setPacienteId] = useState('');
   const [convenioId, setConvenioId] = useState('');
   const [convenioTravado, setConvenioTravado] = useState(false);
+  const [enviarWhatsapp, setEnviarWhatsapp] = useState(true); // <--- NOVO ESTADO
   
   const [encaixeHora, setEncaixeHora] = useState('');
   const [observacao, setObservacao] = useState('');
@@ -159,7 +159,6 @@ export default function MarcarConsulta() {
   const [vagasDoDia, setVagasDoDia] = useState([]);
   const [regrasProfissional, setRegrasProfissional] = useState([]); 
 
-  // Carrega listas iniciais (COM PROTEÇÃO)
   useEffect(() => {
     if (api) {
         api.get('profissionais/').then(res => {
@@ -195,7 +194,7 @@ export default function MarcarConsulta() {
             } else {
                 setEspecialidades([]);
             }
-        }).catch(() => setEspecialidades([]));
+        }).catch(() => setEspecialidades([])); // <--- CORRIGIDO AQUI
         
         api.get(`agendas/config/?status=todos&profissional_id=${profissionalId}&nopage=true`)
             .then(res => {
@@ -223,14 +222,12 @@ export default function MarcarConsulta() {
     } catch (e) { console.error(e); setVagasDoDia([]); }
   };
 
-  // --- NOVA LÓGICA DE CORES NO CALENDÁRIO ---
   const getTileClassName = ({ date, view }) => {
     if (view !== 'month') return null;
     
     const dataIso = getLocalISODate(date);
     const diaMes = dataIso.slice(5);
 
-    // 1. Bloqueios e Feriados (Têm prioridade sobre a regra de agenda)
     const bloqueio = listaBloqueios.find(b => {
         const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
         const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
@@ -242,7 +239,6 @@ export default function MarcarConsulta() {
         return bloqueio.tipo === 'feriado' ? 'dia-feriado' : 'dia-bloqueado';
     }
 
-    // 2. Agendas (Verifica se existe regra para o dia)
     if (!especialidadeId) return null;
     const jsDay = date.getDay();
     
@@ -253,11 +249,9 @@ export default function MarcarConsulta() {
     );
 
     if (regraEncontrada) {
-        // Se a agenda existe, mas foi marcada como encerrada/inativa, usa VERMELHO
         if (regraEncontrada.situacao === false) {
             return 'dia-sem-vagas';
         }
-        // Se está ativa, usa VERDE
         return 'dia-livre'; 
     }
     
@@ -339,7 +333,8 @@ export default function MarcarConsulta() {
                 convenio_nome: a.nome_convenio, 
                 observacoes: a.observacoes,
                 is_encaixe: a.is_encaixe,
-                valor: parseFloat(a.valor || s.valor)
+                valor: parseFloat(a.valor || s.valor),
+                enviar_whatsapp: a.enviar_whatsapp // <--- Mapeia preferência salva
             };
         }
         return s;
@@ -355,7 +350,8 @@ export default function MarcarConsulta() {
         paciente_id: a.paciente,
         convenio_id: a.convenio,
         convenio_nome: a.nome_convenio,
-        observacoes: a.observacoes
+        observacoes: a.observacoes,
+        enviar_whatsapp: a.enviar_whatsapp // <--- Mapeia preferência salva (Encaixe)
     }));
     
     setVagasDoDia(final.sort((a,b) => a.hora.localeCompare(b.hora)));
@@ -368,6 +364,7 @@ export default function MarcarConsulta() {
       setTipoModal('normal');
       setPacienteId(''); 
       setObservacao('');
+      setEnviarWhatsapp(true); // <--- Reseta para TRUE
       
       if (slot.convenio_regra_id) {
           setConvenioId(slot.convenio_regra_id);
@@ -389,6 +386,7 @@ export default function MarcarConsulta() {
      setValorSelecionado(''); 
      setConvenioId('');
      setConvenioTravado(false);
+     setEnviarWhatsapp(true); // <--- Reseta para TRUE
      setModalOpen(true); 
   };
 
@@ -402,6 +400,10 @@ export default function MarcarConsulta() {
       setTipoModal(slot.is_encaixe ? 'encaixe' : 'normal');
       if(slot.is_encaixe) setEncaixeHora(slot.hora);
       setConvenioTravado(false);
+      
+      // <--- Recupera preferência salva ou assume true
+      setEnviarWhatsapp(slot.enviar_whatsapp !== false); 
+      
       setModalOpen(true);
   };
 
@@ -439,7 +441,8 @@ export default function MarcarConsulta() {
             convenio: convenioId || null, 
             valor: valorSelecionado, 
             observacoes: observacao, 
-            is_encaixe: tipoModal === 'encaixe' 
+            is_encaixe: tipoModal === 'encaixe',
+            enviar_whatsapp: enviarWhatsapp // <--- Envia Preferência
         };
         
         if(agendamentoIdEditar) {
@@ -624,7 +627,7 @@ export default function MarcarConsulta() {
                                                     
                                                     {slot.convenio_regra_nome && (
                                                         <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1 truncate">
-                                                            <ShieldCheck size={12}/> {slot.convenio_regra_nome}
+                                                                <ShieldCheck size={12}/> {slot.convenio_regra_nome}
                                                         </div>
                                                     )}
                                                     {slot.valor > 0 && <div className="text-xs font-semibold text-slate-500 mt-0.5">R$ {Number(slot.valor).toFixed(2)}</div>}
@@ -698,6 +701,25 @@ export default function MarcarConsulta() {
                         {tipoModal === 'encaixe' && <div><label className="block text-sm font-bold mb-1">Horário</label><input type="time" className="w-full border p-3 rounded-lg dark:bg-slate-900 dark:text-white" value={encaixeHora} onChange={e => setEncaixeHora(e.target.value)} /></div>}
                         <textarea placeholder="Observações..." className="w-full border p-3 rounded-lg h-24 dark:bg-slate-900 dark:text-white" value={observacao} onChange={e => setObservacao(e.target.value)}></textarea>
                         
+                        {/* --- CHECKBOX DO WHATSAPP (NOVA FUNCIONALIDADE) --- */}
+                        <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 dark:bg-slate-800/50 rounded-lg border border-blue-100 dark:border-slate-700">
+                            <input
+                                type="checkbox"
+                                id="enviar_whatsapp"
+                                name="enviar_whatsapp"
+                                checked={enviarWhatsapp}
+                                onChange={(e) => setEnviarWhatsapp(e.target.checked)}
+                                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300 cursor-pointer"
+                            />
+                            <label htmlFor="enviar_whatsapp" className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300 select-none flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600">
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                                </svg>
+                                Enviar confirmação via WhatsApp
+                            </label>
+                        </div>
+                        {/* ---------------------------------------------------- */}
+
                         <div className="grid grid-cols-2 gap-3 mt-4">
                             <button onClick={salvarAgendamento} disabled={loadingSave} className={`col-span-2 w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 ${agendamentoIdEditar ? '' : 'col-span-2'}`}>
                                 {loadingSave ? <Loader2 className="animate-spin" /> : <Save size={20}/>} 
