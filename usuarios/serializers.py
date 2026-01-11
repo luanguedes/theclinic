@@ -3,22 +3,16 @@ from .models import Operador
 
 class OperadorSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
-    
-    # Campo extra apenas para leitura (mostra o nome na lista)
     profissional_nome = serializers.CharField(source='profissional.nome', read_only=True)
 
     class Meta:
         model = Operador
         fields = [
             'id', 'username', 'first_name', 'last_name', 'email', 'password',
-            'is_superuser', 
-            'profissional',       # <--- CAMPO PARA SALVAR O ID (CORRIGIDO)
-            'profissional_nome',  # <--- CAMPO PARA MOSTRAR O NOME
-            'acesso_agendamento', 
-            'acesso_atendimento', 
-            'acesso_faturamento', 
-            'acesso_cadastros',      
-            'acesso_configuracoes'   
+            'is_superuser', 'profissional', 'profissional_nome',
+            'acesso_agendamento', 'acesso_atendimento', 
+            'acesso_faturamento', 'acesso_cadastros', 'acesso_configuracoes',
+            'force_password_change' 
         ]
 
     def create(self, validated_data):

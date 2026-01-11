@@ -34,8 +34,6 @@ class MeView(APIView):
 
     def get(self, request):
         user = request.user
-        
-        # Recupera o ID do profissional vinculado
         prof_id = user.profissional.id if user.profissional else None
 
         data = {
@@ -44,9 +42,11 @@ class MeView(APIView):
             "first_name": user.first_name,
             "email": user.email,
             "is_superuser": user.is_superuser,
-            "profissional_id": prof_id, # <--- ESSENCIAL PARA O DASHBOARD
+            "profissional_id": prof_id,
             
-            # Permissões
+            # --- ENVIA O STATUS PARA O FRONTEND ---
+            "force_password_change": getattr(user, 'force_password_change', False),
+
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
             "acesso_atendimento": getattr(user, 'acesso_atendimento', False),
             "acesso_faturamento": getattr(user, 'acesso_faturamento', False),
@@ -65,6 +65,9 @@ class TrocarSenhaView(APIView):
 
         user = request.user
         user.set_password(nova_senha)
+        
+        # --- DESLIGA A OBRIGATORIEDADE APÓS TROCAR ---
+        user.force_password_change = False
         user.save()
 
         return Response({'message': 'Senha alterada com sucesso!'})

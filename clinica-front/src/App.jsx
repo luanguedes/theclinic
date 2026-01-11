@@ -11,7 +11,7 @@ import Pacientes from './pages/Pacientes';
 import Operadores from './pages/Operadores';            
 import CadastroOperador from './pages/CadastroOperador';
 import Configuracoes from './pages/Configuracoes';
-import TrocarSenhaObrigatoria from './pages/TrocarSenhaObrigatoria';
+import TrocaSenhaObrigatoria from './pages/TrocaSenhaObrigatoria';
 import Especialidades from './pages/Especialidades';
 import Profissionais from './pages/Profissionais';
 import ProfissionalForm from './pages/ProfissionaisForm';
@@ -41,6 +41,7 @@ function App() {
           <NotificationProvider> 
             <Routes>
               <Route path="/" element={<Login />} />
+              <Route path="/trocasenhaobrigatoria" element={<RotaPrivada><TrocaSenhaObrigatoria /></RotaPrivada>} />
               <Route path="/dashboard" element={<RotaPrivada><Dashboard /></RotaPrivada>} />
               <Route path="/pacientes" element={<RotaPrivada><Pacientes /></RotaPrivada>} />
               <Route path="/operadores" element={<RotaPrivada><Operadores /></RotaPrivada>} />

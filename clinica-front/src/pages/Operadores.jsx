@@ -94,8 +94,8 @@ export default function Operadores() {
                                             ) : (
                                                 <>
                                                     {op.acesso_cadastros && <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">Cadastros</span>}
-                                                    {op.acesso_agendamento && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Recepção</span>}
-                                                    {op.acesso_atendimento && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold">Médico</span>}
+                                                    {op.acesso_agendamento && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Agendamento/Recepção</span>}
+                                                    {op.acesso_atendimento && <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold">Atendimento</span>}
                                                     {op.acesso_faturamento && <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Financeiro</span>}
                                                 </>
                                             )}

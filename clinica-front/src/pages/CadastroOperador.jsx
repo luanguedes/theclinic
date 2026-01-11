@@ -278,7 +278,7 @@ export default function CadastroOperador() {
                 <div className="space-y-4 flex-grow">
                   <PermissionToggle name="acesso_cadastros" label="Gestão de Cadastros" icon={Users} checked={formData.acesso_cadastros} onChange={handleChange} />
                   <PermissionToggle name="acesso_atendimento" label="Atendimento" icon={Stethoscope} checked={formData.acesso_atendimento} onChange={handleChange} />
-                  <PermissionToggle name="acesso_agendamento" label="Agendamento" icon={CalendarDays} checked={formData.acesso_agendamento} onChange={handleChange} />
+                  <PermissionToggle name="acesso_agendamento" label="Agendamento/Recepção" icon={CalendarDays} checked={formData.acesso_agendamento} onChange={handleChange} />
                   <PermissionToggle name="acesso_faturamento" label="Financeiro" icon={DollarSign} checked={formData.acesso_faturamento} onChange={handleChange} />
                   <hr className="border-slate-100 dark:border-slate-700 my-4"/>
                   <PermissionToggle name="is_superuser" label="Administrador" icon={Shield} checked={formData.is_superuser} onChange={handleChange} />
