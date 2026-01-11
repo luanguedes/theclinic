@@ -1,10 +1,14 @@
 from rest_framework import viewsets, permissions, status, filters
-from rest_framework.decorators import action
+# Adicionei 'permission_classes' aqui nos imports 👇
+from rest_framework.decorators import action, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db.models import Case, When, Value, IntegerField
 from django.db import transaction 
 from datetime import date
+from django.conf import settings
+import requests
 import threading
 
 # Importações do Projeto
@@ -53,7 +57,6 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
     def relatorio(self, request, pk=None):
         bloqueio = self.get_object()
         
-        # Busca agendamentos que coincidem com o período do bloqueio
         conflitos = Agendamento.objects.filter(
             data__range=[bloqueio.data_inicio, bloqueio.data_fim],
             horario__gte=bloqueio.hora_inicio,
@@ -106,11 +109,55 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
 
+    # --- MÉTODO DE TESTE (Liberado sem login) ---
+    @action(detail=False, methods=['get'])
+    @permission_classes([AllowAny]) # <--- AQUI ESTÁ A CORREÇÃO MÁGICA
+    def testar_conexao(self, request):
+        """
+        Rota de teste manual: /api/agendamento/testar_conexao/?numero=5511999999999
+        """
+        numero_destino = request.query_params.get('numero')
+        
+        if not numero_destino:
+            return Response({
+                "erro": "Informe um número na URL.",
+                "exemplo": "/api/agendamento/testar_conexao/?numero=5511999999999"
+            }, status=400)
+
+        url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
+        
+        payload = {
+            "number": numero_destino,
+            "textMessage": "🤖 Teste de Conexão: O Django conseguiu falar com o WhatsApp!",
+            "options": {"delay": 0, "linkPreview": False}
+        }
+        
+        headers = {
+            "apikey": settings.EVOLUTION_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        try:
+            # Envia sem Thread para vermos o resultado NA HORA
+            print(f"Testando envio para {url} com key {settings.EVOLUTION_API_KEY[:5]}...")
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            
+            return Response({
+                "status_django": "Enviado",
+                "status_code_whatsapp": response.status_code,
+                "resposta_whatsapp": response.json() if response.status_code == 201 else response.text,
+                "url_usada": url
+            })
+
+        except Exception as e:
+            return Response({
+                "status": "ERRO CRÍTICO NO DJANGO",
+                "detalhe": str(e),
+                "url_tentada": url
+            }, status=500)
+    # --------------------------------------------
+
     def perform_create(self, serializer):
-        """
-        Ao criar um agendamento via POST, salva no banco e
-        dispara a mensagem em uma thread separada.
-        """
         agendamento = serializer.save()
         threading.Thread(target=enviar_mensagem_agendamento, args=(agendamento,)).start()
 
