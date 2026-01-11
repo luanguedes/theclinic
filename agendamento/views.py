@@ -5,10 +5,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db.models import Case, When, Value, IntegerField
 from django.db import transaction 
 from datetime import date
+import threading
 
-# Versão COMPLETA com Bloqueios
+# Importações do Projeto
 from .models import BloqueioAgenda, Agendamento
 from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
+from .whatsapp import enviar_mensagem_agendamento
 
 class BloqueioAgendaViewSet(viewsets.ModelViewSet):
     queryset = BloqueioAgenda.objects.all().order_by('-data_inicio')
@@ -72,7 +74,7 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
                 'medico': c.profissional.nome,
                 'data': c.data,
                 'horario': c.horario,
-                'status': c.get_status_display() # Mostra se está Agendado ou Cancelado
+                'status': c.get_status_display()
             })
 
         return Response(dados_pacientes)
@@ -95,15 +97,26 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+
 class AgendamentoViewSet(viewsets.ModelViewSet):
-    # ... (Mantenha o mesmo código da AgendamentoViewSet que passei no Passo 1 acima) ...
+    queryset = Agendamento.objects.all()
     serializer_class = AgendamentoSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
 
-    
+    # --- NOVO MÉTODO: DISPARO DE WHATSAPP ---
+    def perform_create(self, serializer):
+        """
+        Ao criar um agendamento via POST, salva no banco e
+        dispara a mensagem em uma thread separada.
+        """
+        agendamento = serializer.save()
+        
+        # Dispara o envio em segundo plano para não travar o retorno ao frontend
+        threading.Thread(target=enviar_mensagem_agendamento, args=(agendamento,)).start()
+    # ----------------------------------------
 
     def get_queryset(self):
         queryset = Agendamento.objects.all()

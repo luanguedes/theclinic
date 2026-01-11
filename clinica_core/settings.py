@@ -187,6 +187,9 @@ SIMPLE_JWT = {
     'JTI_CLAIM': 'jti',
 }
 
+
+
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media' 
 
@@ -200,4 +203,7 @@ CSRF_TRUSTED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-
+# Configurações Evolution API (WhatsApp)
+EVOLUTION_API_URL = "https://theclinic-api.up.railway.app"
+EVOLUTION_API_KEY = "Luan@4957"
+EVOLUTION_INSTANCE_NAME = "zap_turbo"
