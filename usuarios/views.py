@@ -34,7 +34,16 @@ class MeView(APIView):
 
     def get(self, request):
         user = request.user
-        prof_id = user.profissional.id if user.profissional else None
+        
+        # Tenta pegar o ID do profissional com segurança
+        prof_id = None
+        try:
+            if hasattr(user, 'profissional') and user.profissional:
+                prof_id = user.profissional.id
+        except Exception as e:
+            # Se der erro no banco ou vínculo, segue como None para não travar o login
+            print(f"Erro ao carregar profissional: {e}")
+            prof_id = None
 
         data = {
             "id": user.id,
@@ -44,7 +53,7 @@ class MeView(APIView):
             "is_superuser": user.is_superuser,
             "profissional_id": prof_id,
             
-            # --- ENVIA O STATUS PARA O FRONTEND ---
+            # Use getattr para evitar erro se o campo não existir no objeto user em memória
             "force_password_change": getattr(user, 'force_password_change', False),
 
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
