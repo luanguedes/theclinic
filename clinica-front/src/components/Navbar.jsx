@@ -65,6 +65,7 @@ export default function Navbar() {
               <DropdownLink to="/recepcao" text="Recepção" />
               <DropdownLink to="/agenda/marcar" text="Marcar Consulta" />
               <div className="border-t border-slate-100 dark:border-slate-700 my-1"></div>
+              <DropdownLink to="/agenda/configurar" text="Configurar Agendas" />
               <DropdownLink to="/agenda/bloqueios" text="Bloqueios e Feriados" />
             </NavItem>
           )}

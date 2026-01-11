@@ -120,6 +120,15 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Agendamento.objects.all()
+
+        # --- CORREÇÃO AQUI 👇 ---
+        # Se a ação for detalhada (Excluir, Editar ou Ver 1 específico), 
+        # retorna tudo sem filtrar por data, senão dá Erro 404.
+        if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
+            return queryset
+        # ------------------------
+
+        # Daqui para baixo, aplica os filtros apenas na Listagem (Agenda do dia)
         profissional = self.request.query_params.get('profissional')
         especialidade = self.request.query_params.get('especialidade')
         data_filtro = self.request.query_params.get('data')
@@ -136,9 +145,11 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         elif mes_filtro and ano_filtro:
             queryset = queryset.filter(data__month=mes_filtro, data__year=ano_filtro)
         else:
+            # Filtro padrão (Hoje) apenas se não for paginação explícita
             if not self.request.query_params.get('nopage'): 
                  queryset = queryset.filter(data=date.today())
 
+        # Ordenação
         queryset = queryset.annotate(
             prioridade_status=Case(
                 When(status='agendado', then=Value(1)),
@@ -151,6 +162,7 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                 output_field=IntegerField(),
             )
         ).order_by('prioridade_status', 'horario')
+        
         return queryset
 
     @action(detail=True, methods=['post'])
