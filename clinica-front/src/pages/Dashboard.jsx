@@ -265,11 +265,23 @@ export default function Dashboard() {
                                     <p className="text-slate-500 max-w-xs mx-auto mt-2 mb-6">
                                         Nenhum paciente agendado para hoje ({filtroDia.split('-')[2]}/{filtroDia.split('-')[1]}).
                                     </p>
+                                    {/* LÓGICA DO BOTÃO NOVO AGENDAMENTO */}
                                     <button 
-                                        onClick={() => navigate('/agenda/marcar')} 
-                                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none transition-all active:scale-95"
+                                        onClick={() => isRecepcao && navigate('/agenda/marcar')} 
+                                        disabled={!isRecepcao} // Desabilita se não tiver privilégio de Agendamento
+                                        className={`
+                                            font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 transition-all 
+                                            ${isRecepcao 
+                                                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200 dark:shadow-none active:scale-95" 
+                                                : "bg-slate-200 text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
+                                            }
+                                        `}
                                     >
-                                        <Plus size={18}/> Novo Agendamento
+                                        {/* Troca o ícone: Mais (+) se permitido, Cadeado se bloqueado */}
+                                        {isRecepcao ? <Plus size={18}/> : <Lock size={18}/>} 
+                                        
+                                        {/* Troca o texto */}
+                                        {isRecepcao ? "Novo Agendamento" : "Apenas Recepção"}
                                     </button>
                                 </div>
                             ) : (
