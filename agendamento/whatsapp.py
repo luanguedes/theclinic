@@ -95,7 +95,7 @@ def enviar_mensagem_agendamento(agendamento):
             f"👨‍⚕️ Profissional: {profissional.nome}\n"
             f"🩺 Especialidade: *{nome_especialidade}*\n\n"
             f"📍 Endereço: {dados_clinica['endereco']}\n\n"
-            f"Por favor, responda SIM para confirmar."
+            f"Por favor, chegue com 15 minutos de antecedência. Em caso de dúvidas, entre em contato conosco!\n\n"   
         )
 
         url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
