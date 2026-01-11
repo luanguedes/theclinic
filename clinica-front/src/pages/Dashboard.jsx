@@ -6,13 +6,42 @@ import Layout from '../components/Layout';
 import { 
     Users, DollarSign, Activity, Clock, TrendingUp, 
     CalendarCheck, AlertCircle, ChevronRight, Stethoscope,
-    Calendar, Filter, Plus
+    Calendar, Filter, Plus, Lock // Importei o Lock
 } from 'lucide-react';
+
+// --- COMPONENTE DE BLOQUEIO VISUAL (Reutilizável) ---
+const RestrictedOverlay = ({ label }) => (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-[3px] rounded-2xl transition-all">
+        <div className="bg-white dark:bg-slate-800 p-3 rounded-full shadow-lg mb-2">
+            <Lock size={24} className="text-slate-400 dark:text-slate-500" />
+        </div>
+        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-3 py-1 bg-white/80 dark:bg-slate-800/80 rounded-full shadow-sm">
+            {label || "Acesso Restrito"}
+        </span>
+    </div>
+);
 
 export default function Dashboard() {
     const { user, api } = useAuth();
     const { notify } = useNotification();
     const navigate = useNavigate();
+
+    // --- DEFINIÇÃO DE PERMISSÕES (VIA PROJETO COMPLETO) ---
+    // Baseado no seu model CustomUser: 'medico', 'recepcao', 'financeiro', 'admin'
+    
+    const isSuperUser = user?.is_superuser || user?.tipo_usuario === 'admin';
+    
+    // Médicos têm acesso se for 'medico' OU 'admin'
+    const isMedico = user?.tipo_usuario === 'medico' || isSuperUser;
+    
+    // Recepção tem acesso se for 'recepcao' OU 'admin'
+    const isRecepcao = user?.tipo_usuario === 'recepcao' || isSuperUser;
+    
+    // Financeiro tem acesso se for 'financeiro' OU 'admin'
+    const isFinanceiro = user?.tipo_usuario === 'financeiro' || isSuperUser;
+
+    // Se quiser testar o visual, force true/false aqui manualmente:
+    // const isFinanceiro = false; 
 
     // --- ESTADOS DOS FILTROS ---
     const hoje = new Date().toISOString().split('T')[0];
@@ -53,13 +82,19 @@ export default function Dashboard() {
 
             const totalPacientesMes = dadosMes.length;
 
-            const receitaConfirmada = dadosMes
-                .filter(a => a.fatura_pago === true && a.status !== 'cancelado')
-                .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+            // Só calcula receita se tiver permissão (opcional: pode calcular mas esconder no front)
+            let receitaConfirmada = 0;
+            let receitaEstimada = 0;
 
-            const receitaEstimada = dadosMes
-                .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
-                .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+            if (isFinanceiro) {
+                receitaConfirmada = dadosMes
+                    .filter(a => a.fatura_pago === true && a.status !== 'cancelado')
+                    .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+
+                receitaEstimada = dadosMes
+                    .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
+                    .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+            }
 
             setStatsMes({ 
                 totalPacientes: totalPacientesMes, 
@@ -75,10 +110,7 @@ export default function Dashboard() {
     };
 
     const handleRealizarAtendimento = () => {
-        if (!user.profissional_id) {
-            notify.error("Apenas profissionais de saúde podem realizar atendimento.");
-            return;
-        }
+        if (!isMedico) return;
         navigate('/triagem'); 
     };
 
@@ -94,8 +126,13 @@ export default function Dashboard() {
         }
     };
 
-    const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading }) => (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+    // Card Atualizado com suporte a prop 'restricted'
+    const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading, restricted, restrictedLabel }) => (
+        <div className="relative bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+            
+            {/* Lógica de Bloqueio do Card */}
+            {restricted && <RestrictedOverlay label={restrictedLabel} />}
+
             <div className="flex justify-between items-start mb-4">
                 <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{title}</p>
@@ -164,6 +201,7 @@ export default function Dashboard() {
 
                 {/* KPI CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    {/* TODOS TÊM ACESSO */}
                     <StatCard 
                         title="Agendamentos (Dia)"
                         value={statsDia.total}
@@ -173,6 +211,7 @@ export default function Dashboard() {
                         loading={loading}
                     />
 
+                    {/* TODOS TÊM ACESSO */}
                     <StatCard 
                         title="Total Agendamentos (Mês)"
                         value={statsMes.totalPacientes}
@@ -182,6 +221,7 @@ export default function Dashboard() {
                         loading={loading}
                     />
 
+                    {/* RESTRITO: APENAS FINANCEIRO */}
                     <StatCard 
                         title="Receita Confirmada"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
@@ -189,6 +229,8 @@ export default function Dashboard() {
                         icon={DollarSign}
                         colorClass="bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400"
                         loading={loading}
+                        restricted={!isFinanceiro}
+                        restrictedLabel="Acesso Financeiro"
                     />
                 </div>
 
@@ -196,7 +238,14 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
                     {/* COLUNA ESQUERDA: AGENDA DE HOJE */}
-                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[400px]">
+                    {/* RESTRITO: APENAS MÉDICO OU RECEPÇÃO */}
+                    <div className="relative lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[400px]">
+                        
+                        {/* Bloqueio da Lista da Agenda */}
+                        {(!isMedico && !isRecepcao) && (
+                            <RestrictedOverlay label="Restrito à Recepção/Profissionais" />
+                        )}
+
                         <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                             <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
                                 <Clock size={20} className="text-slate-400"/> Agenda do Dia
@@ -266,8 +315,12 @@ export default function Dashboard() {
                     {/* COLUNA DIREITA */}
                     <div className="flex flex-col gap-6">
                         
-                        {/* CARD 'AGUARDANDO' (AGORA BRANCO E CLEAN) */}
-                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden flex flex-col justify-center items-center text-center">
+                        {/* CARD 'AGUARDANDO' (RESTRITO: APENAS MÉDICO) */}
+                        <div className="relative bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col justify-center items-center text-center">
+                            
+                            {/* Bloqueio do Card Aguardando */}
+                            {!isMedico && <RestrictedOverlay label="Acesso Profissional" />}
+
                             {/* Borda de status no topo */}
                             <div className="absolute top-0 left-0 right-0 h-1.5 bg-yellow-400"></div>
 
@@ -283,24 +336,17 @@ export default function Dashboard() {
                                     Pacientes Aguardando
                                 </p>
                                 
-                                {user?.profissional_id ? (
-                                    <button 
-                                        onClick={handleRealizarAtendimento}
-                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2 active:scale-95"
-                                    >
-                                        <Stethoscope size={18}/> Iniciar Atendimento
-                                    </button>
-                                ) : (
-                                    <div className="bg-slate-50 dark:bg-slate-700/50 px-4 py-3 rounded-lg border border-slate-100 dark:border-slate-700">
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                            Acesso ao atendimento restrito a médicos.
-                                        </p>
-                                    </div>
-                                )}
+                                <button 
+                                    onClick={handleRealizarAtendimento}
+                                    disabled={!isMedico} // Desabilita clique real mesmo se o overlay falhar
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <Stethoscope size={18}/> Iniciar Atendimento
+                                </button>
                             </div>
                         </div>
                         
-                        {/* CARD PERFORMANCE */}
+                        {/* CARD PERFORMANCE (ACESSO PÚBLICO - OU RESTRINJA SE PREFERIR) */}
                         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
                             <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
                                 <TrendingUp size={18} className="text-green-600"/> Performance Diária

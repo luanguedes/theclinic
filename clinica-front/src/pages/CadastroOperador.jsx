@@ -230,9 +230,9 @@ export default function CadastroOperador() {
                   {/* SELEÇÃO DE PROFISSIONAL VINCULADO */}
                   <div className="col-span-2">
                     <hr className="my-2 border-slate-100 dark:border-slate-700"/>
-                    <p className="text-xs text-blue-500 font-bold mb-2 uppercase tracking-wider flex items-center gap-1"><Stethoscope size={12}/> Vínculo Profissional (Médico)</p>
+                    <p className="text-xs text-blue-500 font-bold mb-2 uppercase tracking-wider flex items-center gap-1"><Stethoscope size={12}/> Vínculo Profissional</p>
                     <SearchableSelect 
-                        label="Este operador é um médico?" 
+                        label="Este operador é um Profissional?" 
                         placeholder="Pesquise o profissional..." 
                         options={profissionais} 
                         value={formData.profissional} // <--- NOME CORRETO

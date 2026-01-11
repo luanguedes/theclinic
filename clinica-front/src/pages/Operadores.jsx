@@ -65,7 +65,7 @@ export default function Operadores() {
                         <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 text-xs uppercase font-bold">
                             <tr>
                                 <th className="px-6 py-4">Nome / Usuário</th>
-                                <th className="px-6 py-4">Médico Vinculado</th>
+                                <th className="px-6 py-4">Profissional Vinculado</th>
                                 <th className="px-6 py-4">Permissões</th>
                                 <th className="px-6 py-4 text-right">Ações</th>
                             </tr>
