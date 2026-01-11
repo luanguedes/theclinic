@@ -3,7 +3,8 @@ import logging
 import re
 import sys
 from django.conf import settings
-from configuracoes.models import DadosClinica, ConfiguracaoSistema
+# --- CORREÇÃO AQUI: Adicionado ConfiguracaoSistema ---
+from configuracoes.models import DadosClinica, ConfiguracaoSistema 
 
 # Logs no terminal do Railway
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -61,18 +62,17 @@ def enviar_mensagem_agendamento(agendamento):
     
     try:
         # --- DIAGNÓSTICO DAS TRAVAS ---
+        # Agora o import está correto lá em cima, então isso vai funcionar:
         config = ConfiguracaoSistema.load()
         
         print(f"🧐 VALOR NO BANCO (GLOBAL): {config.enviar_whatsapp_global}")
         print(f"🧐 VALOR NO AGENDAMENTO (INDIVIDUAL): {agendamento.enviar_whatsapp}")
 
-        # Validação 1
         if not config.enviar_whatsapp_global:
             print("🛑 BLOQUEADO: Configuração Global está como False (Desativado).")
             print("="*40 + "\n")
             return
 
-        # Validação 2
         if not agendamento.enviar_whatsapp:
             print("🛑 BLOQUEADO: Checkbox Individual estava desmarcado.")
             print("="*40 + "\n")
@@ -80,16 +80,13 @@ def enviar_mensagem_agendamento(agendamento):
         
         print("✅ TRAVAS APROVADAS: Prosseguindo para montagem da mensagem...")
 
-        # --- PREPARAÇÃO DOS DADOS ---
         paciente = agendamento.paciente
         profissional = agendamento.profissional
         dados_clinica = get_dados_clinica()
         
         telefone = formatar_telefone(paciente.telefone)
-        print(f"📞 Telefone Formatado: {telefone}")
-
         if not telefone:
-            print("❌ ERRO: Telefone inválido.")
+            print("❌ Telefone inválido.")
             return
 
         data_fmt = agendamento.data.strftime('%d/%m/%Y')
@@ -127,7 +124,7 @@ def enviar_mensagem_agendamento(agendamento):
             "Content-Type": "application/json"
         }
 
-        print(f"📤 Enviando Request para API...")
+        print(f"📤 Enviando Request para API no número {telefone}...")
         response = requests.post(url, json=payload, headers=headers, timeout=15)
         
         print(f"📡 Status API: {response.status_code}")
