@@ -8,7 +8,7 @@ import {
     Calendar, Filter, Plus, Lock 
 } from 'lucide-react';
 
-// --- COMPONENTE DE BLOQUEIO VISUAL (Reutilizável) ---
+// --- COMPONENTE DE BLOQUEIO VISUAL ---
 const RestrictedOverlay = ({ label }) => (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-[3px] rounded-2xl transition-all">
         <div className="bg-white dark:bg-slate-800 p-3 rounded-full shadow-lg mb-2">
@@ -24,29 +24,20 @@ export default function Dashboard() {
     const { user, api } = useAuth();
     const navigate = useNavigate();
     
-    // --- LÓGICA DE PERMISSÕES ATUALIZADA ---
-    
-    // Admin tem acesso a tudo
+    // --- PERMISSÕES ---
     const isSuperUser = user?.is_superuser;
-
-    // Acesso Profissional: Se tiver a flag 'acesso_atendimento' ligada
-    // (Ou se tiver um profissional_id vinculado, ou for admin)
     const isProfissional = user?.acesso_atendimento || !!user?.profissional_id || isSuperUser;
-
-    // Acesso Recepção/Agendamento
     const isRecepcao = user?.acesso_agendamento || isSuperUser;
-
-    // Acesso Financeiro
     const isFinanceiro = user?.acesso_faturamento || isSuperUser;
 
-    // --- ESTADOS DOS FILTROS ---
+    // --- FILTROS ---
     const hoje = new Date().toISOString().split('T')[0];
     const mesAtual = new Date().toISOString().slice(0, 7);
 
     const [filtroDia, setFiltroDia] = useState(hoje);
     const [filtroMes, setFiltroMes] = useState(mesAtual);
 
-    // --- ESTADOS DOS DADOS ---
+    // --- DADOS ---
     const [statsDia, setStatsDia] = useState({ total: 0, aguardando: 0 });
     const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0, receitaEstimada: 0 });
     const [listaHoje, setListaHoje] = useState([]); 
@@ -61,52 +52,65 @@ export default function Dashboard() {
     const carregarDados = async () => {
         setLoading(true);
         try {
-            // 1. DADOS DO DIA
+            // =======================================================
+            // 1. CARREGAR E PROCESSAR DADOS DO DIA
+            // =======================================================
             const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true`);
-            const dadosDia = resDia.data.results || resDia.data;
+            const dadosDiaBrutos = resDia.data.results || resDia.data;
             
-            const totalAgendadosDia = dadosDia.length;
-            const aguardando = dadosDia.filter(a => a.status === 'aguardando').length;
+            // REGRA: Na lista do dia e contagem diária, ignoramos apenas CANCELADOS.
+            // Faltosos aparecem para sabermos que faltaram.
+            const agendaAtivaDia = dadosDiaBrutos.filter(a => a.status !== 'cancelado');
+            
+            setListaHoje(agendaAtivaDia);
+            setStatsDia({ 
+                total: agendaAtivaDia.length, 
+                aguardando: agendaAtivaDia.filter(a => a.status === 'aguardando').length 
+            });
 
-            setStatsDia({ total: totalAgendadosDia, aguardando });
-            setListaHoje(dadosDia);
-
-            // 2. DADOS DO MÊS
+            // =======================================================
+            // 2. CARREGAR E PROCESSAR DADOS DO MÊS
+            // =======================================================
             const [ano, mes] = filtroMes.split('-');
             const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
-            const dadosMes = resMes.data.results || resMes.data;
+            const dadosMesBrutos = resMes.data.results || resMes.data;
 
-            const totalPacientesMes = dadosMes.length;
+            // REGRA KPI 1: Contagem de Pacientes do Mês
+            // "Desconsiderar cancelados e faltosos"
+            const pacientesValidosMes = dadosMesBrutos.filter(a => 
+                a.status !== 'cancelado' && a.status !== 'faltou'
+            );
 
-            // Só calcula receita se tiver permissão
+            // REGRA KPI 2: Financeiro
             let receitaConfirmada = 0;
             let receitaEstimada = 0;
 
             if (isFinanceiro) {
-                receitaConfirmada = dadosMes
+                // Confirmada: Soma tudo que tem flag 'pago=True', exceto cancelados (estorno)
+                receitaConfirmada = dadosMesBrutos
                     .filter(a => a.fatura_pago === true && a.status !== 'cancelado')
                     .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
 
-                receitaEstimada = dadosMes
+                // Estimada: Soma tudo que NÃO é cancelado e NÃO é falta (potencial de ganho)
+                receitaEstimada = dadosMesBrutos
                     .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
                     .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
             }
 
             setStatsMes({ 
-                totalPacientes: totalPacientesMes, 
-                receitaConfirmada: receitaConfirmada,
-                receitaEstimada: receitaEstimada
+                totalPacientes: pacientesValidosMes.length, 
+                receitaConfirmada,
+                receitaEstimada
             });
 
         } catch (error) {
-            console.error("Erro dashboard", error);
+            console.error("Erro ao calcular dashboard", error);
         } finally {
             setLoading(false);
         }
     };
 
     const handleRealizarAtendimento = () => {
-        // Atualizado para usar isProfissional
         if (!isProfissional) return;
         navigate('/triagem'); 
     };
@@ -117,19 +121,16 @@ export default function Dashboard() {
             case 'aguardando': return 'bg-yellow-50 text-yellow-700 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800';
             case 'em_atendimento': return 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
             case 'finalizado': return 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800';
-            case 'faltou': return 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
-            case 'cancelado': return 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
+            case 'faltou': return 'bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800';
             default: return 'bg-gray-100 text-gray-600';
         }
     };
 
     const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading, restricted, restrictedLabel }) => (
-        <div className="relative bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-            
-            {/* Lógica de Bloqueio do Card */}
+        <div className="relative bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow overflow-hidden h-full flex flex-col justify-between">
             {restricted && <RestrictedOverlay label={restrictedLabel} />}
-
-            <div className="flex justify-between items-start mb-4">
+            
+            <div className="flex justify-between items-start mb-2">
                 <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{title}</p>
                     {loading ? (
@@ -142,9 +143,10 @@ export default function Dashboard() {
                     <Icon size={24} />
                 </div>
             </div>
+            
             {subValue && (
-                <div className="flex items-center gap-2 text-sm">
-                    <span className="flex items-center text-slate-400 font-medium">
+                <div className="flex items-center gap-2 text-sm mt-2 pt-2 border-t border-slate-50 dark:border-slate-700/50">
+                    <span className="flex items-center text-slate-400 font-medium truncate">
                        {subValue}
                     </span>
                 </div>
@@ -197,7 +199,6 @@ export default function Dashboard() {
 
                 {/* KPI CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    {/* TODOS TÊM ACESSO */}
                     <StatCard 
                         title="Agendamentos (Dia)"
                         value={statsDia.total}
@@ -207,21 +208,19 @@ export default function Dashboard() {
                         loading={loading}
                     />
 
-                    {/* TODOS TÊM ACESSO */}
                     <StatCard 
-                        title="Total Agendamentos (Mês)"
+                        title="Atendimentos (Mês)"
                         value={statsMes.totalPacientes}
-                        subValue={`Referente a ${filtroMes.split('-')[1]}/${filtroMes.split('-')[0]}`}
+                        subValue={`Exclui faltas e cancelamentos`}
                         icon={Users}
                         colorClass="bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400"
                         loading={loading}
                     />
 
-                    {/* RESTRITO: APENAS FINANCEIRO */}
                     <StatCard 
                         title="Receita Confirmada"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
-                        subValue={`Estimado Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
+                        subValue={`Previsto Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
                         icon={DollarSign}
                         colorClass="bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400"
                         loading={loading}
@@ -233,11 +232,9 @@ export default function Dashboard() {
                 {/* ÁREA PRINCIPAL */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
-                    {/* COLUNA ESQUERDA: AGENDA DE HOJE */}
-                    {/* RESTRITO: APENAS PROFISSIONAL OU RECEPÇÃO */}
+                    {/* AGENDA DE HOJE */}
                     <div className="relative lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[400px]">
                         
-                        {/* Bloqueio da Lista da Agenda (Atualizado para isProfissional) */}
                         {(!isProfissional && !isRecepcao) && (
                             <RestrictedOverlay label="Restrito à Recepção/Profissionais" />
                         )}
@@ -265,10 +262,9 @@ export default function Dashboard() {
                                     <p className="text-slate-500 max-w-xs mx-auto mt-2 mb-6">
                                         Nenhum paciente agendado para hoje ({filtroDia.split('-')[2]}/{filtroDia.split('-')[1]}).
                                     </p>
-                                    {/* LÓGICA DO BOTÃO NOVO AGENDAMENTO */}
                                     <button 
                                         onClick={() => isRecepcao && navigate('/agenda/marcar')} 
-                                        disabled={!isRecepcao} // Desabilita se não tiver privilégio de Agendamento
+                                        disabled={!isRecepcao}
                                         className={`
                                             font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 transition-all 
                                             ${isRecepcao 
@@ -277,10 +273,7 @@ export default function Dashboard() {
                                             }
                                         `}
                                     >
-                                        {/* Troca o ícone: Mais (+) se permitido, Cadeado se bloqueado */}
                                         {isRecepcao ? <Plus size={18}/> : <Lock size={18}/>} 
-                                        
-                                        {/* Troca o texto */}
                                         {isRecepcao ? "Novo Agendamento" : "Apenas Recepção/Agendamento"}
                                     </button>
                                 </div>
@@ -320,33 +313,26 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    {/* COLUNA DIREITA */}
+                    {/* COLUNA LATERAL */}
                     <div className="flex flex-col gap-6">
                         
-                        {/* CARD 'AGUARDANDO' (RESTRITO: APENAS PROFISSIONAL) */}
+                        {/* CARD AGUARDANDO */}
                         <div className="relative bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col justify-center items-center text-center">
-                            
-                            {/* Bloqueio do Card Aguardando (Atualizado para isProfissional) */}
                             {!isProfissional && <RestrictedOverlay label="Acesso Profissional" />}
-
-                            {/* Borda de status no topo */}
                             <div className="absolute top-0 left-0 right-0 h-1.5 bg-yellow-400"></div>
-
                             <div className="relative z-10 w-full">
                                 <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-full mb-4 inline-flex items-center justify-center ring-8 ring-yellow-50/50 dark:ring-yellow-900/10">
                                     <AlertCircle size={32} className="text-yellow-600 dark:text-yellow-400"/>
                                 </div>
-                                
                                 <h3 className="text-5xl font-extrabold text-slate-800 dark:text-white mb-1 tracking-tighter">
                                     {statsDia.aguardando}
                                 </h3>
                                 <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">
                                     Pacientes Aguardando
                                 </p>
-                                
                                 <button 
                                     onClick={handleRealizarAtendimento}
-                                    disabled={!isProfissional} // Desabilita clique se não for profissional
+                                    disabled={!isProfissional}
                                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Stethoscope size={18}/> Iniciar Atendimento
@@ -362,15 +348,16 @@ export default function Dashboard() {
                             <div className="space-y-4">
                                 <div>
                                     <div className="flex justify-between text-xs mb-2 font-medium">
-                                        <span className="text-slate-500">Ocupação da Agenda</span>
+                                        <span className="text-slate-500">Fluxo de Agenda</span>
                                         <span className="text-slate-800 dark:text-white">Normal</span>
                                     </div>
+                                    {/* Barra de progresso visual baseada na ocupação */}
                                     <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
-                                        <div className="bg-green-500 h-full rounded-full w-[65%]"></div>
+                                        <div className="bg-green-500 h-full rounded-full" style={{ width: '65%' }}></div>
                                     </div>
                                 </div>
                                 <p className="text-xs text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-700 pt-3 mt-2">
-                                    Dados atualizados em tempo real conforme movimentação da recepção.
+                                    Dados atualizados em tempo real. Faltas e cancelamentos não contabilizam nos KPIs mensais.
                                 </p>
                             </div>
                         </div>

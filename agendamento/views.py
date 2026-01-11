@@ -170,8 +170,13 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Agendamento.objects.all()
 
+        # Se for uma ação de detalhe (editar, deletar, ver um específico), traz tudo, inclusive cancelados.
         if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
             return queryset
+
+        
+        queryset = queryset.exclude(status='cancelado')
+        # ------------------------------------------
 
         profissional = self.request.query_params.get('profissional')
         especialidade = self.request.query_params.get('especialidade')
@@ -192,14 +197,15 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
             if not self.request.query_params.get('nopage'): 
                  queryset = queryset.filter(data=date.today())
 
+        # Ordenação
         queryset = queryset.annotate(
             prioridade_status=Case(
                 When(status='agendado', then=Value(1)),
                 When(status='aguardando', then=Value(2)),
                 When(status='em_atendimento', then=Value(3)),
                 When(status='finalizado', then=Value(4)),
-                When(status='cancelado', then=Value(5)),
-                When(status='faltou', then=Value(6)),
+                When(status='faltou', then=Value(5)), # Faltou aparece, mas com prioridade baixa
+                # Cancelado nem entra aqui pois foi excluído lá em cima
                 default=Value(10),
                 output_field=IntegerField(),
             )
