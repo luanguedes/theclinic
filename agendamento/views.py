@@ -10,7 +10,6 @@ from django.conf import settings
 import requests
 import threading
 
-# Importações do Projeto
 from .models import BloqueioAgenda, Agendamento
 from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
 from .whatsapp import enviar_mensagem_agendamento, enviar_mensagem_cancelamento_bloqueio
@@ -55,16 +54,8 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def relatorio(self, request, pk=None):
         bloqueio = self.get_object()
+        conflitos = Agendamento.objects.filter(bloqueio_origem=bloqueio)
         
-        conflitos = Agendamento.objects.filter(
-            data__range=[bloqueio.data_inicio, bloqueio.data_fim],
-            horario__gte=bloqueio.hora_inicio,
-            horario__lte=bloqueio.hora_fim
-        )
-        
-        if bloqueio.profissional:
-            conflitos = conflitos.filter(profissional=bloqueio.profissional)
-
         dados_pacientes = []
         for c in conflitos:
             dados_pacientes.append({
@@ -109,6 +100,7 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
             
             for ag in conflitos:
                 ag.status = 'cancelado'
+                ag.bloqueio_origem = bloqueio
                 ag.observacoes = f"Cancelado por bloqueio. Motivo: {bloqueio.observacao or 'Administrativo'}"
                 ag.save()
                 
@@ -154,11 +146,14 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.status = 'cancelado'
+        instance.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=False, methods=['get'], permission_classes=[AllowAny]) 
     def testar_conexao(self, request):
-        """
-        Rota de teste manual: /api/agendamento/testar_conexao/?numero=5511999999999
-        """
         numero_destino = request.query_params.get('numero')
         
         if not numero_destino:
@@ -186,7 +181,6 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         }
 
         try:
-            print(f"Testando envio para {url} com key {settings.EVOLUTION_API_KEY[:5]}...")
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             
             return Response({

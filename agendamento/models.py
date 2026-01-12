@@ -48,16 +48,25 @@ class Agendamento(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
     lembrete_enviado = models.BooleanField(default=False, verbose_name="Lembrete 24h enviado?")
+    bloqueio_origem = models.ForeignKey(
+        BloqueioAgenda, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='pacientes_cancelados'
+    )
 
     class Meta:
         ordering = ['data', 'horario']
         constraints = [
             models.UniqueConstraint(
                 fields=['profissional', 'data', 'horario', 'paciente'], 
+                # CRÍTICO: Agora a trava de "horário único" ignora agendamentos cancelados.
+                # Isso permite que o paciente marque outro horário se o anterior foi cancelado.
                 condition=Q(status__in=['agendado', 'aguardando', 'em_atendimento']),
                 name='unique_paciente_horario'
             )
         ]
 
     def __str__(self):
-        return f"{self.paciente} - {self.data} {self.horario}"
+        return f"{self.paciente} - {self.data} {self.horario} [{self.status}]"

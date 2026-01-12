@@ -3,8 +3,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser 
-from django.core.management import call_command # Importação necessária para o robô
+from django.core.management import call_command
+from datetime import timedelta, date
 from .models import Convenio, DadosClinica, ConfiguracaoSistema
+from agendamento.models import Agendamento
 from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer
 
 class ConvenioViewSet(viewsets.ModelViewSet):
@@ -44,7 +46,22 @@ class ConfiguracaoSistemaView(APIView):
     def get(self, request):
         config = ConfiguracaoSistema.load()
         serializer = ConfiguracaoSistemaSerializer(config)
-        return Response(serializer.data)
+        
+        amanha = date.today() + timedelta(days=1)
+        agendamentos_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
+        
+        total_amanha = agendamentos_amanha.count()
+        avisados = agendamentos_amanha.filter(lembrete_enviado=True).count()
+        faltam = total_amanha - avisados
+        
+        data = serializer.data
+        data['stats_lembretes'] = {
+            'total': total_amanha,
+            'avisados': avisados,
+            'faltam': faltam
+        }
+        
+        return Response(data)
 
     def put(self, request):
         config = ConfiguracaoSistema.load()
@@ -55,21 +72,27 @@ class ConfiguracaoSistemaView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def post(self, request):
-        """
-        Esta função será chamada quando o React enviar um POST para
-        /api/configuracoes/sistema/
-        """
-        # Verifica se na URL veio o comando de executar lembretes
         if 'executar_lembretes' in request.path:
             try:
                 call_command('enviar_lembretes')
-                
                 config = ConfiguracaoSistema.load()
+                
+                amanha = date.today() + timedelta(days=1)
+                agendamentos_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
+                
+                avisados = agendamentos_amanha.filter(lembrete_enviado=True).count()
+                faltam = agendamentos_amanha.count() - avisados
+
                 return Response({
                     'status': 'sucesso', 
-                    'ultima_execucao': config.data_ultima_execucao_lembrete
+                    'ultima_execucao': config.data_ultima_execucao_lembrete,
+                    'stats_lembretes': {
+                        'total': agendamentos_amanha.count(),
+                        'avisados': avisados,
+                        'faltam': faltam
+                    }
                 })
             except Exception as e:
                 return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        return Response({'error': 'Ação não encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Ação não permitida'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
