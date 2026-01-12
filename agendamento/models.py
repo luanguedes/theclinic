@@ -47,6 +47,7 @@ class Agendamento(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AGENDADO)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    lembrete_enviado = models.BooleanField(default=False, verbose_name="Lembrete 24h enviado?")
 
     class Meta:
         ordering = ['data', 'horario']
