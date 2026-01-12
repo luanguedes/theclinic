@@ -5,15 +5,16 @@ import Layout from '../components/Layout';
 import { 
     Search, CalendarClock, User, CheckCircle2, 
     Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil, UserX, RotateCcw,
-    Star, Accessibility, Baby, Users, Heart, AlertTriangle, UserCog, MapPin, Stethoscope
+    Star, Accessibility, Baby, Users, Heart, AlertTriangle, UserCog, MapPin, 
+    Stethoscope, ShieldCheck, Briefcase, Check
 } from 'lucide-react';
 
 const PRIORIDADES = {
-    'idoso': { label: 'Idoso (60+)', icon: <Users size={14} />, color: 'text-amber-600 bg-amber-50 border-amber-200' },
-    'gestante': { label: 'Gestante / Lactante', icon: <Baby size={14} />, color: 'text-pink-600 bg-pink-50 border-pink-200' },
-    'cadeirante': { label: 'Cadeirante / Mobilidade', icon: <Accessibility size={14} />, color: 'text-blue-600 bg-blue-50 border-blue-200' },
-    'autista': { label: 'TEA (Autismo)', icon: <Heart size={14} />, color: 'text-teal-600 bg-teal-50 border-teal-200' },
-    'pcd': { label: 'PCD / Def. Oculta', icon: <Accessibility size={14} />, color: 'text-purple-600 bg-purple-50 border-purple-200' },
+    'idoso': { label: 'Idoso (60+)', icon: <Users size={16} strokeWidth={2.5} />, color: 'bg-amber-100 text-amber-700 border-amber-200' },
+    'gestante': { label: 'Gestante', icon: <Baby size={16} strokeWidth={2.5} />, color: 'bg-pink-100 text-pink-700 border-pink-200' },
+    'cadeirante': { label: 'Cadeirante', icon: <Accessibility size={16} strokeWidth={2.5} />, color: 'bg-blue-100 text-blue-700 border-blue-200' },
+    'autista': { label: 'TEA', icon: <Heart size={16} strokeWidth={2.5} />, color: 'bg-teal-100 text-teal-700 border-teal-200' },
+    'pcd': { label: 'PCD', icon: <Accessibility size={16} strokeWidth={2.5} />, color: 'bg-purple-100 text-purple-700 border-purple-200' },
 };
 
 export default function Recepcao() {
@@ -22,7 +23,12 @@ export default function Recepcao() {
 
     const [loading, setLoading] = useState(false);
     const [agendamentos, setAgendamentos] = useState([]);
+    
+    // Listas para os selects
     const [profissionais, setProfissionais] = useState([]);
+    const [especialidades, setEspecialidades] = useState([]);
+    const [convenios, setConvenios] = useState([]);
+
     const [dataFiltro, setDataFiltro] = useState(new Date().toISOString().split('T')[0]);
     const [profissionalFiltro, setProfissionalFiltro] = useState('');
     const [buscaTexto, setBuscaTexto] = useState('');
@@ -32,7 +38,15 @@ export default function Recepcao() {
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     const [loadingCheckin, setLoadingCheckin] = useState(false);
-    const [formCheckin, setFormCheckin] = useState({ valor: '', forma_pagamento: 'dinheiro', pago: false });
+    
+    const [formCheckin, setFormCheckin] = useState({ 
+        valor: '', 
+        forma_pagamento: 'dinheiro', 
+        pago: false,
+        profissional: '',
+        especialidade: '',
+        convenio: ''
+    });
 
     const [modalPacienteOpen, setModalPacienteOpen] = useState(false);
     const [pacienteParaEditar, setPacienteParaEditar] = useState(null);
@@ -46,10 +60,9 @@ export default function Recepcao() {
 
     useEffect(() => {
         if(api) {
-            api.get('profissionais/').then(res => {
-                const data = res.data.results || res.data;
-                setProfissionais(Array.isArray(data) ? data : []);
-            }).catch(() => setProfissionais([]));
+            api.get('profissionais/').then(res => setProfissionais(res.data.results || res.data)).catch(() => {});
+            api.get('configuracoes/especialidades/').then(res => setEspecialidades(res.data.results || res.data)).catch(() => {});
+            api.get('configuracoes/convenios/').then(res => setConvenios(res.data.results || res.data)).catch(() => {});
         }
     }, [api]);
 
@@ -64,8 +77,7 @@ export default function Recepcao() {
             if (dataFiltro) params.append('data', dataFiltro);
             if (profissionalFiltro) params.append('profissional', profissionalFiltro);
             const res = await api.get(`agendamento/?${params.toString()}`);
-            const data = res.data.results || res.data;
-            setAgendamentos(Array.isArray(data) ? data : []);
+            setAgendamentos(Array.isArray(res.data.results || res.data) ? (res.data.results || res.data) : []);
         } catch (error) {
             notify.error("Erro ao carregar agenda.");
             setAgendamentos([]);
@@ -81,14 +93,10 @@ export default function Recepcao() {
         return Math.max(0, Math.floor(diffMs / 60000));
     };
 
-    // CORREÇÃO: Validação apenas de campos CRUCIAIS
     const isCadastroIncompleto = (item) => {
-        // Se vier do agendamento (detalhes_pdf ou paciente_*)
         const cpf = item.paciente_cpf || item.detalhes_pdf?.paciente_cpf;
         const tel = item.paciente_telefone || item.telefone_paciente;
         const nasc = item.detalhes_pdf?.paciente_nascimento;
-        
-        // Retorna true se faltar qualquer um destes
         return !cpf || !tel || !nasc;
     };
 
@@ -98,11 +106,8 @@ export default function Recepcao() {
             const res = await api.get(`pacientes/${pacienteId}/`);
             setPacienteParaEditar(res.data);
             setModalPacienteOpen(true);
-        } catch (e) {
-            notify.error("Erro ao carregar dados do paciente.");
-        } finally {
-            setLoadingPaciente(false);
-        }
+        } catch (e) { notify.error("Erro ao carregar paciente."); } 
+        finally { setLoadingPaciente(false); }
     };
 
     const handleSalvarPacienteRapido = async (e) => {
@@ -113,50 +118,44 @@ export default function Recepcao() {
             notify.success("Cadastro atualizado!");
             setModalPacienteOpen(false);
             carregarAgenda();
-        } catch (e) {
-            notify.error("Erro ao atualizar cadastro.");
-        } finally {
-            setLoadingPaciente(false);
-        }
+        } catch (e) { notify.error("Erro ao atualizar."); } 
+        finally { setLoadingPaciente(false); }
     };
 
     const handleSetPriority = async (pacienteId, tipo) => {
         try {
+            // Atualização Otimista (Atualiza a tela antes do backend responder para parecer instantâneo)
+            setAgendamentos(prev => prev.map(ag => 
+                ag.paciente === pacienteId ? { ...ag, paciente_prioridade: tipo } : ag
+            ));
+            setActivePriorityMenu(null); // Fecha o menu
+
             await api.patch(`pacientes/${pacienteId}/`, { prioridade: tipo });
             notify.success("Prioridade atualizada.");
-            setActivePriorityMenu(null);
-            carregarAgenda();
-        } catch (e) { notify.error("Erro ao definir prioridade."); }
+        } catch (e) { 
+            notify.error("Erro ao definir prioridade.");
+            carregarAgenda(); // Reverte se der erro
+        }
     };
 
     const handleMarcarFalta = async (item) => {
-        const confirm = await confirmDialog(`Confirmar falta de ${item.nome_paciente}?`, "Registrar Falta", "Sim, Faltou", "Cancelar", "danger");
-        if (confirm) {
-            try {
-                await api.post(`agendamento/${item.id}/marcar_falta/`);
-                notify.info("Falta registrada.");
-                carregarAgenda();
-            } catch (error) { notify.error("Erro ao registrar falta."); }
+        if (await confirmDialog(`Confirmar falta de ${item.nome_paciente}?`, "Registrar Falta", "Sim, Faltou", "Cancelar", "danger")) {
+            try { await api.post(`agendamento/${item.id}/marcar_falta/`); notify.info("Falta registrada."); carregarAgenda(); } 
+            catch { notify.error("Erro ao registrar falta."); }
         }
     };
 
     const handleReverter = async (item) => {
-        const confirm = await confirmDialog("Reverter status para 'Agendado'?", "Desfazer Ação", "Sim, Reverter", "Cancelar", "warning");
-        if (confirm) {
-            try {
-                await api.post(`agendamento/${item.id}/reverter_chegada/`);
-                notify.info("Status revertido.");
-                carregarAgenda();
-            } catch (error) { notify.error("Erro ao reverter."); }
+        if (await confirmDialog("Reverter status para 'Agendado'?", "Desfazer Ação", "Sim, Reverter", "Cancelar", "warning")) {
+            try { await api.post(`agendamento/${item.id}/reverter_chegada/`); notify.info("Status revertido."); carregarAgenda(); } 
+            catch { notify.error("Erro ao reverter."); }
         }
     };
 
     const verificarAtraso = (horario, status) => {
         if (status !== 'agendado') return false;
-        const [h, m] = horario.split(':');
         const dataAgendamento = new Date(dataFiltro + 'T' + horario);
-        const agora = new Date();
-        return dataFiltro === agora.toISOString().split('T')[0] && agora > new Date(dataAgendamento.getTime() + 15*60000);
+        return dataFiltro === new Date().toISOString().split('T')[0] && new Date() > new Date(dataAgendamento.getTime() + 15*60000);
     };
 
     const calcularIdade = (dataNasc) => {
@@ -180,13 +179,16 @@ export default function Recepcao() {
         }
     };
 
-    // CORREÇÃO: Botão Confirmar Chegada agora abre o modal corretamente
+    // ABERTURA DO MODAL COM DADOS COMPLETOS
     const abrirCheckin = (item) => {
         setSelectedItem(item);
         setFormCheckin({ 
             valor: item.valor || '', 
             forma_pagamento: item.fatura_forma_pagamento || 'dinheiro', 
-            pago: item.fatura_pago || false 
+            pago: item.fatura_pago || false,
+            profissional: item.profissional || '', 
+            especialidade: item.especialidade || '', 
+            convenio: item.convenio || '' 
         });
         setModalOpen(true);
     };
@@ -195,10 +197,10 @@ export default function Recepcao() {
         setLoadingCheckin(true);
         try {
             await api.post(`agendamento/${selectedItem.id}/confirmar_chegada/`, formCheckin);
-            notify.success(selectedItem.status === 'agendado' ? 'Chegada confirmada!' : 'Dados atualizados!');
+            notify.success("Recepção realizada com sucesso!");
             setModalOpen(false);
             carregarAgenda();
-        } catch (error) { notify.error("Erro ao salvar dados."); }
+        } catch (error) { notify.error("Erro ao confirmar chegada."); }
         finally { setLoadingCheckin(false); }
     };
 
@@ -212,6 +214,7 @@ export default function Recepcao() {
     });
 
     const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white transition-all font-bold";
+    const labelClass = "text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block";
 
     return (
         <Layout>
@@ -226,9 +229,9 @@ export default function Recepcao() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 mb-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Data</label><input type="date" value={dataFiltro} onChange={e => setDataFiltro(e.target.value)} className={inputClass}/></div>
-                    <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Profissional</label><select value={profissionalFiltro} onChange={e => setProfissionalFiltro(e.target.value)} className={inputClass}><option value="">Todos</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
-                    <div className="lg:col-span-2"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Busca Rápida</label><div className="relative"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input placeholder="Paciente..." value={buscaTexto} onChange={e => setBuscaTexto(e.target.value)} className={`${inputClass} pl-12`}/></div></div>
+                    <div><label className={labelClass}>Data</label><input type="date" value={dataFiltro} onChange={e => setDataFiltro(e.target.value)} className={inputClass}/></div>
+                    <div><label className={labelClass}>Profissional</label><select value={profissionalFiltro} onChange={e => setProfissionalFiltro(e.target.value)} className={inputClass}><option value="">Todos</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
+                    <div className="lg:col-span-2"><label className={labelClass}>Busca Rápida</label><div className="relative"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input placeholder="Paciente..." value={buscaTexto} onChange={e => setBuscaTexto(e.target.value)} className={`${inputClass} pl-12`}/></div></div>
                 </div>
 
                 <div className="flex flex-wrap gap-2 mb-6">
@@ -240,7 +243,6 @@ export default function Recepcao() {
                     ))}
                 </div>
 
-                {/* CORREÇÃO: Min-Height e Overflow Visible para Popups funcionarem */}
                 <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 min-h-[400px]">
                     <div className="overflow-visible">
                         <table className="w-full text-left">
@@ -249,7 +251,6 @@ export default function Recepcao() {
                                     <th className="px-8 py-5">🕒 Hora / Espera</th>
                                     <th className="px-8 py-5">📍 Status</th>
                                     <th className="px-8 py-5">👤 Paciente</th>
-                                    {/* CORREÇÃO: Trocado 'Médico' por 'Profissional' */}
                                     <th className="px-8 py-5">🩺 Profissional</th>
                                     <th className="px-8 py-5 text-right">Ações</th>
                                 </tr>
@@ -262,8 +263,8 @@ export default function Recepcao() {
                                     const esperaMin = item.status === 'aguardando' ? calcularEspera(item.horario_chegada) : 0;
                                     const incompleto = isCadastroIncompleto(item);
                                     
-                                    // Pega prioridade do objeto do agendamento (que vem do paciente)
-                                    const prioridadeKey = item.paciente_prioridade; 
+                                    // CORREÇÃO: Tenta pegar prioridade de múltiplos lugares para garantir
+                                    const prioridadeKey = item.paciente_prioridade || item.prioridade; 
                                     const pInfo = PRIORIDADES[prioridadeKey];
 
                                     return (
@@ -289,21 +290,25 @@ export default function Recepcao() {
                                                         {item.nome_paciente}
                                                     </button>
                                                     {incompleto && (
-                                                        <button onClick={() => handleAbrirEditarPaciente(item.paciente)} title="Dados Cruciais Faltando (CPF, Tel, Nasc)">
+                                                        <button onClick={() => handleAbrirEditarPaciente(item.paciente)} title="Dados Cruciais Faltando">
                                                             <AlertTriangle size={16} className="text-rose-500 animate-bounce" />
                                                         </button>
                                                     )}
+                                                    
+                                                    {/* ÍCONE DE PRIORIDADE VISÍVEL */}
                                                     {pInfo && (
-                                                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase ${pInfo.color}`}>{pInfo.icon} {pInfo.label}</div>
+                                                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase ${pInfo.color} shadow-sm`}>
+                                                            {pInfo.icon} {pInfo.label}
+                                                        </div>
                                                     )}
                                                     
-                                                    {/* Menu de Prioridade - CORREÇÃO DE SCROLL E VISIBILIDADE */}
+                                                    {/* MENU DE PRIORIDADE (ESTRELA) */}
                                                     <div className="relative">
                                                         <button onClick={() => setActivePriorityMenu(activePriorityMenu === item.id ? null : item.id)} className={`p-1 rounded-full transition-all ${prioridadeKey ? 'text-amber-500' : 'text-slate-200 hover:text-slate-400 opacity-0 group-hover:opacity-100'}`}><Star size={16} fill={prioridadeKey ? "currentColor" : "none"}/></button>
                                                         {activePriorityMenu === item.id && (
                                                             <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-2xl z-[150] p-2 animate-in fade-in zoom-in-95">
                                                                 {Object.entries(PRIORIDADES).map(([key, info]) => (
-                                                                    <button key={key} onClick={() => handleSetPriority(item.paciente, key)} className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-200 transition-colors"><span className={`${info.color.split(' ')[0]} p-1 rounded-lg bg-current/10`}>{info.icon}</span> {info.label}</button>
+                                                                    <button key={key} onClick={() => handleSetPriority(item.paciente, key)} className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-200 transition-colors"><span className={`p-1 rounded-lg bg-current/10 ${info.color}`}>{info.icon}</span> {info.label}</button>
                                                                 ))}
                                                                 <button onClick={() => handleSetPriority(item.paciente, null)} className="w-full text-center px-3 py-2 mt-2 border-t dark:border-slate-700 text-red-500 text-[10px] font-black uppercase">Limpar Prioridade</button>
                                                             </div>
@@ -319,16 +324,14 @@ export default function Recepcao() {
                                                 <div className="flex justify-end items-center gap-2">
                                                     <div className={item.fatura_pago ? 'text-emerald-500' : 'text-slate-200'}><DollarSign size={20} strokeWidth={3}/></div>
                                                     
-                                                    {/* BOTÕES DE AÇÃO VISÍVEIS */}
                                                     {item.status === 'agendado' ? (
                                                         <>
                                                             <button onClick={() => handleMarcarFalta(item)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="Faltou"><UserX size={18}/></button>
-                                                            <button onClick={() => abrirCheckin(item)} className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-green-500/20 active:scale-95 transition-all">Confirmar Chegada</button>
+                                                            <button onClick={() => abrirCheckin(item)} className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-green-500/20 active:scale-95 transition-all">Check-in</button>
                                                         </>
                                                     ) : (
                                                         <div className="flex gap-2">
                                                             <button onClick={() => handleReverter(item)} className="p-2.5 text-slate-400 hover:text-orange-500 bg-white border border-slate-200 hover:bg-orange-50 rounded-xl shadow-sm transition-all" title="Reverter Status"><RotateCcw size={16}/></button>
-                                                            {/* Edição de Checkin (Financeiro) */}
                                                             {['aguardando', 'em_atendimento', 'finalizado'].includes(item.status) && (
                                                                 <button onClick={() => abrirCheckin(item)} className="p-2.5 text-blue-600 hover:bg-blue-50 bg-white border border-slate-200 rounded-xl shadow-sm transition-all" title="Editar Financeiro"><Pencil size={16}/></button>
                                                             )}
@@ -344,7 +347,130 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* MODAL DE EDIÇÃO DE PACIENTE */}
+                {/* MODAL DE CHECK-IN COMPLETO */}
+                {modalOpen && selectedItem && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden border border-white/10">
+                            <div className="bg-green-600 p-8 text-white relative overflow-hidden">
+                                <div className="relative z-10">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="bg-white/20 p-3 rounded-2xl shadow-inner"><CheckCircle2 size={32}/></div>
+                                        <button onClick={() => setModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={24}/></button>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="text-2xl font-black uppercase tracking-tighter">Confirmação de Recepção</h3>
+                                        
+                                        {/* ÍCONE DE PRIORIDADE NO TOPO (CORRIGIDO PARA SER VISÍVEL) */}
+                                        {(selectedItem.paciente_prioridade || selectedItem.prioridade) && 
+                                         PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade] && (
+                                            <div className="bg-white text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-lg border-2 border-white/20">
+                                                {PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade].icon}
+                                                {PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade].label}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-green-100 text-sm font-bold uppercase tracking-widest mt-1 opacity-80">{selectedItem.nome_paciente}</p>
+                                </div>
+                            </div>
+                            
+                            <div className="p-8 space-y-8">
+                                {/* SEÇÃO 1: DADOS DO ATENDIMENTO (EDITÁVEIS) */}
+                                <div>
+                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-2">
+                                        <Stethoscope size={14}/> Dados do Atendimento
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div>
+                                            <label className={labelClass}>Profissional</label>
+                                            <select 
+                                                value={formCheckin.profissional} 
+                                                onChange={e => setFormCheckin({...formCheckin, profissional: e.target.value})} 
+                                                className={inputClass}
+                                            >
+                                                <option value="">Selecione...</option>
+                                                {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className={labelClass}>Especialidade</label>
+                                            <select 
+                                                value={formCheckin.especialidade} 
+                                                onChange={e => setFormCheckin({...formCheckin, especialidade: e.target.value})} 
+                                                className={inputClass}
+                                            >
+                                                <option value="">Selecione...</option>
+                                                {especialidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className={labelClass}>Plano / Convênio</label>
+                                            <div className="relative">
+                                                <ShieldCheck className="absolute left-3 top-3.5 text-slate-400" size={16}/>
+                                                <select 
+                                                    value={formCheckin.convenio} 
+                                                    onChange={e => setFormCheckin({...formCheckin, convenio: e.target.value})} 
+                                                    className={`${inputClass} pl-10`}
+                                                >
+                                                    <option value="">Particular (Sem convênio)</option>
+                                                    {convenios.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* SEÇÃO 2: FINANCEIRO */}
+                                <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <DollarSign size={14}/> Financeiro da Consulta
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+                                        <div>
+                                            <label className={labelClass}>Valor Acordado</label>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-3.5 text-slate-400 font-bold text-sm">R$</span>
+                                                <input type="number" value={formCheckin.valor} onChange={e => setFormCheckin({...formCheckin, valor: e.target.value})} className={`${inputClass} pl-10 font-black text-lg text-blue-600`}/>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className={labelClass}>Forma de Pagamento</label>
+                                            <select value={formCheckin.forma_pagamento} onChange={e => setFormCheckin({...formCheckin, forma_pagamento: e.target.value})} className={inputClass}>
+                                                <option value="dinheiro">💵 Dinheiro</option><option value="pix">📱 Pix</option><option value="cartao_credito">💳 Crédito</option><option value="cartao_debito">💳 Débito</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* STATUS DE PAGAMENTO (SWITCH) */}
+                                    <div 
+                                        onClick={() => setFormCheckin(prev => ({ ...prev, pago: !prev.pago }))}
+                                        className={`cursor-pointer p-4 rounded-xl border flex items-center justify-between transition-all ${formCheckin.pago ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formCheckin.pago ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                {formCheckin.pago ? <Check size={20}/> : <X size={20}/>}
+                                            </div>
+                                            <div>
+                                                <p className={`font-black uppercase text-xs tracking-widest ${formCheckin.pago ? 'text-green-700' : 'text-slate-500'}`}>
+                                                    {formCheckin.pago ? 'Pagamento Realizado' : 'Pagamento Pendente'}
+                                                </p>
+                                                <p className="text-[10px] text-slate-400">Clique para alterar o status</p>
+                                            </div>
+                                        </div>
+                                        <div className={`w-12 h-6 rounded-full relative transition-colors ${formCheckin.pago ? 'bg-green-500' : 'bg-slate-300'}`}>
+                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${formCheckin.pago ? 'left-7' : 'left-1'}`}></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button onClick={confirmarCheckin} disabled={loadingCheckin} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-3">
+                                    {loadingCheckin ? <Loader2 className="animate-spin"/> : <Save size={20}/>} Confirmar Recepção
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL DE EDIÇÃO DE PACIENTE (Mantido do código anterior) */}
                 {modalPacienteOpen && pacienteParaEditar && (
                     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in duration-300">
                         <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-4xl my-10 overflow-hidden border border-white/10">
@@ -354,15 +480,15 @@ export default function Recepcao() {
                             </div>
                             <form onSubmit={handleSalvarPacienteRapido} className="p-8 grid grid-cols-1 md:grid-cols-12 gap-5">
                                 <div className="md:col-span-12 border-b dark:border-slate-700 pb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Informações Pessoais</div>
-                                <div className="md:col-span-6"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Nome Completo</label><input value={pacienteParaEditar.nome} onChange={e => setPacienteParaEditar({...pacienteParaEditar, nome: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-3"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">CPF</label><input value={pacienteParaEditar.cpf} onChange={e => setPacienteParaEditar({...pacienteParaEditar, cpf: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-3"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Telefone</label><input value={pacienteParaEditar.telefone} onChange={e => setPacienteParaEditar({...pacienteParaEditar, telefone: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-3"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Data Nascimento</label><input type="date" value={pacienteParaEditar.data_nascimento} onChange={e => setPacienteParaEditar({...pacienteParaEditar, data_nascimento: e.target.value})} className={inputClass} required /></div>
+                                <div className="md:col-span-6"><label className={labelClass}>Nome Completo</label><input value={pacienteParaEditar.nome} onChange={e => setPacienteParaEditar({...pacienteParaEditar, nome: e.target.value})} className={inputClass} required /></div>
+                                <div className="md:col-span-3"><label className={labelClass}>CPF</label><input value={pacienteParaEditar.cpf} onChange={e => setPacienteParaEditar({...pacienteParaEditar, cpf: e.target.value})} className={inputClass} required /></div>
+                                <div className="md:col-span-3"><label className={labelClass}>Telefone</label><input value={pacienteParaEditar.telefone} onChange={e => setPacienteParaEditar({...pacienteParaEditar, telefone: e.target.value})} className={inputClass} required /></div>
+                                <div className="md:col-span-3"><label className={labelClass}>Data Nascimento</label><input type="date" value={pacienteParaEditar.data_nascimento} onChange={e => setPacienteParaEditar({...pacienteParaEditar, data_nascimento: e.target.value})} className={inputClass} required /></div>
                                 
                                 <div className="md:col-span-12 border-b dark:border-slate-700 pb-2 mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Endereço</div>
-                                <div className="md:col-span-3"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">CEP</label><input value={pacienteParaEditar.cep} onChange={e => setPacienteParaEditar({...pacienteParaEditar, cep: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-7"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Logradouro</label><input value={pacienteParaEditar.logradouro} onChange={e => setPacienteParaEditar({...pacienteParaEditar, logradouro: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-2"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Nº</label><input value={pacienteParaEditar.numero} onChange={e => setPacienteParaEditar({...pacienteParaEditar, numero: e.target.value})} className={inputClass} required /></div>
+                                <div className="md:col-span-3"><label className={labelClass}>CEP</label><input value={pacienteParaEditar.cep} onChange={e => setPacienteParaEditar({...pacienteParaEditar, cep: e.target.value})} className={inputClass} required /></div>
+                                <div className="md:col-span-7"><label className={labelClass}>Logradouro</label><input value={pacienteParaEditar.logradouro} onChange={e => setPacienteParaEditar({...pacienteParaEditar, logradouro: e.target.value})} className={inputClass} required /></div>
+                                <div className="md:col-span-2"><label className={labelClass}>Nº</label><input value={pacienteParaEditar.numero} onChange={e => setPacienteParaEditar({...pacienteParaEditar, numero: e.target.value})} className={inputClass} required /></div>
                                 
                                 <div className="md:col-span-12 pt-8 flex gap-4 justify-end border-t dark:border-slate-700 mt-4">
                                     <button type="button" onClick={() => setModalPacienteOpen(false)} className="px-8 py-3 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 rounded-xl transition-colors">Cancelar</button>
@@ -371,40 +497,6 @@ export default function Recepcao() {
                                     </button>
                                 </div>
                             </form>
-                        </div>
-                    </div>
-                )}
-
-                {/* MODAL DE CHECK-IN */}
-                {modalOpen && selectedItem && (
-                    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden border border-white/10">
-                            <div className="bg-green-600 p-8 text-white">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="bg-white/20 p-3 rounded-2xl shadow-inner"><CheckCircle2 size={32}/></div>
-                                    <button onClick={() => setModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={24}/></button>
-                                </div>
-                                <h3 className="text-2xl font-black uppercase tracking-tighter">Recepção</h3>
-                                <p className="text-green-100 text-sm font-bold uppercase tracking-widest mt-1 opacity-80">{selectedItem.nome_paciente}</p>
-                            </div>
-                            <div className="p-8 space-y-6">
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Valor da Consulta</label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-3 text-slate-400 font-bold text-sm">R$</span>
-                                        <input type="number" value={formCheckin.valor} onChange={e => setFormCheckin({...formCheckin, valor: e.target.value})} className={`${inputClass} pl-12 font-black text-lg text-blue-600`}/>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Pagamento</label>
-                                    <select value={formCheckin.forma_pagamento} onChange={e => setFormCheckin({...formCheckin, forma_pagamento: e.target.value})} className={inputClass}>
-                                        <option value="dinheiro">💵 Dinheiro</option><option value="pix">📱 Pix</option><option value="cartao_credito">💳 Crédito</option><option value="cartao_debito">💳 Débito</option>
-                                    </select>
-                                </div>
-                                <button onClick={confirmarCheckin} disabled={loadingCheckin} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-3">
-                                    {loadingCheckin ? <Loader2 className="animate-spin"/> : <Save size={20}/>} Finalizar
-                                </button>
-                            </div>
                         </div>
                     </div>
                 )}

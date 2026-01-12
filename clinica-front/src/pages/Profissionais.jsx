@@ -4,8 +4,7 @@ import { useNotification } from '../context/NotificationContext';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-    Search, Plus, Stethoscope, Mail, Phone, MapPin, 
-    Edit, Trash2, Calendar, Clock, User, Briefcase
+    Search, Plus, Stethoscope, Edit, Trash2, Briefcase, ShieldCheck 
 } from 'lucide-react';
 
 export default function Profissionais() {
@@ -44,6 +43,21 @@ export default function Profissionais() {
 
     const filtered = profissionais.filter(p => p.nome.toLowerCase().includes(search.toLowerCase()));
 
+    // Função auxiliar para formatar o registro
+    const formatarRegistro = (profissional) => {
+        if (!profissional.especialidades || profissional.especialidades.length === 0) return 'Registro Pendente';
+        
+        // Pega o primeiro vínculo para exibir
+        const principal = profissional.especialidades[0];
+        
+        // Tenta montar CONSELHO/UF - REGISTRO
+        const sigla = principal.sigla_conselho || 'Conselho';
+        const uf = principal.uf_conselho || 'BR';
+        const reg = principal.registro_conselho || '---';
+        
+        return `${sigla}/${uf} - ${reg}`;
+    };
+
     return (
         <Layout>
             <div className="max-w-6xl mx-auto pb-20">
@@ -74,32 +88,35 @@ export default function Profissionais() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filtered.map(p => (
                         <div key={p.id} className="bg-white dark:bg-slate-800 rounded-[24px] p-6 shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-xl transition-all group relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-bl-[100px] -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-                            
                             <div className="relative z-10">
                                 <div className="flex items-start justify-between mb-4">
-                                    <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 flex items-center justify-center font-black text-xl shadow-inner">
+                                    <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 flex items-center justify-center font-black text-xl shadow-inner uppercase">
                                         {p.nome.charAt(0)}
                                     </div>
                                     <div className="flex gap-1">
-                                        <Link to={`/profissionais/${p.id}`} className="p-2 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors"><Edit size={16}/></Link>
-                                        <button onClick={() => handleDelete(p.id)} className="p-2 hover:bg-red-50 rounded-lg text-red-500 transition-colors"><Trash2 size={16}/></button>
+                                        <Link to={`/profissionais/${p.id}`} className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg text-blue-600 transition-colors"><Edit size={16}/></Link>
+                                        <button onClick={() => handleDelete(p.id)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg text-red-500 transition-colors"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
 
-                                <h3 className="text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight mb-1">{p.nome}</h3>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{p.registro_profissional || 'Sem Registro'}</p>
+                                <h3 className="text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight mb-1 truncate">{p.nome}</h3>
+                                
+                                {/* EXIBIÇÃO CORRETA DO REGISTRO */}
+                                <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg mb-4">
+                                    <ShieldCheck size={12} className="text-slate-500"/>
+                                    <p className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">
+                                        {formatarRegistro(p)}
+                                    </p>
+                                </div>
 
-                                <div className="space-y-2">
+                                <div className="space-y-2 border-t dark:border-slate-700 pt-3">
                                     <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
                                         <Briefcase size={14} className="text-blue-500"/>
-                                        {p.especialidades && p.especialidades.length > 0 
-                                            ? p.especialidades.map(e => e.nome_especialidade).join(', ') 
-                                            : 'Clínico Geral'}
-                                    </div>
-                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                                        <Phone size={14} className="text-slate-400"/>
-                                        {p.telefone || 'Sem telefone'}
+                                        <span className="truncate">
+                                            {p.especialidades && p.especialidades.length > 0 
+                                                ? p.especialidades.map(e => e.nome_especialidade || e.especialidade_nome).join(', ') 
+                                                : 'Sem Especialidade'}
+                                        </span>
                                     </div>
                                 </div>
                             </div>

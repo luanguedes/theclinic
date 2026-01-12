@@ -14,6 +14,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, required }) =
     const containerRef = useRef(null);
 
     useEffect(() => { 
+        // Converte ambos para string para garantir a comparação
         const selected = options.find(o => String(o.id) === String(value)); 
         if (selected) setQuery(selected.label);
         else if (!value) setQuery('');
@@ -23,6 +24,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, required }) =
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
                 setIsOpen(false);
+                // Reseta o texto se o usuário clicou fora sem selecionar
                 const selected = options.find(o => String(o.id) === String(value));
                 setQuery(selected ? selected.label : '');
             }
@@ -76,7 +78,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, required }) =
 
 export default function ProfissionalForm() {
   const { api } = useAuth();
-  const { notify, confirmDialog } = useNotification();
+  const { notify } = useNotification();
   const navigate = useNavigate();
   const { id } = useParams();
   
@@ -93,7 +95,7 @@ export default function ProfissionalForm() {
   useEffect(() => {
     if(api) {
         setFetching(true);
-        // CORREÇÃO DE ROTA
+        // Carrega lista de especialidades
         api.get('especialidades/?nopage=true') 
             .then(res => setListaEspecialidades(res.data.results || res.data))
             .catch(() => notify.error("Erro ao carregar lista de especialidades."));
@@ -105,9 +107,23 @@ export default function ProfissionalForm() {
                     cpf: res.data.cpf, 
                     data_nascimento: res.data.data_nascimento
                 });
-                setItems(res.data.especialidades || []);
-            }).catch(() => notify.error("Erro ao carregar dados."))
-              .finally(() => setFetching(false));
+                
+                // --- CORREÇÃO CRÍTICA DO MAPEAMENTO ---
+                // Verifica como o backend manda e normaliza para o formulário
+                const vinculos = (res.data.especialidades || []).map(v => ({
+                    // Se v.especialidade for um objeto (com id, nome), pega o id. Se for número, pega direto.
+                    especialidade_id: (typeof v.especialidade === 'object' ? v.especialidade.id : v.especialidade) || v.especialidade_id,
+                    sigla_conselho: v.sigla_conselho,
+                    registro_conselho: v.registro_conselho,
+                    uf_conselho: v.uf_conselho
+                }));
+                
+                setItems(vinculos);
+            }).catch((err) => {
+                console.error(err);
+                notify.error("Erro ao carregar dados.");
+            })
+            .finally(() => setFetching(false));
         } else { setFetching(false); }
     }
   }, [id, api]);
@@ -124,9 +140,8 @@ export default function ProfissionalForm() {
   };
 
   const handleRemoveItem = async (index) => {
-    if(await confirmDialog("Remover esta especialidade?", "Remover", "Sim", "Não")) {
-        setItems(items.filter((_, i) => i !== index));
-    }
+    // Não precisa de confirmação assíncrona se for só remoção visual antes de salvar
+    setItems(items.filter((_, i) => i !== index));
   };
   
   const handleItemChange = (index, field, value) => {
@@ -140,9 +155,16 @@ export default function ProfissionalForm() {
     if (formData.data_nascimento > hoje) return notify.warning("Data de nascimento inválida.");
     if (items.length === 0) return notify.warning("Vincule ao menos uma especialidade.");
 
+    // Valida se todas as especialidades tem ID selecionado
+    if (items.some(i => !i.especialidade_id)) return notify.warning("Selecione a especialidade em todas as linhas.");
+
     setLoading(true);
     const cpfLimpo = formData.cpf.replace(/\D/g, ''); 
-    const payload = { ...formData, cpf: cpfLimpo, especialidades: items };
+    const payload = { 
+        ...formData, 
+        cpf: cpfLimpo, 
+        especialidades: items // Envia o array de objetos completo
+    };
     
     try {
         if(id) await api.put(`profissionais/${id}/`, payload);
@@ -187,7 +209,16 @@ export default function ProfissionalForm() {
                 <div className="space-y-4">
                     {items.map((item, index) => (
                         <div key={index} className="flex flex-col md:flex-row gap-4 items-end bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in slide-in-from-top-2 duration-300">
-                            <div className="flex-[2] w-full min-w-[200px]"><label className={subLabelClass}>Especialidade</label><SearchableSelect options={listaEspecialidades.map(e => ({ id: e.id, label: e.nome }))} value={item.especialidade_id} onChange={(val) => handleItemChange(index, 'especialidade_id', val)} placeholder="Selecione..." required={true} /></div>
+                            <div className="flex-[2] w-full min-w-[200px]">
+                                <label className={subLabelClass}>Especialidade</label>
+                                <SearchableSelect
+                                    options={listaEspecialidades.map(e => ({ id: e.id, label: e.nome }))}
+                                    value={item.especialidade_id}
+                                    onChange={(val) => handleItemChange(index, 'especialidade_id', val)}
+                                    placeholder="Selecione..."
+                                    required={true}
+                                />
+                            </div>
                             <div className="flex-1 w-full min-w-[100px]"><label className={subLabelClass}>Conselho</label><input required value={item.sigla_conselho} onChange={e=>handleItemChange(index, 'sigla_conselho', e.target.value)} className={inputClass} placeholder="CRM/CRO" style={{textTransform: 'uppercase'}}/></div>
                             <div className="flex-1 w-full min-w-[120px]"><label className={subLabelClass}>Nº Registro</label><input required value={item.registro_conselho} onChange={e=>handleItemChange(index, 'registro_conselho', e.target.value)} className={inputClass} placeholder="000000"/></div>
                             <div className="w-full md:w-24"><label className={subLabelClass}>UF</label><input required value={item.uf_conselho} onChange={e=>handleItemChange(index, 'uf_conselho', e.target.value)} className={inputClass} placeholder="UF" maxLength={2} style={{textTransform: 'uppercase'}}/></div>
