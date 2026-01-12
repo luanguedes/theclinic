@@ -4,11 +4,10 @@ import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-    User, Phone, Mail, Save, ArrowLeft, Plus, Trash2, 
+    User, Save, ArrowLeft, Plus, Trash2, 
     BriefcaseMedical, ChevronDown, Check, X, Loader2, Award 
 } from 'lucide-react';
 
-// --- COMPONENTE DE SELEÇÃO PESQUISÁVEL OTIMIZADO ---
 const SearchableSelect = ({ options, value, onChange, placeholder, required }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -42,13 +41,6 @@ const SearchableSelect = ({ options, value, onChange, placeholder, required }) =
         setIsOpen(false);
     };
 
-    const handleClear = (e) => {
-        e.stopPropagation();
-        onChange('');
-        setQuery('');
-        setIsOpen(false);
-    };
-
     return (
         <div className="relative w-full" ref={containerRef}>
             <div className="relative">
@@ -64,18 +56,15 @@ const SearchableSelect = ({ options, value, onChange, placeholder, required }) =
                     autoComplete="off"
                 />
                 <div className="absolute right-2 top-2.5 flex items-center gap-1 text-slate-400">
-                    {value && (
-                        <button type="button" onClick={handleClear} className="hover:text-red-500 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"><X size={14}/></button>
-                    )}
+                    {value && <button type="button" onClick={(e) => { e.stopPropagation(); onChange(''); setQuery(''); }} className="hover:text-red-500 p-0.5"><X size={14}/></button>}
                     <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
                 </div>
             </div>
             {isOpen && (
                 <ul className="absolute z-[100] w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-auto mt-1 animate-in fade-in zoom-in duration-100">
-                    {filtered.slice(0, 50).map(opt => (
-                        <li key={opt.id} onMouseDown={() => handleSelect(opt.id, opt.label)} className={`p-2.5 cursor-pointer text-sm border-b last:border-0 border-slate-100 dark:border-slate-700 flex justify-between items-center transition-colors ${String(value) === String(opt.id) ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'}`}>
-                            {opt.label}
-                            {String(value) === String(opt.id) && <Check size={14}/>}
+                    {filtered.map(opt => (
+                        <li key={opt.id} onMouseDown={() => handleSelect(opt.id, opt.label)} className={`p-2.5 cursor-pointer text-sm border-b last:border-0 border-slate-100 dark:border-slate-700 flex justify-between items-center transition-colors ${String(value) === String(opt.id) ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}>
+                            {opt.label} {String(value) === String(opt.id) && <Check size={14}/>}
                         </li>
                     ))}
                     {filtered.length === 0 && <li className="p-3 text-sm text-slate-400 text-center">Nenhum resultado.</li>}
@@ -91,9 +80,7 @@ export default function ProfissionalForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   
-  const [formData, setFormData] = useState({ 
-      nome: '', cpf: '', data_nascimento: '', email: '', telefone: '' 
-  });
+  const [formData, setFormData] = useState({ nome: '', cpf: '', data_nascimento: '' });
   const [items, setItems] = useState([]); 
   const [listaEspecialidades, setListaEspecialidades] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -101,20 +88,13 @@ export default function ProfissionalForm() {
 
   const hoje = new Date().toISOString().split('T')[0];
 
-  const mascaraCPF = (value) => {
-    return value
-      .replace(/\D/g, '') 
-      .replace(/(\d{3})(\d)/, '$1.$2') 
-      .replace(/(\d{3})(\d)/, '$1.$2') 
-      .replace(/(\d{3})(\d{1,2})/, '$1-$2') 
-      .slice(0, 14);
-  };
+  const mascaraCPF = (value) => value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').slice(0, 14);
 
   useEffect(() => {
     if(api) {
         setFetching(true);
-        // Traz TODAS as especialidades
-        api.get('configuracoes/especialidades/?nopage=true') // Rota corrigida conforme padrão
+        // CORREÇÃO DE ROTA
+        api.get('especialidades/?nopage=true') 
             .then(res => setListaEspecialidades(res.data.results || res.data))
             .catch(() => notify.error("Erro ao carregar lista de especialidades."));
         
@@ -123,25 +103,18 @@ export default function ProfissionalForm() {
                 setFormData({ 
                     nome: res.data.nome, 
                     cpf: res.data.cpf, 
-                    data_nascimento: res.data.data_nascimento,
-                    email: res.data.email,
-                    telefone: res.data.telefone
+                    data_nascimento: res.data.data_nascimento
                 });
                 setItems(res.data.especialidades || []);
-            }).catch(() => notify.error("Erro ao carregar dados do profissional."))
+            }).catch(() => notify.error("Erro ao carregar dados."))
               .finally(() => setFetching(false));
-        } else {
-            setFetching(false);
-        }
+        } else { setFetching(false); }
     }
   }, [id, api]);
 
   const handleChange = (e) => {
     let { name, value } = e.target;
-    if (name === 'data_nascimento') {
-        const partes = value.split('-');
-        if (partes[0] && partes[0].length > 4) return;
-    }
+    if (name === 'data_nascimento' && value.split('-')[0].length > 4) return;
     if (name === 'cpf') value = mascaraCPF(value);
     setFormData({ ...formData, [name]: value });
   };
@@ -151,8 +124,7 @@ export default function ProfissionalForm() {
   };
 
   const handleRemoveItem = async (index) => {
-    const confirm = await confirmDialog("Remover esta especialidade do profissional?", "Remover Especialidade");
-    if(confirm) {
+    if(await confirmDialog("Remover esta especialidade?", "Remover", "Sim", "Não")) {
         setItems(items.filter((_, i) => i !== index));
     }
   };
@@ -165,18 +137,8 @@ export default function ProfissionalForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (formData.data_nascimento > hoje) {
-        return notify.warning("A data de nascimento não pode ser futura.");
-    }
-    const anoNasc = parseInt(formData.data_nascimento.split('-')[0]);
-    if (anoNasc < 1920) {
-        return notify.warning("Por favor, insira um ano de nascimento válido.");
-    }
-
-    if (items.length === 0) {
-        return notify.warning("Vincule ao menos uma especialidade ao profissional.");
-    }
+    if (formData.data_nascimento > hoje) return notify.warning("Data de nascimento inválida.");
+    if (items.length === 0) return notify.warning("Vincule ao menos uma especialidade.");
 
     setLoading(true);
     const cpfLimpo = formData.cpf.replace(/\D/g, ''); 
@@ -185,146 +147,59 @@ export default function ProfissionalForm() {
     try {
         if(id) await api.put(`profissionais/${id}/`, payload);
         else await api.post('profissionais/', payload);
-        
-        notify.success("Profissional salvo com sucesso!");
+        notify.success("Salvo com sucesso!");
         navigate('/profissionais');
     } catch (err) { 
-        if(err.response?.data?.cpf) notify.warning("Este CPF já está cadastrado.");
-        else notify.error('Erro ao salvar profissional.'); 
-    }
-    finally { setLoading(false); }
+        if(err.response?.data?.cpf) notify.warning("CPF já cadastrado.");
+        else notify.error('Erro ao salvar.'); 
+    } finally { setLoading(false); }
   };
 
   const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-all font-bold";
-  const labelClass = "block text-xs font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-tight";
   const subLabelClass = "text-[10px] font-black text-slate-400 mb-1 block uppercase tracking-widest";
 
-  if (fetching) {
-      return (
-          <Layout>
-              <div className="flex flex-col items-center justify-center h-[50vh]">
-                  <Loader2 className="animate-spin text-blue-600 mb-2" size={32}/>
-                  <span className="text-slate-500 font-bold uppercase tracking-widest text-xs">Carregando ficha...</span>
-              </div>
-          </Layout>
-      )
-  }
+  if (fetching) return <Layout><div className="h-[50vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600"/></div></Layout>;
 
   return (
     <Layout>
       <div className="max-w-5xl mx-auto pb-20">
-        <button 
-            onClick={()=>navigate('/profissionais')} 
-            className="mb-4 flex items-center gap-2 text-slate-500 hover:text-blue-600 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-2 rounded-lg transition-colors font-bold text-sm"
-        >
-            <ArrowLeft size={18}/> Voltar para lista
-        </button>
-
-        <h1 className="text-2xl font-black mb-6 text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-tighter">
-            {id ? 'Editar Profissional' : 'Novo Profissional'}
-        </h1>
+        <button onClick={()=>navigate('/profissionais')} className="mb-4 flex items-center gap-2 text-slate-500 hover:text-blue-600 bg-transparent hover:bg-slate-100 px-3 py-2 rounded-lg transition-colors font-bold text-sm"><ArrowLeft size={18}/> Voltar</button>
+        <h1 className="text-2xl font-black mb-6 text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-tighter">{id ? 'Editar Profissional' : 'Novo Profissional'}</h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
             <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
-                <h2 className="font-black text-sm uppercase tracking-widest mb-6 text-slate-800 dark:text-white border-b pb-2 dark:border-slate-700 flex items-center gap-2">
-                    <User size={18} className="text-blue-500"/> Dados Cadastrais
-                </h2>
+                <h2 className="font-black text-sm uppercase tracking-widest mb-6 text-slate-800 dark:text-white border-b pb-2 dark:border-slate-700 flex items-center gap-2"><User size={18} className="text-blue-500"/> Dados Cadastrais</h2>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                    <div className="md:col-span-6">
-                        <label className={labelClass}>Nome Completo</label>
-                        <input required value={formData.nome} onChange={e=>setFormData({...formData, nome:e.target.value})} className={inputClass} placeholder="Nome do médico"/>
-                    </div>
-                    <div className="md:col-span-3">
-                        <label className={labelClass}>CPF</label>
-                        <input required placeholder="000.000.000-00" value={formData.cpf} onChange={handleChange} name="cpf" className={inputClass} maxLength={14}/>
-                    </div>
-                    <div className="md:col-span-3">
-                        <label className={labelClass}>Nascimento</label>
-                        <input required type="date" name="data_nascimento" max={hoje} value={formData.data_nascimento} onChange={handleChange} className={inputClass}/>
-                    </div>
-                    <div className="md:col-span-6">
-                        <label className={labelClass}>E-mail</label>
-                        <div className="relative">
-                            <Mail className="absolute left-3 top-3 text-slate-400" size={16}/>
-                            <input type="email" name="email" value={formData.email} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="medico@clinica.com"/>
-                        </div>
-                    </div>
-                    <div className="md:col-span-6">
-                        <label className={labelClass}>Telefone / Celular</label>
-                        <div className="relative">
-                            <Phone className="absolute left-3 top-3 text-slate-400" size={16}/>
-                            <input name="telefone" value={formData.telefone} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="(00) 00000-0000"/>
-                        </div>
-                    </div>
+                    <div className="md:col-span-6"><label className={subLabelClass}>Nome Completo</label><input required value={formData.nome} onChange={e=>setFormData({...formData, nome:e.target.value})} className={inputClass} placeholder="Nome do médico"/></div>
+                    <div className="md:col-span-3"><label className={subLabelClass}>CPF</label><input required placeholder="000.000.000-00" value={formData.cpf} onChange={handleChange} name="cpf" className={inputClass} maxLength={14}/></div>
+                    <div className="md:col-span-3"><label className={subLabelClass}>Nascimento</label><input required type="date" name="data_nascimento" max={hoje} value={formData.data_nascimento} onChange={handleChange} className={inputClass}/></div>
                 </div>
             </div>
 
             <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
                 <div className="flex justify-between items-center mb-6 border-b pb-2 dark:border-slate-700">
-                    <h2 className="font-black text-sm uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2">
-                        <BriefcaseMedical size={18} className="text-pink-600"/> Vínculos e Conselhos
-                    </h2>
-                    
-                    <button 
-                        type="button" 
-                        onClick={handleAddItem} 
-                        className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-4 py-2 rounded-xl transition-colors bg-blue-50 dark:bg-blue-900/10"
-                    >
-                        <Plus size={16}/> Adicionar Especialidade
-                    </button>
+                    <h2 className="font-black text-sm uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2"><BriefcaseMedical size={18} className="text-pink-600"/> Vínculos e Conselhos</h2>
+                    <button type="button" onClick={handleAddItem} className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-1 hover:bg-blue-50 px-4 py-2 rounded-xl transition-colors bg-blue-50"><Plus size={16}/> Adicionar Especialidade</button>
                 </div>
 
-                {items.length === 0 && (
-                    <div className="text-center py-12 px-4 text-slate-400 border-2 border-dashed rounded-2xl bg-slate-50/50 dark:bg-slate-900/20">
-                        <Award size={32} className="mx-auto mb-2 opacity-50"/>
-                        <span className="font-bold text-xs uppercase">Nenhuma especialidade vinculada</span>
-                        <p className="text-[10px] mt-1">Clique no botão acima para adicionar CRM/RQE.</p>
-                    </div>
-                )}
+                {items.length === 0 && <div className="text-center py-12 px-4 text-slate-400 border-2 border-dashed rounded-2xl bg-slate-50/50"><Award size={32} className="mx-auto mb-2 opacity-50"/><span className="font-bold text-xs uppercase">Nenhuma especialidade vinculada</span></div>}
 
                 <div className="space-y-4">
                     {items.map((item, index) => (
                         <div key={index} className="flex flex-col md:flex-row gap-4 items-end bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in slide-in-from-top-2 duration-300">
-                            
-                            <div className="flex-[2] w-full min-w-[200px]">
-                                <label className={subLabelClass}>Especialidade</label>
-                                <SearchableSelect
-                                    options={listaEspecialidades.map(e => ({ id: e.id, label: e.nome }))}
-                                    value={item.especialidade_id}
-                                    onChange={(val) => handleItemChange(index, 'especialidade_id', val)}
-                                    placeholder="Selecione..."
-                                    required={true}
-                                />
-                            </div>
-
-                            <div className="flex-1 w-full min-w-[100px]">
-                                <label className={subLabelClass}>Conselho</label>
-                                <input required value={item.sigla_conselho} onChange={e=>handleItemChange(index, 'sigla_conselho', e.target.value)} className={inputClass} placeholder="CRM/CRO" style={{textTransform: 'uppercase'}}/>
-                            </div>
-
-                            <div className="flex-1 w-full min-w-[120px]">
-                                <label className={subLabelClass}>Nº Registro</label>
-                                <input required value={item.registro_conselho} onChange={e=>handleItemChange(index, 'registro_conselho', e.target.value)} className={inputClass} placeholder="000000"/>
-                            </div>
-
-                            <div className="w-full md:w-24">
-                                <label className={subLabelClass}>UF</label>
-                                <input required value={item.uf_conselho} onChange={e=>handleItemChange(index, 'uf_conselho', e.target.value)} className={inputClass} placeholder="UF" maxLength={2} style={{textTransform: 'uppercase'}}/>
-                            </div>
-
-                            <button type="button" onClick={()=>handleRemoveItem(index)} className="p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-colors bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-red-200 shadow-sm" title="Remover">
-                                <Trash2 size={20}/>
-                            </button>
+                            <div className="flex-[2] w-full min-w-[200px]"><label className={subLabelClass}>Especialidade</label><SearchableSelect options={listaEspecialidades.map(e => ({ id: e.id, label: e.nome }))} value={item.especialidade_id} onChange={(val) => handleItemChange(index, 'especialidade_id', val)} placeholder="Selecione..." required={true} /></div>
+                            <div className="flex-1 w-full min-w-[100px]"><label className={subLabelClass}>Conselho</label><input required value={item.sigla_conselho} onChange={e=>handleItemChange(index, 'sigla_conselho', e.target.value)} className={inputClass} placeholder="CRM/CRO" style={{textTransform: 'uppercase'}}/></div>
+                            <div className="flex-1 w-full min-w-[120px]"><label className={subLabelClass}>Nº Registro</label><input required value={item.registro_conselho} onChange={e=>handleItemChange(index, 'registro_conselho', e.target.value)} className={inputClass} placeholder="000000"/></div>
+                            <div className="w-full md:w-24"><label className={subLabelClass}>UF</label><input required value={item.uf_conselho} onChange={e=>handleItemChange(index, 'uf_conselho', e.target.value)} className={inputClass} placeholder="UF" maxLength={2} style={{textTransform: 'uppercase'}}/></div>
+                            <button type="button" onClick={()=>handleRemoveItem(index)} className="p-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors bg-white border border-slate-200 shadow-sm"><Trash2 size={20}/></button>
                         </div>
                     ))}
                 </div>
             </div>
 
             <div className="flex justify-end gap-4 pt-6">
-                <button type="button" onClick={() => navigate('/profissionais')} className="px-8 py-4 text-slate-500 dark:text-slate-400 font-black uppercase text-xs tracking-widest hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancelar</button>
-                <button disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50">
-                    {loading ? <Loader2 className="animate-spin" size={20}/> : <><Save size={20}/> Salvar Dados</>}
-                </button>
+                <button type="button" onClick={() => navigate('/profissionais')} className="px-8 py-4 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-100 rounded-xl transition-colors">Cancelar</button>
+                <button disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl active:scale-95 transition-all disabled:opacity-50">{loading ? <Loader2 className="animate-spin" size={20}/> : <><Save size={20}/> Salvar Dados</>}</button>
             </div>
         </form>
       </div>

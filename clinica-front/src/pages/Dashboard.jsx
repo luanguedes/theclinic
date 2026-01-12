@@ -9,7 +9,7 @@ import {
     Calendar, Lock, Eye, EyeOff, Loader2 
 } from 'lucide-react';
 
-// --- COMPONENTE DE BLOQUEIO VISUAL (Mantido) ---
+// --- COMPONENTE DE BLOQUEIO VISUAL (Mantido Original) ---
 const RestrictedOverlay = ({ label }) => (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 dark:bg-slate-900/80 backdrop-blur-[4px] rounded-[24px] transition-all border-2 border-dashed border-slate-200 dark:border-slate-700">
         <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-xl mb-3 border border-slate-100 dark:border-slate-700">
@@ -26,7 +26,7 @@ export default function Dashboard() {
     const { notify } = useNotification();
     const navigate = useNavigate();
     
-    // --- PERMISSÕES ---
+    // --- PERMISSÕES (Mantidas Originais + Ajuste Admin no Financeiro) ---
     const isSuperUser = user?.is_superuser;
     const isProfissional = user?.acesso_atendimento || !!user?.profissional_id || isSuperUser;
     const isRecepcao = user?.acesso_agendamento || isSuperUser;
@@ -44,7 +44,7 @@ export default function Dashboard() {
     const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0, receitaEstimada: 0 });
     const [listaHoje, setListaHoje] = useState([]); 
     const [loading, setLoading] = useState(true);
-    const [showValues, setShowValues] = useState(false);
+    const [showValues, setShowValues] = useState(false); // NOVO: Estado para o olhinho
 
     useEffect(() => {
         if (api) carregarDados();
@@ -58,7 +58,7 @@ export default function Dashboard() {
             const dadosDiaBrutos = resDia.data.results || resDia.data;
             const agendaAtivaDia = dadosDiaBrutos.filter(a => a.status !== 'cancelado');
             
-            // Simulação de ocupação baseada em meta de 20 atendimentos
+            // Cálculo de Ocupação (Simulado: assumindo 20 slots diários como 100%)
             const perc = Math.min(Math.round((agendaAtivaDia.length / 20) * 100), 100);
 
             setListaHoje(agendaAtivaDia);
@@ -73,19 +73,20 @@ export default function Dashboard() {
             const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
             const dadosMesBrutos = resMes.data.results || resMes.data;
 
-            // Filtra pacientes válidos (excluindo cancelados)
-            const pacientesValidosMes = dadosMesBrutos.filter(a => a.status !== 'cancelado');
+            // Filtra pacientes válidos (excluindo cancelados/faltas para contagem de atendimento)
+            const pacientesValidosMes = dadosMesBrutos.filter(a => a.status !== 'cancelado' && a.status !== 'faltou');
 
             let receitaConfirmada = 0;
             let receitaEstimada = 0;
 
+            // Lógica Financeira (Admin ou Financeiro vê tudo)
             if (isFinanceiro) {
                 receitaConfirmada = dadosMesBrutos
                     .filter(a => a.fatura_pago === true && a.status !== 'cancelado')
                     .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
 
                 receitaEstimada = dadosMesBrutos
-                    .filter(a => a.status !== 'cancelado')
+                    .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
                     .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
             }
 
@@ -108,7 +109,7 @@ export default function Dashboard() {
         }
     };
 
-    // Componente de Card Reutilizável
+    // Componente de Card Reutilizável (Com suporte a Olhinho e Bloqueio)
     const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading, restricted, restrictedLabel, isCurrency }) => (
         <div className="relative bg-white dark:bg-slate-800 p-6 rounded-[24px] border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:shadow-xl hover:-translate-y-1 overflow-hidden group h-full flex flex-col justify-between">
             {restricted && <RestrictedOverlay label={restrictedLabel} />}
@@ -120,11 +121,14 @@ export default function Dashboard() {
                         <div className="h-10 w-2/3 bg-slate-100 dark:bg-slate-700 animate-pulse rounded-xl mt-2"></div>
                     ) : (
                         <div className="flex items-center gap-2">
+                            {/* APLICAÇÃO DO BLUR SE FOR MOEDA E ESTIVER ESCONDIDO */}
                             <h3 className={`text-2xl font-black text-slate-900 dark:text-white tracking-tighter ${isCurrency && !showValues && isFinanceiro ? 'blur-md select-none opacity-50' : ''}`}>
                                 {value}
                             </h3>
+                            
+                            {/* BOTÃO DO OLHINHO (SÓ APARECE SE FOR MOEDA E TIVER ACESSO) */}
                             {isCurrency && isFinanceiro && (
-                                <button onClick={() => setShowValues(!showValues)} className="text-slate-300 hover:text-blue-500 transition-colors">
+                                <button onClick={() => setShowValues(!showValues)} className="text-slate-300 hover:text-blue-500 transition-colors p-1 rounded-full hover:bg-slate-100">
                                     {showValues ? <EyeOff size={16}/> : <Eye size={16}/>}
                                 </button>
                             )}
@@ -148,7 +152,7 @@ export default function Dashboard() {
         <Layout>
             <div className="max-w-7xl mx-auto pb-20">
                 
-                {/* HEADER COM FILTROS */}
+                {/* HEADER COM FILTROS INTELIGENTES */}
                 <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
                     <div>
                         <div className="flex items-center gap-3 mb-1">
@@ -157,7 +161,7 @@ export default function Dashboard() {
                                 Visão Geral
                             </h1>
                         </div>
-                        {/* TEXTO CORRIGIDO AQUI */}
+                        {/* TEXTO AJUSTADO: GESTÃO ESTRATÉGICA */}
                         <p className="text-slate-400 dark:text-slate-500 text-xs font-black uppercase tracking-[0.2em] ml-5">
                             Gestão Estratégica • {user?.first_name || user?.username}
                         </p>
@@ -185,7 +189,7 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* KPIs PRINCIPAIS */}
+                {/* KPIs PRINCIPAIS (TEXTOS E ÍCONES AJUSTADOS) */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 font-bold">
                     <StatCard 
                         title="Fluxo do Dia"
@@ -196,7 +200,7 @@ export default function Dashboard() {
                         loading={loading}
                     />
 
-                    {/* CORREÇÃO AQUI: Título e Subtítulo alterados */}
+                    {/* TEXTO AJUSTADO: ATENDIMENTOS PREVISTOS */}
                     <StatCard 
                         title="Atendimentos Previstos"
                         value={`${statsMes.totalPacientes} Pacientes`}
@@ -206,6 +210,7 @@ export default function Dashboard() {
                         loading={loading}
                     />
 
+                    {/* CARD FINANCEIRO COM OLHINHO E BLOQUEIO */}
                     <StatCard 
                         title="Liquidez Confirmada"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
@@ -219,7 +224,7 @@ export default function Dashboard() {
                     />
                 </div>
 
-                {/* GRID DE CONTEÚDO */}
+                {/* GRID DE CONTEÚDO (MANTIDO IDÊNTICO AO SEU) */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
                     {/* LISTAGEM DA AGENDA (MAIOR) */}

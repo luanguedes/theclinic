@@ -40,28 +40,71 @@ export const generateAppointmentReceipt = async (agendamento) => {
     const contentWidth = 170;
     let y = 20;
 
-    // ================= 1. CABEÇALHO (BRANDING) =================
+    // --- CONSTRUÇÃO DO ENDEREÇO COMPLETO ---
+    const enderecoCompletoClinica = [
+        pdfData.clinica_endereco,
+        pdfData.clinica_numero ? `nº ${pdfData.clinica_numero}` : null,
+        pdfData.clinica_complemento ? `(${pdfData.clinica_complemento})` : null,
+        pdfData.clinica_bairro ? `- ${pdfData.clinica_bairro}` : null,
+        pdfData.clinica_cidade ? `- ${pdfData.clinica_cidade}` : null
+    ].filter(Boolean).join(' ');
+
+    const telefoneClinica = pdfData.clinica_telefone || "";
+
+    // ================= 1. CABEÇALHO (BRANDING MELHORADO) =================
     if (logoData) {
         doc.addImage(logoData, 'PNG', marginLeft, y, 25, 25);
-        // Texto ao lado da logo
+        
+        // Nome da Clínica
         doc.setFont("helvetica", "bold");
         doc.setFontSize(18);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.text(pdfData.clinica_nome?.toUpperCase() || "THECLINIC", 52, y + 10);
+        doc.text(pdfData.clinica_nome?.toUpperCase() || "THECLINIC", 52, y + 8);
         
+        // Endereço no Cabeçalho (NOVO)
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
+        doc.setFontSize(8);
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        doc.text("COMPROVANTE DE AGENDAMENTO", 52, y + 16);
+        
+        // Quebra o endereço se for muito longo
+        const enderecoLines = doc.splitTextToSize(enderecoCompletoClinica, 130);
+        doc.text(enderecoLines, 52, y + 14);
+        
+        // Telefone
+        if(telefoneClinica) {
+            doc.text(`Tel: ${telefoneClinica}`, 52, y + 14 + (enderecoLines.length * 4));
+        }
+
+        // Título do Documento
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text("COMPROVANTE DE AGENDAMENTO", 52, y + 24);
+
     } else {
+        // Sem logo (Alinhado à esquerda)
         doc.setFont("helvetica", "bold");
         doc.setFontSize(22);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text(pdfData.clinica_nome?.toUpperCase() || "THECLINIC", marginLeft, y);
-        y += 10;
+        y += 8;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        
+        const enderecoLines = doc.splitTextToSize(enderecoCompletoClinica, 170);
+        doc.text(enderecoLines, marginLeft, y);
+        y += (enderecoLines.length * 5);
+        
+        if(telefoneClinica) {
+            doc.text(`Tel: ${telefoneClinica}`, marginLeft, y);
+            y += 6;
+        }
+        
+        y += 4;
     }
 
-    y = logoData ? 55 : 40;
+    y = logoData ? 60 : y + 15; // Ajuste dinâmico da altura
 
     // ================= 2. CARD DE DATA E HORA (DESTAQUE) =================
     doc.setFillColor(248, 250, 252); // bg-slate-50
@@ -129,7 +172,18 @@ export const generateAppointmentReceipt = async (agendamento) => {
     drawField("Convênio / Plano", agendamento.nome_convenio || "PARTICULAR", marginLeft, y, 80);
     drawField("Unidade de Atendimento", pdfData.clinica_nome || "CONSULTÓRIO CENTRAL", marginLeft + 80, y, 90);
     y += 15;
-    drawField("Endereço da Unidade", `${pdfData.clinica_endereco || ''} - ${pdfData.clinica_bairro || ''}`, marginLeft, y, 170);
+    
+    // Aqui usamos a variável que já montamos lá em cima
+    const enderecoLinesBody = doc.splitTextToSize(enderecoCompletoClinica, 170);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text("ENDEREÇO DA UNIDADE", marginLeft, y);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(enderecoLinesBody, marginLeft, y + 5);
 
     // ================= 5. OBSERVAÇÕES E ORIENTAÇÕES =================
     y += 30;

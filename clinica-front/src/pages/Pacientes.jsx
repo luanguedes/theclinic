@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { 
   Search, UserPlus, MapPin, Pencil, Trash2, Save, ArrowLeft, Loader2, 
-  User, Heart, Accessibility, Users, Baby, Eye, EyeOff, ShieldCheck
+  User, Heart, Accessibility, Users, Baby, Eye, EyeOff, ShieldCheck,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import Layout from '../components/Layout';
 
@@ -40,13 +41,34 @@ export default function Pacientes() {
   const hoje = new Date().toISOString().split('T')[0];
 
   // --- MÁSCARAS E UTILITÁRIOS ---
-  const mascaraCPF = (v) => v.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').slice(0, 14);
-  const mascaraTelefone = (v) => v.replace(/\D/g, '').replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').slice(0, 15);
-  const mascaraCEP = (v) => v.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2').slice(0, 9);
+  const mascaraCPF = (v) => {
+    return v
+      .replace(/\D/g, '') // Remove tudo o que não é dígito
+      .replace(/(\d{3})(\d)/, '$1.$2') // Coloca um ponto entre o terceiro e o quarto dígitos
+      .replace(/(\d{3})(\d)/, '$1.$2') // Coloca um ponto entre o terceiro e o quarto dígitos de novo (para o segundo bloco de números)
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2') // Coloca um hífen entre o terceiro e o quarto dígitos
+      .slice(0, 14); // Limita o tamanho
+  };
+
+  const mascaraTelefone = (v) => {
+    return v
+      .replace(/\D/g, '')
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{5})(\d)/, '$1-$2')
+      .slice(0, 15);
+  };
+
+  const mascaraCEP = (v) => {
+    return v
+      .replace(/\D/g, '')
+      .replace(/(\d{5})(\d)/, '$1-$2')
+      .slice(0, 9);
+  };
   
   const ocultarCPF = (cpf) => {
     if (!cpf) return "---";
     const limpo = cpf.replace(/\D/g, '');
+    if (limpo.length < 11) return cpf;
     return `***.${limpo.slice(3, 6)}.${limpo.slice(6, 9)}-**`;
   };
 
@@ -62,11 +84,19 @@ export default function Pacientes() {
 
   const handleChange = (e) => {
     let { name, value, type, checked } = e.target;
-    if (name === 'data_nascimento' && value.split('-')[0]?.length > 4) return;
+    
+    // Tratamento específico para campos mascarados
     if (name === 'cpf') value = mascaraCPF(value);
     if (name === 'telefone') value = mascaraTelefone(value);
     if (name === 'cep') value = mascaraCEP(value);
-    setForm({ ...form, [name]: type === 'checkbox' ? checked : value });
+    
+    // Validação de ano de nascimento
+    if (name === 'data_nascimento') {
+        const partes = value.split('-');
+        if (partes[0] && partes[0].length > 4) return; // Impede anos com 5 dígitos
+    }
+
+    setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   // --- API ---
@@ -118,12 +148,16 @@ export default function Pacientes() {
     if (!form.aceite_lgpd) return notify.warning("O aceite do Termo de Privacidade é obrigatório.");
     if (form.data_nascimento > hoje) return notify.warning("Data de nascimento inválida.");
 
+    // Limpa máscaras antes de enviar (opcional, dependendo do backend)
+    // const payload = { ...form, cpf: form.cpf.replace(/\D/g, ''), telefone: form.telefone.replace(/\D/g, ''), cep: form.cep.replace(/\D/g, '') };
+    const payload = form; // Enviando com máscara se o backend aceitar, senão descomente a linha acima
+
     try {
       if (editandoId) {
-        await api.put(`pacientes/${editandoId}/`, form);
+        await api.put(`pacientes/${editandoId}/`, payload);
         notify.success("Cadastro atualizado!");
       } else {
-        await api.post('pacientes/', form);
+        await api.post('pacientes/', payload);
         notify.success("Paciente cadastrado com sucesso!");
       }
       setViewMode('list');
@@ -202,7 +236,8 @@ export default function Pacientes() {
                         {p.telefone || '---'}
                       </td>
                       <td className="px-8 py-6 text-right">
-                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* CORREÇÃO: Botões de ação sempre visíveis, removido opacity-0 */}
+                        <div className="flex justify-end gap-2">
                           <button onClick={() => {setForm(p); setEditandoId(p.id); setViewMode('form');}} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar"><Pencil size={18} /></button>
                           <button onClick={() => handleExcluir(p.id)} className="p-2.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="Remover"><Trash2 size={18} /></button>
                         </div>
@@ -215,9 +250,9 @@ export default function Pacientes() {
               {/* Paginação */}
               {totalPages > 1 && (
                   <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t dark:border-slate-700 flex justify-between items-center">
-                      <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="p-2 disabled:opacity-30 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-all"><ChevronLeft/></button>
+                      <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="p-2 disabled:opacity-30 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-all"><ChevronLeft size={20}/></button>
                       <span className="text-xs font-black uppercase text-slate-400 tracking-widest">Página {page} de {totalPages}</span>
-                      <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="p-2 disabled:opacity-30 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-all"><ChevronRight/></button>
+                      <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="p-2 disabled:opacity-30 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-all"><ChevronRight size={20}/></button>
                   </div>
               )}
             </div>
@@ -289,8 +324,3 @@ export default function Pacientes() {
     </Layout>
   );
 }
-
-// Subcomponentes extras para facilitar navegação
-const ChevronLeft = () => <ChevronLeftIcon size={20}/>;
-const ChevronRight = () => <ChevronRightIcon size={20}/>;
-import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon } from 'lucide-react';
