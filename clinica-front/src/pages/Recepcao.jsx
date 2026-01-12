@@ -3,12 +3,12 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    Search, CalendarClock, User, CheckCircle2, 
-    Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil, UserX, RotateCcw,
-    Star, Accessibility, Baby, Users, Heart, AlertTriangle, UserCog, MapPin, 
-    Stethoscope, ShieldCheck, Check
+    Search, User, CheckCircle2, Clock, DollarSign, X, Save, Loader2, 
+    Pencil, UserX, RotateCcw, Star, Accessibility, Baby, Users, Heart, 
+    AlertTriangle, UserCog, MapPin, Stethoscope, ShieldCheck, Check
 } from 'lucide-react';
 
+// Mapeamento visual das prioridades
 const PRIORIDADES = {
     'idoso': { label: 'Idoso (60+)', icon: <Users size={16} strokeWidth={2.5} />, color: 'bg-amber-100 text-amber-700 border-amber-200' },
     'gestante': { label: 'Gestante', icon: <Baby size={16} strokeWidth={2.5} />, color: 'bg-pink-100 text-pink-700 border-pink-200' },
@@ -24,46 +24,46 @@ export default function Recepcao() {
     const [loading, setLoading] = useState(false);
     const [agendamentos, setAgendamentos] = useState([]);
     
-    // Listas para os selects
+    // Listas auxiliares
     const [profissionais, setProfissionais] = useState([]);
     const [especialidades, setEspecialidades] = useState([]);
     const [convenios, setConvenios] = useState([]);
 
+    // Filtros
     const [dataFiltro, setDataFiltro] = useState(new Date().toISOString().split('T')[0]);
     const [profissionalFiltro, setProfissionalFiltro] = useState('');
     const [buscaTexto, setBuscaTexto] = useState('');
     const [statusVisiveis, setStatusVisiveis] = useState(['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou']);
+    
     const [now, setNow] = useState(new Date());
 
-    const [modalOpen, setModalOpen] = useState(false);
+    // Modais
+    const [modalOpen, setModalOpen] = useState(false); // Check-in
     const [selectedItem, setSelectedItem] = useState(null);
     const [loadingCheckin, setLoadingCheckin] = useState(false);
-    
     const [formCheckin, setFormCheckin] = useState({ 
-        valor: '', 
-        forma_pagamento: 'dinheiro', 
-        pago: false,
-        profissional: '',
-        especialidade: '',
-        convenio: ''
+        valor: '', forma_pagamento: 'dinheiro', pago: false, 
+        profissional: '', especialidade: '', convenio: '' 
     });
 
-    const [modalPacienteOpen, setModalPacienteOpen] = useState(false);
+    const [modalPacienteOpen, setModalPacienteOpen] = useState(false); // Edição Paciente
     const [pacienteParaEditar, setPacienteParaEditar] = useState(null);
     const [loadingPaciente, setLoadingPaciente] = useState(false);
     const [loadingCep, setLoadingCep] = useState(false);
     const [activePriorityMenu, setActivePriorityMenu] = useState(null);
 
-    // --- MÁSCARAS ---
+    // Máscaras
     const mascaraCPF = (v) => v.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').slice(0, 14);
     const mascaraTelefone = (v) => v.replace(/\D/g, '').replace(/^(\d{2})(\d)/g, '($1) $2').replace(/(\d)(\d{4})$/, '$1-$2').slice(0, 15);
     const mascaraCEP = (v) => v.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2').slice(0, 9);
 
+    // Relógio
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 60000);
         return () => clearInterval(timer);
     }, []);
 
+    // Carregamento Inicial
     useEffect(() => {
         if(api) {
             api.get('profissionais/').then(res => setProfissionais(res.data.results || res.data)).catch(() => {});
@@ -72,6 +72,7 @@ export default function Recepcao() {
         }
     }, [api]);
 
+    // Carregar Agenda
     useEffect(() => {
         if(api) carregarAgenda();
     }, [api, dataFiltro, profissionalFiltro]);
@@ -90,6 +91,7 @@ export default function Recepcao() {
         } finally { setLoading(false); }
     };
 
+    // Cálculos
     const calcularEspera = (horaChegada) => {
         if (!horaChegada) return 0;
         const chegada = new Date();
@@ -107,6 +109,17 @@ export default function Recepcao() {
         return !cpf || !tel || !nasc;
     };
 
+    const calcularIdade = (dataNasc) => {
+        if (!dataNasc) return '-';
+        const nasc = new Date(dataNasc);
+        const hoje = new Date();
+        let idade = hoje.getFullYear() - nasc.getFullYear();
+        const m = hoje.getMonth() - nasc.getMonth();
+        if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
+        return idade;
+    };
+
+    // Ações de Paciente
     const handleAbrirEditarPaciente = async (pacienteId) => {
         setLoadingPaciente(true);
         try {
@@ -117,14 +130,11 @@ export default function Recepcao() {
         finally { setLoadingPaciente(false); }
     };
 
-    // --- LÓGICA DE EDIÇÃO DO FORMULÁRIO COM MÁSCARAS ---
     const handlePacienteChange = (e) => {
         let { name, value } = e.target;
-        
         if (name === 'cpf') value = mascaraCPF(value);
         if (name === 'telefone') value = mascaraTelefone(value);
         if (name === 'cep') value = mascaraCEP(value);
-        
         setPacienteParaEditar({ ...pacienteParaEditar, [name]: value });
     };
 
@@ -132,7 +142,6 @@ export default function Recepcao() {
         if (!pacienteParaEditar.cep) return;
         const cepLimpo = pacienteParaEditar.cep.replace(/\D/g, '');
         if (cepLimpo.length !== 8) return;
-        
         setLoadingCep(true);
         try {
             const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
@@ -140,53 +149,41 @@ export default function Recepcao() {
             if (!data.erro) {
                 setPacienteParaEditar(prev => ({ 
                     ...prev, 
-                    logradouro: data.logradouro, 
-                    bairro: data.bairro, 
-                    cidade: data.localidade, 
-                    estado: data.uf 
+                    logradouro: data.logradouro, bairro: data.bairro, cidade: data.localidade, estado: data.uf 
                 }));
                 notify.success("Endereço encontrado!");
-            } else {
-                notify.warning("CEP não encontrado.");
-            }
-        } catch (e) {
-            notify.error("Erro ao buscar CEP.");
-        } finally { 
-            setLoadingCep(false); 
-        }
+            } else { notify.warning("CEP não encontrado."); }
+        } catch (e) { notify.error("Erro ao buscar CEP."); } 
+        finally { setLoadingCep(false); }
     };
 
     const handleSalvarPacienteRapido = async (e) => {
         e.preventDefault();
         setLoadingPaciente(true);
         try {
-            // Remove máscara do CPF antes de enviar
-            const payload = { 
-                ...pacienteParaEditar, 
-                cpf: pacienteParaEditar.cpf.replace(/\D/g, '') 
-            };
+            const payload = { ...pacienteParaEditar, cpf: pacienteParaEditar.cpf.replace(/\D/g, '') };
             await api.put(`pacientes/${pacienteParaEditar.id}/`, payload);
             notify.success("Cadastro atualizado!");
             setModalPacienteOpen(false);
-            carregarAgenda();
+            carregarAgenda(); // Recarrega para atualizar prioridade na lista
         } catch (e) { notify.error("Erro ao atualizar."); } 
         finally { setLoadingPaciente(false); }
     };
 
     const handleSetPriority = async (pacienteId, tipo) => {
         try {
+            // Atualização Otimista
             setAgendamentos(prev => prev.map(ag => 
-                ag.paciente === pacienteId ? { ...ag, prioridade_paciente: tipo } : ag
+                ag.paciente === pacienteId ? { ...ag, paciente_prioridade: tipo } : ag
             ));
             setActivePriorityMenu(null);
             await api.patch(`pacientes/${pacienteId}/`, { prioridade: tipo });
             notify.success("Prioridade atualizada.");
-            carregarAgenda(); 
-        } catch (e) { 
-            notify.error("Erro ao definir prioridade.");
-        }
+            carregarAgenda();
+        } catch (e) { notify.error("Erro ao definir prioridade."); }
     };
 
+    // Ações de Agendamento
     const handleMarcarFalta = async (item) => {
         if (await confirmDialog(`Confirmar falta de ${item.nome_paciente}?`, "Registrar Falta", "Sim, Faltou", "Cancelar", "danger")) {
             try { await api.post(`agendamento/${item.id}/marcar_falta/`); notify.info("Falta registrada."); carregarAgenda(); } 
@@ -201,20 +198,36 @@ export default function Recepcao() {
         }
     };
 
+    const abrirCheckin = (item) => {
+        setSelectedItem(item);
+        let specId = item.especialidade || item.especialidade_id || '';
+        if (!specId && item.nome_especialidade) {
+            const encontrada = especialidades.find(e => e.nome === item.nome_especialidade);
+            if (encontrada) specId = encontrada.id;
+        }
+        setFormCheckin({ 
+            valor: item.valor || '', forma_pagamento: item.fatura_forma_pagamento || 'dinheiro', 
+            pago: item.fatura_pago || false, profissional: item.profissional || '', 
+            especialidade: specId, convenio: item.convenio || '' 
+        });
+        setModalOpen(true);
+    };
+
+    const confirmarCheckin = async () => {
+        setLoadingCheckin(true);
+        try {
+            await api.post(`agendamento/${selectedItem.id}/confirmar_chegada/`, formCheckin);
+            notify.success("Recepção realizada!");
+            setModalOpen(false);
+            carregarAgenda();
+        } catch (error) { notify.error("Erro ao confirmar."); }
+        finally { setLoadingCheckin(false); }
+    };
+
     const verificarAtraso = (horario, status) => {
         if (status !== 'agendado') return false;
         const dataAgendamento = new Date(dataFiltro + 'T' + horario);
         return dataFiltro === new Date().toISOString().split('T')[0] && new Date() > new Date(dataAgendamento.getTime() + 15*60000);
-    };
-
-    const calcularIdade = (dataNasc) => {
-        if (!dataNasc) return '-';
-        const nasc = new Date(dataNasc);
-        const hoje = new Date();
-        let idade = hoje.getFullYear() - nasc.getFullYear();
-        const m = hoje.getMonth() - nasc.getMonth();
-        if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
-        return idade;
     };
 
     const getStatusColor = (status) => {
@@ -226,37 +239,6 @@ export default function Recepcao() {
             case 'faltou': return 'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700';
             default: return 'bg-slate-100 text-slate-600';
         }
-    };
-
-    const abrirCheckin = (item) => {
-        setSelectedItem(item);
-        let specId = item.especialidade || item.especialidade_id || '';
-        
-        if (!specId && item.nome_especialidade) {
-            const encontrada = especialidades.find(e => e.nome === item.nome_especialidade);
-            if (encontrada) specId = encontrada.id;
-        }
-
-        setFormCheckin({ 
-            valor: item.valor || '', 
-            forma_pagamento: item.fatura_forma_pagamento || 'dinheiro', 
-            pago: item.fatura_pago || false,
-            profissional: item.profissional || '', 
-            especialidade: specId, 
-            convenio: item.convenio || '' 
-        });
-        setModalOpen(true);
-    };
-
-    const confirmarCheckin = async () => {
-        setLoadingCheckin(true);
-        try {
-            await api.post(`agendamento/${selectedItem.id}/confirmar_chegada/`, formCheckin);
-            notify.success("Recepção realizada com sucesso!");
-            setModalOpen(false);
-            carregarAgenda();
-        } catch (error) { notify.error("Erro ao confirmar chegada."); }
-        finally { setLoadingCheckin(false); }
     };
 
     const itensFiltrados = agendamentos.filter(item => {
@@ -274,7 +256,6 @@ export default function Recepcao() {
     return (
         <Layout>
             <div className="max-w-7xl mx-auto pb-20 tracking-tight">
-                {/* HEADER */}
                 <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                     <div>
                         <h1 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-tighter">
@@ -284,7 +265,6 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* FILTROS */}
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 mb-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
                     <div><label className={labelClass}>Data</label><input type="date" value={dataFiltro} onChange={e => setDataFiltro(e.target.value)} className={inputClass}/></div>
                     <div><label className={labelClass}>Profissional</label><select value={profissionalFiltro} onChange={e => setProfissionalFiltro(e.target.value)} className={inputClass}><option value="">Todos</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
@@ -300,7 +280,6 @@ export default function Recepcao() {
                     ))}
                 </div>
 
-                {/* TABELA DE AGENDAMENTOS */}
                 <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 min-h-[400px]">
                     <div className="overflow-visible">
                         <table className="w-full text-left">
@@ -320,7 +299,9 @@ export default function Recepcao() {
                                     const atrasado = verificarAtraso(item.horario, item.status);
                                     const esperaMin = item.status === 'aguardando' ? calcularEspera(item.horario_chegada) : 0;
                                     const incompleto = isCadastroIncompleto(item);
-                                    const prioridadeKey = item.prioridade_paciente || item.paciente_prioridade || item.detalhes_pdf?.paciente_prioridade;
+                                    
+                                    // Tenta ler a prioridade de todas as fontes possíveis
+                                    const prioridadeKey = item.paciente_prioridade || item.prioridade || (item.paciente_dados && item.paciente_dados.prioridade);
                                     const pInfo = PRIORIDADES[prioridadeKey];
 
                                     return (
@@ -380,6 +361,7 @@ export default function Recepcao() {
                                             <td className="px-8 py-6 text-right">
                                                 <div className="flex justify-end items-center gap-2">
                                                     <div className={item.fatura_pago ? 'text-emerald-500' : 'text-slate-200'}><DollarSign size={20} strokeWidth={3}/></div>
+                                                    
                                                     {item.status === 'agendado' ? (
                                                         <>
                                                             <button onClick={() => handleMarcarFalta(item)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="Faltou"><UserX size={18}/></button>
@@ -403,11 +385,10 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* MODAL CHECKIN */}
+                {/* MODAL CHECKIN (Cabeçalho com Prioridade Corrigido) */}
                 {modalOpen && selectedItem && (
                     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
                         <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden border border-white/10">
-                             {/* ... (CONTEÚDO DO CHECKIN MANTIDO, FOCANDO NA EDIÇÃO DE PACIENTE ABAIXO) ... */}
                              <div className="bg-green-600 p-8 text-white relative overflow-hidden">
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-4">
@@ -416,6 +397,15 @@ export default function Recepcao() {
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <h3 className="text-2xl font-black uppercase tracking-tighter">Confirmação de Recepção</h3>
+                                        
+                                        {/* ÍCONE DE PRIORIDADE NO MODAL */}
+                                        {(selectedItem.paciente_prioridade || selectedItem.prioridade) && 
+                                         PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade] && (
+                                            <div className="bg-white text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-lg border-2 border-white/20">
+                                                {PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade].icon}
+                                                {PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade].label}
+                                            </div>
+                                        )}
                                     </div>
                                     <p className="text-green-100 text-sm font-bold uppercase tracking-widest mt-1 opacity-80">{selectedItem.nome_paciente}</p>
                                 </div>

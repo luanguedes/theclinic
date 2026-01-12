@@ -3,6 +3,13 @@ from .models import Agendamento, BloqueioAgenda
 from configuracoes.models import DadosClinica
 from profissionais.models import ProfissionalEspecialidade
 from agendas.models import AgendaConfig
+from pacientes.models import Paciente  # Certifique-se que o import do model Paciente está correto
+
+# --- SERIALIZER DE PACIENTE (Para uso geral ou aninhado) ---
+class PacienteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Paciente
+        fields = '__all__'
 
 class BloqueioAgendaSerializer(serializers.ModelSerializer):
     # Usamos SerializerMethodField para evitar erro quando for Null
@@ -23,6 +30,11 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     telefone_paciente = serializers.CharField(source='paciente.telefone', read_only=True)
     nome_profissional = serializers.CharField(source='profissional.nome', read_only=True)
     nome_especialidade = serializers.CharField(source='especialidade.nome', read_only=True)
+    
+    # --- NOVOS CAMPOS PARA CORRIGIR A RECEPÇÃO ---
+    # Busca a prioridade direto do cadastro do paciente em tempo real
+    paciente_prioridade = serializers.CharField(source='paciente.prioridade', read_only=True)
+    paciente_cpf = serializers.CharField(source='paciente.cpf', read_only=True)
     
     # Campos Calculados
     nome_convenio = serializers.SerializerMethodField()
@@ -119,6 +131,10 @@ class AgendamentoSerializer(serializers.ModelSerializer):
             "paciente_nascimento": obj.paciente.data_nascimento,
             "paciente_sexo": obj.paciente.sexo,
             "paciente_mae": obj.paciente.nome_mae,
+            
+            # Adicionado aqui também para garantir consistência
+            "paciente_prioridade": obj.paciente.prioridade,
+            
             "paciente_endereco": f"{obj.paciente.logradouro}, {obj.paciente.numero} - {obj.paciente.bairro}",
             "paciente_cidade": f"{obj.paciente.cidade}/{obj.paciente.estado}",
             "profissional_registro": registro,
