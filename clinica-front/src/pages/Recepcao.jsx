@@ -6,7 +6,7 @@ import {
     Search, CalendarClock, User, CheckCircle2, 
     Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil, UserX, RotateCcw,
     Star, Accessibility, Baby, Users, Heart, AlertTriangle, UserCog, MapPin, 
-    Stethoscope, ShieldCheck, Briefcase, Check
+    Stethoscope, ShieldCheck, Check
 } from 'lucide-react';
 
 const PRIORIDADES = {
@@ -51,22 +51,23 @@ export default function Recepcao() {
     const [modalPacienteOpen, setModalPacienteOpen] = useState(false);
     const [pacienteParaEditar, setPacienteParaEditar] = useState(null);
     const [loadingPaciente, setLoadingPaciente] = useState(false);
+    const [loadingCep, setLoadingCep] = useState(false);
     const [activePriorityMenu, setActivePriorityMenu] = useState(null);
 
-    // Atualiza o relógio a cada minuto para recalcular a espera
+    // --- MÁSCARAS ---
+    const mascaraCPF = (v) => v.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').slice(0, 14);
+    const mascaraTelefone = (v) => v.replace(/\D/g, '').replace(/^(\d{2})(\d)/g, '($1) $2').replace(/(\d)(\d{4})$/, '$1-$2').slice(0, 15);
+    const mascaraCEP = (v) => v.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2').slice(0, 9);
+
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 60000);
         return () => clearInterval(timer);
     }, []);
 
-    // --- CARREGAMENTO DE DADOS AUXILIARES (CORRIGIDO) ---
     useEffect(() => {
         if(api) {
             api.get('profissionais/').then(res => setProfissionais(res.data.results || res.data)).catch(() => {});
-            
-            // CORREÇÃO: Removido 'configuracoes/' do caminho
             api.get('especialidades/?nopage=true').then(res => setEspecialidades(res.data.results || res.data)).catch(() => {});
-            
             api.get('configuracoes/convenios/').then(res => setConvenios(res.data.results || res.data)).catch(() => {});
         }
     }, [api]);
@@ -94,13 +95,9 @@ export default function Recepcao() {
         const chegada = new Date();
         const [h, m] = horaChegada.split(':');
         chegada.setHours(h, m, 0, 0); 
-        
         if (chegada > now) return 0;
-
         const diffMs = now - chegada;
-        const minutos = Math.floor(diffMs / 60000);
-        
-        return Math.max(0, minutos);
+        return Math.max(0, Math.floor(diffMs / 60000));
     };
 
     const isCadastroIncompleto = (item) => {
@@ -120,11 +117,55 @@ export default function Recepcao() {
         finally { setLoadingPaciente(false); }
     };
 
+    // --- LÓGICA DE EDIÇÃO DO FORMULÁRIO COM MÁSCARAS ---
+    const handlePacienteChange = (e) => {
+        let { name, value } = e.target;
+        
+        if (name === 'cpf') value = mascaraCPF(value);
+        if (name === 'telefone') value = mascaraTelefone(value);
+        if (name === 'cep') value = mascaraCEP(value);
+        
+        setPacienteParaEditar({ ...pacienteParaEditar, [name]: value });
+    };
+
+    const buscarCep = async () => {
+        if (!pacienteParaEditar.cep) return;
+        const cepLimpo = pacienteParaEditar.cep.replace(/\D/g, '');
+        if (cepLimpo.length !== 8) return;
+        
+        setLoadingCep(true);
+        try {
+            const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+            const data = await response.json();
+            if (!data.erro) {
+                setPacienteParaEditar(prev => ({ 
+                    ...prev, 
+                    logradouro: data.logradouro, 
+                    bairro: data.bairro, 
+                    cidade: data.localidade, 
+                    estado: data.uf 
+                }));
+                notify.success("Endereço encontrado!");
+            } else {
+                notify.warning("CEP não encontrado.");
+            }
+        } catch (e) {
+            notify.error("Erro ao buscar CEP.");
+        } finally { 
+            setLoadingCep(false); 
+        }
+    };
+
     const handleSalvarPacienteRapido = async (e) => {
         e.preventDefault();
         setLoadingPaciente(true);
         try {
-            await api.put(`pacientes/${pacienteParaEditar.id}/`, pacienteParaEditar);
+            // Remove máscara do CPF antes de enviar
+            const payload = { 
+                ...pacienteParaEditar, 
+                cpf: pacienteParaEditar.cpf.replace(/\D/g, '') 
+            };
+            await api.put(`pacientes/${pacienteParaEditar.id}/`, payload);
             notify.success("Cadastro atualizado!");
             setModalPacienteOpen(false);
             carregarAgenda();
@@ -135,14 +176,14 @@ export default function Recepcao() {
     const handleSetPriority = async (pacienteId, tipo) => {
         try {
             setAgendamentos(prev => prev.map(ag => 
-                ag.paciente === pacienteId ? { ...ag, paciente_prioridade: tipo } : ag
+                ag.paciente === pacienteId ? { ...ag, prioridade_paciente: tipo } : ag
             ));
             setActivePriorityMenu(null);
             await api.patch(`pacientes/${pacienteId}/`, { prioridade: tipo });
             notify.success("Prioridade atualizada.");
+            carregarAgenda(); 
         } catch (e) { 
             notify.error("Erro ao definir prioridade.");
-            carregarAgenda(); 
         }
     };
 
@@ -189,7 +230,6 @@ export default function Recepcao() {
 
     const abrirCheckin = (item) => {
         setSelectedItem(item);
-        
         let specId = item.especialidade || item.especialidade_id || '';
         
         if (!specId && item.nome_especialidade) {
@@ -234,6 +274,7 @@ export default function Recepcao() {
     return (
         <Layout>
             <div className="max-w-7xl mx-auto pb-20 tracking-tight">
+                {/* HEADER */}
                 <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                     <div>
                         <h1 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-tighter">
@@ -243,6 +284,7 @@ export default function Recepcao() {
                     </div>
                 </div>
 
+                {/* FILTROS */}
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 mb-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
                     <div><label className={labelClass}>Data</label><input type="date" value={dataFiltro} onChange={e => setDataFiltro(e.target.value)} className={inputClass}/></div>
                     <div><label className={labelClass}>Profissional</label><select value={profissionalFiltro} onChange={e => setProfissionalFiltro(e.target.value)} className={inputClass}><option value="">Todos</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
@@ -258,6 +300,7 @@ export default function Recepcao() {
                     ))}
                 </div>
 
+                {/* TABELA DE AGENDAMENTOS */}
                 <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 min-h-[400px]">
                     <div className="overflow-visible">
                         <table className="w-full text-left">
@@ -277,8 +320,7 @@ export default function Recepcao() {
                                     const atrasado = verificarAtraso(item.horario, item.status);
                                     const esperaMin = item.status === 'aguardando' ? calcularEspera(item.horario_chegada) : 0;
                                     const incompleto = isCadastroIncompleto(item);
-                                    
-                                    const prioridadeKey = item.paciente_prioridade || item.prioridade; 
+                                    const prioridadeKey = item.prioridade_paciente || item.paciente_prioridade || item.detalhes_pdf?.paciente_prioridade;
                                     const pInfo = PRIORIDADES[prioridadeKey];
 
                                     return (
@@ -338,7 +380,6 @@ export default function Recepcao() {
                                             <td className="px-8 py-6 text-right">
                                                 <div className="flex justify-end items-center gap-2">
                                                     <div className={item.fatura_pago ? 'text-emerald-500' : 'text-slate-200'}><DollarSign size={20} strokeWidth={3}/></div>
-                                                    
                                                     {item.status === 'agendado' ? (
                                                         <>
                                                             <button onClick={() => handleMarcarFalta(item)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="Faltou"><UserX size={18}/></button>
@@ -362,11 +403,12 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* MODAL DE CHECK-IN COMPLETO */}
+                {/* MODAL CHECKIN */}
                 {modalOpen && selectedItem && (
                     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
                         <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden border border-white/10">
-                            <div className="bg-green-600 p-8 text-white relative overflow-hidden">
+                             {/* ... (CONTEÚDO DO CHECKIN MANTIDO, FOCANDO NA EDIÇÃO DE PACIENTE ABAIXO) ... */}
+                             <div className="bg-green-600 p-8 text-white relative overflow-hidden">
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="bg-white/20 p-3 rounded-2xl shadow-inner"><CheckCircle2 size={32}/></div>
@@ -374,113 +416,34 @@ export default function Recepcao() {
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <h3 className="text-2xl font-black uppercase tracking-tighter">Confirmação de Recepção</h3>
-                                        
-                                        {(selectedItem.paciente_prioridade || selectedItem.prioridade) && 
-                                         PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade] && (
-                                            <div className="bg-white text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-lg border-2 border-white/20">
-                                                {PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade].icon}
-                                                {PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade].label}
-                                            </div>
-                                        )}
                                     </div>
                                     <p className="text-green-100 text-sm font-bold uppercase tracking-widest mt-1 opacity-80">{selectedItem.nome_paciente}</p>
                                 </div>
                             </div>
-                            
                             <div className="p-8 space-y-8">
                                 <div>
-                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-2">
-                                        <Stethoscope size={14}/> Dados do Atendimento
-                                    </h4>
+                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-2"><Stethoscope size={14}/> Dados do Atendimento</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className={labelClass}>Profissional</label>
-                                            <select 
-                                                value={formCheckin.profissional} 
-                                                onChange={e => setFormCheckin({...formCheckin, profissional: e.target.value})} 
-                                                className={inputClass}
-                                            >
-                                                <option value="">Selecione...</option>
-                                                {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className={labelClass}>Especialidade</label>
-                                            <select 
-                                                value={formCheckin.especialidade} 
-                                                onChange={e => setFormCheckin({...formCheckin, especialidade: e.target.value})} 
-                                                className={inputClass}
-                                            >
-                                                <option value="">Selecione...</option>
-                                                {especialidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="md:col-span-2">
-                                            <label className={labelClass}>Plano / Convênio</label>
-                                            <div className="relative">
-                                                <ShieldCheck className="absolute left-3 top-3.5 text-slate-400" size={16}/>
-                                                <select 
-                                                    value={formCheckin.convenio} 
-                                                    onChange={e => setFormCheckin({...formCheckin, convenio: e.target.value})} 
-                                                    className={`${inputClass} pl-10`}
-                                                >
-                                                    <option value="">Particular (Sem convênio)</option>
-                                                    {convenios.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                                                </select>
-                                            </div>
-                                        </div>
+                                        <div><label className={labelClass}>Profissional</label><select value={formCheckin.profissional} onChange={e => setFormCheckin({...formCheckin, profissional: e.target.value})} className={inputClass}><option value="">Selecione...</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
+                                        <div><label className={labelClass}>Especialidade</label><select value={formCheckin.especialidade} onChange={e => setFormCheckin({...formCheckin, especialidade: e.target.value})} className={inputClass}><option value="">Selecione...</option>{especialidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</select></div>
+                                        <div className="md:col-span-2"><label className={labelClass}>Plano / Convênio</label><div className="relative"><ShieldCheck className="absolute left-3 top-3.5 text-slate-400" size={16}/><select value={formCheckin.convenio} onChange={e => setFormCheckin({...formCheckin, convenio: e.target.value})} className={`${inputClass} pl-10`}><option value="">Particular (Sem convênio)</option>{convenios.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div></div>
                                     </div>
                                 </div>
-
                                 <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
-                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <DollarSign size={14}/> Financeiro da Consulta
-                                    </h4>
+                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Financeiro da Consulta</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
-                                        <div>
-                                            <label className={labelClass}>Valor Acordado</label>
-                                            <div className="relative">
-                                                <span className="absolute left-4 top-3.5 text-slate-400 font-bold text-sm">R$</span>
-                                                <input type="number" value={formCheckin.valor} onChange={e => setFormCheckin({...formCheckin, valor: e.target.value})} className={`${inputClass} pl-10 font-black text-lg text-blue-600`}/>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className={labelClass}>Forma de Pagamento</label>
-                                            <select value={formCheckin.forma_pagamento} onChange={e => setFormCheckin({...formCheckin, forma_pagamento: e.target.value})} className={inputClass}>
-                                                <option value="dinheiro">💵 Dinheiro</option><option value="pix">📱 Pix</option><option value="cartao_credito">💳 Crédito</option><option value="cartao_debito">💳 Débito</option>
-                                            </select>
-                                        </div>
+                                        <div><label className={labelClass}>Valor Acordado</label><div className="relative"><span className="absolute left-4 top-3.5 text-slate-400 font-bold text-sm">R$</span><input type="number" value={formCheckin.valor} onChange={e => setFormCheckin({...formCheckin, valor: e.target.value})} className={`${inputClass} pl-10 font-black text-lg text-blue-600`}/></div></div>
+                                        <div><label className={labelClass}>Forma de Pagamento</label><select value={formCheckin.forma_pagamento} onChange={e => setFormCheckin({...formCheckin, forma_pagamento: e.target.value})} className={inputClass}><option value="dinheiro">💵 Dinheiro</option><option value="pix">📱 Pix</option><option value="cartao_credito">💳 Crédito</option><option value="cartao_debito">💳 Débito</option></select></div>
                                     </div>
-                                    
-                                    <div 
-                                        onClick={() => setFormCheckin(prev => ({ ...prev, pago: !prev.pago }))}
-                                        className={`cursor-pointer p-4 rounded-xl border flex items-center justify-between transition-all ${formCheckin.pago ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formCheckin.pago ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                                {formCheckin.pago ? <Check size={20}/> : <X size={20}/>}
-                                            </div>
-                                            <div>
-                                                <p className={`font-black uppercase text-xs tracking-widest ${formCheckin.pago ? 'text-green-700' : 'text-slate-500'}`}>
-                                                    {formCheckin.pago ? 'Pagamento Realizado' : 'Pagamento Pendente'}
-                                                </p>
-                                                <p className="text-[10px] text-slate-400">Clique para alterar o status</p>
-                                            </div>
-                                        </div>
-                                        <div className={`w-12 h-6 rounded-full relative transition-colors ${formCheckin.pago ? 'bg-green-500' : 'bg-slate-300'}`}>
-                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${formCheckin.pago ? 'left-7' : 'left-1'}`}></div>
-                                        </div>
-                                    </div>
+                                    <div onClick={() => setFormCheckin(prev => ({ ...prev, pago: !prev.pago }))} className={`cursor-pointer p-4 rounded-xl border flex items-center justify-between transition-all ${formCheckin.pago ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center ${formCheckin.pago ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400'}`}>{formCheckin.pago ? <Check size={20}/> : <X size={20}/>}</div><div><p className={`font-black uppercase text-xs tracking-widest ${formCheckin.pago ? 'text-green-700' : 'text-slate-500'}`}>{formCheckin.pago ? 'Pagamento Realizado' : 'Pagamento Pendente'}</p><p className="text-[10px] text-slate-400">Clique para alterar o status</p></div></div><div className={`w-12 h-6 rounded-full relative transition-colors ${formCheckin.pago ? 'bg-green-500' : 'bg-slate-300'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${formCheckin.pago ? 'left-7' : 'left-1'}`}></div></div></div>
                                 </div>
-
-                                <button onClick={confirmarCheckin} disabled={loadingCheckin} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-3">
-                                    {loadingCheckin ? <Loader2 className="animate-spin"/> : <Save size={20}/>} Confirmar Recepção
-                                </button>
+                                <button onClick={confirmarCheckin} disabled={loadingCheckin} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-3">{loadingCheckin ? <Loader2 className="animate-spin"/> : <Save size={20}/>} Confirmar Recepção</button>
                             </div>
                         </div>
                     </div>
                 )}
 
+                {/* MODAL DE EDIÇÃO DE PACIENTE (COMPLETO) */}
                 {modalPacienteOpen && pacienteParaEditar && (
                     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in duration-300">
                         <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-4xl my-10 overflow-hidden border border-white/10">
@@ -490,20 +453,46 @@ export default function Recepcao() {
                             </div>
                             <form onSubmit={handleSalvarPacienteRapido} className="p-8 grid grid-cols-1 md:grid-cols-12 gap-5">
                                 <div className="md:col-span-12 border-b dark:border-slate-700 pb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Informações Pessoais</div>
-                                <div className="md:col-span-6"><label className={labelClass}>Nome Completo</label><input value={pacienteParaEditar.nome} onChange={e => setPacienteParaEditar({...pacienteParaEditar, nome: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-3"><label className={labelClass}>CPF</label><input value={pacienteParaEditar.cpf} onChange={e => setPacienteParaEditar({...pacienteParaEditar, cpf: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-3"><label className={labelClass}>Telefone</label><input value={pacienteParaEditar.telefone} onChange={e => setPacienteParaEditar({...pacienteParaEditar, telefone: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-3"><label className={labelClass}>Data Nascimento</label><input type="date" value={pacienteParaEditar.data_nascimento} onChange={e => setPacienteParaEditar({...pacienteParaEditar, data_nascimento: e.target.value})} className={inputClass} required /></div>
                                 
+                                <div className="md:col-span-6"><label className={labelClass}>Nome Completo</label><input name="nome" value={pacienteParaEditar.nome} onChange={handlePacienteChange} className={inputClass} required /></div>
+                                <div className="md:col-span-3"><label className={labelClass}>CPF</label><input name="cpf" value={pacienteParaEditar.cpf} onChange={handlePacienteChange} className={inputClass} required /></div>
+                                <div className="md:col-span-3"><label className={labelClass}>Telefone</label><input name="telefone" value={pacienteParaEditar.telefone} onChange={handlePacienteChange} className={inputClass} required /></div>
+                                
+                                <div className="md:col-span-3"><label className={labelClass}>Data Nascimento</label><input type="date" name="data_nascimento" value={pacienteParaEditar.data_nascimento} onChange={handlePacienteChange} className={inputClass} required /></div>
+                                <div className="md:col-span-3"><label className={labelClass}>Sexo</label>
+                                    <select name="sexo" value={pacienteParaEditar.sexo || ''} onChange={handlePacienteChange} className={inputClass}>
+                                        <option value="">Selecione...</option>
+                                        <option value="Feminino">Feminino</option>
+                                        <option value="Masculino">Masculino</option>
+                                    </select>
+                                </div>
+                                <div className="md:col-span-3"><label className={labelClass}>Prioridade</label>
+                                    <select name="prioridade" value={pacienteParaEditar.prioridade || ''} onChange={handlePacienteChange} className={inputClass}>
+                                        <option value="">Nenhuma</option>
+                                        {Object.entries(PRIORIDADES).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                                    </select>
+                                </div>
+                                <div className="md:col-span-3"><label className={labelClass}>Nome da Mãe</label><input name="nome_mae" value={pacienteParaEditar.nome_mae || ''} onChange={handlePacienteChange} className={inputClass} /></div>
+
                                 <div className="md:col-span-12 border-b dark:border-slate-700 pb-2 mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Endereço</div>
-                                <div className="md:col-span-3"><label className={labelClass}>CEP</label><input value={pacienteParaEditar.cep} onChange={e => setPacienteParaEditar({...pacienteParaEditar, cep: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-7"><label className={labelClass}>Logradouro</label><input value={pacienteParaEditar.logradouro} onChange={e => setPacienteParaEditar({...pacienteParaEditar, logradouro: e.target.value})} className={inputClass} required /></div>
-                                <div className="md:col-span-2"><label className={labelClass}>Nº</label><input value={pacienteParaEditar.numero} onChange={e => setPacienteParaEditar({...pacienteParaEditar, numero: e.target.value})} className={inputClass} required /></div>
                                 
+                                <div className="md:col-span-2"><label className={labelClass}>CEP</label>
+                                    <div className="relative">
+                                        <input name="cep" value={pacienteParaEditar.cep || ''} onChange={handlePacienteChange} onBlur={buscarCep} className={inputClass} required />
+                                        {loadingCep && <span className="absolute right-2 top-2.5 text-[9px] font-bold text-blue-500 animate-pulse">BUSCANDO</span>}
+                                    </div>
+                                </div>
+                                <div className="md:col-span-6"><label className={labelClass}>Logradouro</label><input name="logradouro" value={pacienteParaEditar.logradouro || ''} onChange={handlePacienteChange} className={inputClass} required /></div>
+                                <div className="md:col-span-2"><label className={labelClass}>Nº</label><input name="numero" value={pacienteParaEditar.numero || ''} onChange={handlePacienteChange} className={inputClass} required /></div>
+                                <div className="md:col-span-2"><label className={labelClass}>UF</label><input name="estado" value={pacienteParaEditar.estado || ''} onChange={handlePacienteChange} className={inputClass} required maxLength={2} /></div>
+                                <div className="md:col-span-4"><label className={labelClass}>Bairro</label><input name="bairro" value={pacienteParaEditar.bairro || ''} onChange={handlePacienteChange} className={inputClass} required /></div>
+                                <div className="md:col-span-4"><label className={labelClass}>Cidade</label><input name="cidade" value={pacienteParaEditar.cidade || ''} onChange={handlePacienteChange} className={inputClass} required /></div>
+                                <div className="md:col-span-4"><label className={labelClass}>Complemento</label><input name="complemento" value={pacienteParaEditar.complemento || ''} onChange={handlePacienteChange} className={inputClass} /></div>
+
                                 <div className="md:col-span-12 pt-8 flex gap-4 justify-end border-t dark:border-slate-700 mt-4">
                                     <button type="button" onClick={() => setModalPacienteOpen(false)} className="px-8 py-3 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 rounded-xl transition-colors">Cancelar</button>
-                                    <button type="submit" className="px-10 py-3 bg-blue-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2">
-                                        <Save size={16}/> Gravar Alterações
+                                    <button type="submit" disabled={loadingPaciente} className="px-10 py-3 bg-blue-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2">
+                                        {loadingPaciente ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Gravar Alterações
                                     </button>
                                 </div>
                             </form>

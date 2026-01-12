@@ -49,18 +49,21 @@ class AgendaConfigSerializer(serializers.ModelSerializer):
         try:
             Agendamento = apps.get_model('agendamento', 'Agendamento')
             
-            # Conversão: No Model AgendaConfig 0=Domingo, mas no Django Query __week_day 1=Domingo
-            target_day = obj.dia_semana + 1 
+            # 1. Descobre todos os dias da semana vinculados a este GRUPO
+            # (Se for uma regra de Seg, Qua, Sex, precisamos somar tudo)
+            dias_do_grupo = AgendaConfig.objects.filter(group_id=obj.group_id).values_list('dia_semana', flat=True)
+            
+            # Converte para o padrão Django (Domingo=1, Sábado=7)
+            # No seu model 0=Domingo, então somamos 1
+            dias_django = [d + 1 for d in dias_do_grupo]
 
-            # Conta todos os agendamentos que NÃO foram cancelados dentro do período daquela agenda
-            # Isso contabiliza históricos de agendas encerradas também.
             return Agendamento.objects.filter(
                 profissional=obj.profissional,
                 data__range=(obj.data_inicio, obj.data_fim),
-                data__week_day=target_day,
-                # Lista atualizada com TODOS os status que contam como "vaga ocupada" ou "paciente atendido"
+                data__week_day__in=dias_django,  # <-- MUDANÇA CRÍTICA AQUI
                 status__in=['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou']
             ).count()
+            
         except Exception as e:
             print(f"Erro ao contar agendados: {e}")
             return 0
