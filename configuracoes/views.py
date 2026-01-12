@@ -47,21 +47,33 @@ class ConfiguracaoSistemaView(APIView):
         config = ConfiguracaoSistema.load()
         serializer = ConfiguracaoSistemaSerializer(config)
         
-        amanha = date.today() + timedelta(days=1)
-        agendamentos_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
+        # Datas
+        hoje = date.today()
+        amanha = hoje + timedelta(days=1)
         
-        total_amanha = agendamentos_amanha.count()
-        avisados = agendamentos_amanha.filter(lembrete_enviado=True).count()
-        faltam = total_amanha - avisados
+        # --- ESTATÍSTICAS DE HOJE (O que já foi enviado) ---
+        agendamentos_hoje = Agendamento.objects.filter(data=hoje, status='agendado')
+        enviados_hoje = agendamentos_hoje.filter(lembrete_enviado=True).count()
+        falhas_hoje = agendamentos_hoje.filter(lembrete_enviado=False).count()
+
+        # --- ESTATÍSTICAS DE AMANHÃ (O que o robô vai processar) ---
+        agendamentos_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
+        enviados_amanha = agendamentos_amanha.filter(lembrete_enviado=True).count()
+        pendentes_amanha = agendamentos_amanha.filter(lembrete_enviado=False).count()
         
         data = serializer.data
-        data['stats_lembretes'] = {
-            'total': total_amanha,
-            'avisados': avisados,
-            'faltam': faltam
+        data['stats_hoje'] = {
+            'total': agendamentos_hoje.count(),
+            'enviados': enviados_hoje,
+            'pendentes': falhas_hoje # Estes deveriam ter sido enviados ontem
+        }
+        data['stats_amanha'] = {
+            'total': agendamentos_amanha.count(),
+            'enviados': enviados_amanha,
+            'pendentes': pendentes_amanha
         }
         
-        return Response(data)
+    return Response(data)
 
     def put(self, request):
         config = ConfiguracaoSistema.load()
