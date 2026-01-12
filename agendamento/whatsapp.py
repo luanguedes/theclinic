@@ -179,12 +179,12 @@ def enviar_lembrete_24h(agendamento):
         
         mensagem = (
             f"Olá, *{paciente.nome}*! 👋\n\n"
-            f"Passando para lembrar da sua consulta amanhã:\n\n"
+            f"Passando para lembrar da sua consulta amanhã na clinica *{dados_clinica['nome']}*\n\n"
             f"📅 *Amanhã, {data_fmt}*\n"
             f"⏰ Horário: *{hora_fmt}*\n"
             f"👨‍⚕️ Profissional: {profissional.nome}\n"
             f"🩺 Especialidade: *{nome_especialidade}*\n\n"
-            f"📍 Local: {dados_clinica['nome']}\n\n"
+            f"📍 Endereço: {dados_clinica['endereco']}\n\n"
             f"Sua presença é muito importante. Caso não possa comparecer, avise-nos com antecedência.\n\n"
             f"Até lá!"
         )
