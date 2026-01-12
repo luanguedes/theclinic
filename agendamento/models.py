@@ -15,6 +15,7 @@ class BloqueioAgenda(models.Model):
     hora_inicio = models.TimeField(default='00:00')
     hora_fim = models.TimeField(default='23:59')
     motivo = models.CharField(max_length=255)
+    observacao = models.TextField(blank=True, null=True, help_text="Observação para enviar aos pacientes")
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='bloqueio')
     recorrente = models.BooleanField(default=False)
     criado_em = models.DateTimeField(auto_now_add=True)

@@ -3,7 +3,6 @@ import logging
 import re
 import sys
 from django.conf import settings
-# --- CORREÇÃO AQUI: Adicionado ConfiguracaoSistema ---
 from configuracoes.models import DadosClinica, ConfiguracaoSistema 
 
 # Logs no terminal do Railway
@@ -61,8 +60,6 @@ def enviar_mensagem_agendamento(agendamento):
     print(f"🚀 [DIAGNÓSTICO] Iniciando envio ID: {agendamento.id}")
     
     try:
-        # --- DIAGNÓSTICO DAS TRAVAS ---
-        # Agora o import está correto lá em cima, então isso vai funcionar:
         config = ConfiguracaoSistema.load()
         
         print(f"🧐 VALOR NO BANCO (GLOBAL): {config.enviar_whatsapp_global}")
@@ -140,3 +137,59 @@ def enviar_mensagem_agendamento(agendamento):
         traceback.print_exc()
     
     print("="*40 + "\n")
+
+# --- FUNÇÃO NOVA ADICIONADA CORRETAMENTE FORA DO BLOCO EXCEPT ---
+def enviar_mensagem_cancelamento_bloqueio(agendamento, motivo_personalizado=""):
+    print(f"⚠️ [WHATSAPP] Enviando CANCELAMENTO para Agendamento ID: {agendamento.id}")
+    
+    try:
+        # Verifica Config Global
+        config = ConfiguracaoSistema.load()
+        if not config.enviar_whatsapp_global:
+            print("🛑 Envio cancelado: Bloqueio Global Ativo.")
+            return
+
+        paciente = agendamento.paciente
+        dados_clinica = get_dados_clinica()
+        telefone = formatar_telefone(paciente.telefone)
+        
+        if not telefone: 
+            print("❌ Telefone inválido.")
+            return
+
+        data_fmt = agendamento.data.strftime('%d/%m/%Y')
+        hora_fmt = agendamento.horario.strftime('%H:%M')
+        
+        # Se tiver motivo, adiciona na mensagem
+        bloco_motivo = ""
+        if motivo_personalizado:
+            bloco_motivo = f"\nℹ️ *Motivo:* _{motivo_personalizado}_\n"
+
+        mensagem = (
+            f"Olá, *{paciente.nome}*.\n\n"
+            f"Informamos que sua consulta na *{dados_clinica['nome']}* precisou ser *CANCELADA*.\n\n"
+            f"📅 Data original: *{data_fmt}* às *{hora_fmt}*\n"
+            f"👨‍⚕️ Profissional: {agendamento.profissional.nome}\n"
+            f"{bloco_motivo}\n"
+            f"Por favor, entre em contato conosco para realizarmos um novo agendamento o mais breve possível.\n\n"
+            f"Pedimos desculpas pelo transtorno. 🙏"
+        )
+
+        url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
+        
+        payload = {
+            "number": telefone,
+            "textMessage": {"text": mensagem},
+            "options": {"delay": 1200, "linkPreview": False}
+        }
+        
+        headers = {
+            "apikey": settings.EVOLUTION_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        requests.post(url, json=payload, headers=headers, timeout=10)
+        print(f"✅ Cancelamento enviado para {telefone}")
+
+    except Exception as e:
+        print(f"🔥 Erro ao enviar cancelamento: {e}")

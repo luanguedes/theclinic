@@ -1,5 +1,5 @@
 from rest_framework import viewsets, permissions, status, filters
-from rest_framework.decorators import action # Removi o permission_classes daqui para não confundir
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -13,7 +13,7 @@ import threading
 # Importações do Projeto
 from .models import BloqueioAgenda, Agendamento
 from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
-from .whatsapp import enviar_mensagem_agendamento
+from .whatsapp import enviar_mensagem_agendamento, enviar_mensagem_cancelamento_bloqueio
 
 class BloqueioAgendaViewSet(viewsets.ModelViewSet):
     queryset = BloqueioAgenda.objects.all().order_by('-data_inicio')
@@ -83,35 +83,77 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         acao_conflito = request.data.pop('acao_conflito', 'manter')
+        observacao_texto = request.data.get('observacao', '')
+        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         bloqueio = serializer.save()
 
+        if observacao_texto:
+            bloqueio.observacao = observacao_texto
+            bloqueio.save()
+
+        afetados_response = []
+
         if acao_conflito == 'cancelar':
             prof_id = bloqueio.profissional.id if bloqueio.profissional else None
+            
             conflitos = Agendamento.objects.filter(
                 data__range=[bloqueio.data_inicio, bloqueio.data_fim],
                 horario__gte=bloqueio.hora_inicio, horario__lte=bloqueio.hora_fim,
                 status__in=['agendado', 'aguardando']
             )
-            if prof_id: conflitos = conflitos.filter(profissional_id=prof_id)
-            conflitos.update(status='cancelado', observacoes=f"Bloqueio: {bloqueio.motivo}")
+            
+            if prof_id:
+                conflitos = conflitos.filter(profissional_id=prof_id)
+            
+            for ag in conflitos:
+                ag.status = 'cancelado'
+                ag.observacoes = f"Cancelado por bloqueio. Motivo: {bloqueio.observacao or 'Administrativo'}"
+                ag.save()
+                
+                afetados_response.append({
+                    'id': ag.id,
+                    'paciente_nome': ag.paciente.nome,
+                    'paciente_telefone': ag.paciente.telefone,
+                    'data': ag.data.strftime('%d/%m/%Y'),
+                    'horario': ag.horario.strftime('%H:%M')
+                })
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response({
+            'bloqueio': serializer.data,
+            'afetados': afetados_response
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def notificar_cancelados(self, request):
+        ids = request.data.get('agendamentos_ids', [])
+        motivo = request.data.get('motivo', '')
+        
+        enviados = 0
+        erros = 0
+        
+        for ag_id in ids:
+            try:
+                ag = Agendamento.objects.get(id=ag_id)
+                enviar_mensagem_cancelamento_bloqueio(ag, motivo)
+                enviados += 1
+            except Exception as e:
+                print(f"Erro no envio ID {ag_id}: {e}")
+                erros += 1
+                
+        return Response({'status': 'Processado', 'enviados': enviados, 'erros': erros})
 
 
 class AgendamentoViewSet(viewsets.ModelViewSet):
     queryset = Agendamento.objects.all()
     serializer_class = AgendamentoSerializer
     authentication_classes = [JWTAuthentication]
-    # Esta linha abaixo criava o conflito com o decorator de mesmo nome
-    permission_classes = [permissions.IsAuthenticated] 
+    permission_classes = [permissions.IsAuthenticated]
     
     filter_backends = [filters.SearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
 
-    # --- MÉTODO DE TESTE (CORRIGIDO) ---
-    # Colocamos o permission_classes DENTRO do action. Isso é o correto.
     @action(detail=False, methods=['get'], permission_classes=[AllowAny]) 
     def testar_conexao(self, request):
         """
@@ -129,7 +171,6 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         
         payload = {
             "number": numero_destino,
-            # CORREÇÃO AQUI: Colocamos o texto DENTRO de um objeto
             "textMessage": {
                 "text": "🤖 Teste de Conexão: O Django conseguiu falar com o WhatsApp!"
             },
@@ -161,7 +202,6 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                 "detalhe": str(e),
                 "url_tentada": url
             }, status=500)
-    # --------------------------------------------
 
     def perform_create(self, serializer):
         agendamento = serializer.save()
@@ -170,13 +210,10 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Agendamento.objects.all()
 
-        # Se for uma ação de detalhe (editar, deletar, ver um específico), traz tudo, inclusive cancelados.
         if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
             return queryset
 
-        
         queryset = queryset.exclude(status='cancelado')
-        # ------------------------------------------
 
         profissional = self.request.query_params.get('profissional')
         especialidade = self.request.query_params.get('especialidade')
@@ -197,15 +234,13 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
             if not self.request.query_params.get('nopage'): 
                  queryset = queryset.filter(data=date.today())
 
-        # Ordenação
         queryset = queryset.annotate(
             prioridade_status=Case(
                 When(status='agendado', then=Value(1)),
                 When(status='aguardando', then=Value(2)),
                 When(status='em_atendimento', then=Value(3)),
                 When(status='finalizado', then=Value(4)),
-                When(status='faltou', then=Value(5)), # Faltou aparece, mas com prioridade baixa
-                # Cancelado nem entra aqui pois foi excluído lá em cima
+                When(status='faltou', then=Value(5)),
                 default=Value(10),
                 output_field=IntegerField(),
             )

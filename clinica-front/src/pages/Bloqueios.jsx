@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X, Pencil, Printer, FileText, RotateCcw
+    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X, Pencil, FileText, RotateCcw, MessageSquare, CheckSquare, Square, Send, Loader2
 } from 'lucide-react';
 import { generateConflictReport } from '../utils/generateReport';
 
@@ -15,18 +15,23 @@ export default function Bloqueios() {
     const [profissionais, setProfissionais] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Estado de Edição
     const [editingId, setEditingId] = useState(null);
 
     const formInicial = {
         profissional: '', data_inicio: '', data_fim: '', 
         hora_inicio: '00:00', hora_fim: '23:59', 
-        motivo: '', tipo: 'bloqueio', recorrente: false
+        motivo: '', tipo: 'bloqueio', recorrente: false,
+        observacao: '' 
     };
     const [form, setForm] = useState(formInicial);
 
-    // Modal de Conflito (Apenas na criação)
     const [conflictData, setConflictData] = useState(null);
+
+    const [modalDisparoOpen, setModalDisparoOpen] = useState(false);
+    const [listaAfetados, setListaAfetados] = useState([]);
+    const [selecionados, setSelecionados] = useState([]);
+    const [enviandoWpp, setEnviandoWpp] = useState(false);
+    const [motivoSalvo, setMotivoSalvo] = useState('');
 
     useEffect(() => {
         if (api) loadData();
@@ -56,7 +61,8 @@ export default function Bloqueios() {
             hora_fim: bloqueio.hora_fim,
             motivo: bloqueio.motivo,
             tipo: bloqueio.tipo,
-            recorrente: bloqueio.recorrente
+            recorrente: bloqueio.recorrente,
+            observacao: bloqueio.observacao || ''
         });
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -72,15 +78,11 @@ export default function Bloqueios() {
         
         try {
             if (editingId) {
-                // --- MODO EDIÇÃO (PUT) ---
-                // Na edição, não verificamos conflitos automaticamente para não travar o fluxo,
-                // assume-se que o gestor sabe o que está fazendo ao alterar datas.
                 await api.put(`agendamento/bloqueios/${editingId}/`, form);
                 notify.success("Bloqueio atualizado com sucesso!");
                 handleCancelEdit();
                 loadData();
             } else {
-                // --- MODO CRIAÇÃO (POST) com Verificação ---
                 const res = await api.post('agendamento/bloqueios/verificar_conflitos/', form);
                 
                 if (res.data.conflito) {
@@ -104,8 +106,17 @@ export default function Bloqueios() {
 
     const resolverConflito = async (acao) => {
         try {
-            await api.post('agendamento/bloqueios/', { ...form, acao_conflito: acao });
-            notify.success(`Bloqueio criado!`);
+            const res = await api.post('agendamento/bloqueios/', { ...form, acao_conflito: acao });
+            
+            if (res.data.afetados && res.data.afetados.length > 0) {
+                setListaAfetados(res.data.afetados);
+                setSelecionados(res.data.afetados.map(a => a.id));
+                setMotivoSalvo(form.observacao); 
+                setModalDisparoOpen(true);
+            } else {
+                notify.success(`Bloqueio criado!`);
+            }
+
             setConflictData(null);
             setForm(formInicial);
             loadData();
@@ -140,6 +151,23 @@ export default function Bloqueios() {
         }
     }
 
+    const handleEnviarEmMassa = async () => {
+        if (selecionados.length === 0) return;
+        setEnviandoWpp(true);
+        try {
+            await api.post('agendamento/bloqueios/notificar_cancelados/', {
+                agendamentos_ids: selecionados,
+                motivo: motivoSalvo
+            });
+            notify.success("Mensagens enviadas com sucesso!");
+            setModalDisparoOpen(false);
+        } catch (e) {
+            notify.error("Erro ao enviar mensagens.");
+        } finally {
+            setEnviandoWpp(false);
+        }
+    };
+
     const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-red-500 text-sm dark:text-white";
 
     return (
@@ -150,7 +178,6 @@ export default function Bloqueios() {
                 </h1>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* FORMULÁRIO */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-fit">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="font-bold text-lg dark:text-white">{editingId ? 'Editar Bloqueio' : 'Novo Bloqueio'}</h2>
@@ -192,7 +219,18 @@ export default function Bloqueios() {
                                 </div>
                             )}
 
-                            <div><label className="block text-xs font-bold text-slate-500 mb-1">Motivo</label><input value={form.motivo} onChange={e=>setForm({...form, motivo: e.target.value})} className={inputClass} placeholder="Ex: Férias, Natal..." required/></div>
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1">Motivo Interno</label><input value={form.motivo} onChange={e=>setForm({...form, motivo: e.target.value})} className={inputClass} placeholder="Ex: Férias" required/></div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">Observação para o Paciente</label>
+                                <textarea 
+                                    value={form.observacao} 
+                                    onChange={e=>setForm({...form, observacao: e.target.value})} 
+                                    className={inputClass} 
+                                    placeholder="Ex: Médico testou positivo para COVID..."
+                                    rows="2"
+                                />
+                            </div>
 
                             {form.tipo === 'feriado' && (
                                 <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -202,13 +240,12 @@ export default function Bloqueios() {
                             )}
 
                             <button type="submit" disabled={loading} className={`w-full text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-800 hover:bg-slate-900'}`}>
-                                {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save size={18}/>} 
+                                {loading ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
                                 {editingId ? 'Atualizar Bloqueio' : 'Salvar Bloqueio'}
                             </button>
                         </form>
                     </div>
 
-                    {/* LISTA */}
                     <div className="lg:col-span-2">
                         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                             <table className="w-full text-left">
@@ -264,7 +301,6 @@ export default function Bloqueios() {
                     </div>
                 </div>
 
-                {/* MODAL DE CONFLITO */}
                 {conflictData && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
@@ -293,6 +329,83 @@ export default function Bloqueios() {
                                         <span className="text-[10px] font-normal opacity-70">Cancela todos os agendamentos</span>
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {modalDisparoOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="bg-orange-600 p-4 text-white flex justify-between items-center">
+                                <h2 className="text-lg font-bold flex items-center gap-2">
+                                    <MessageSquare size={20}/> Avisar Pacientes Cancelados
+                                </h2>
+                                <button onClick={() => setModalDisparoOpen(false)}><X size={20}/></button>
+                            </div>
+                            
+                            <div className="p-5 overflow-y-auto flex-1">
+                                <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl text-orange-800 dark:text-orange-200 text-sm mb-4 border border-orange-100 dark:border-orange-800">
+                                    <p className="font-bold mb-1">Bloqueio realizado com sucesso!</p>
+                                    <p>Encontramos <strong>{listaAfetados.length} pacientes</strong> que tiveram suas consultas canceladas. Deseja enviar um aviso via WhatsApp para eles?</p>
+                                </div>
+
+                                <div className="flex justify-between items-center mb-3 px-1">
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lista de Envio</span>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setSelecionados(selecionados.length === listaAfetados.length ? [] : listaAfetados.map(a=>a.id))} 
+                                        className="text-xs text-blue-600 font-bold hover:underline"
+                                    >
+                                        {selecionados.length === listaAfetados.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+                                    </button>
+                                </div>
+
+                                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                    {listaAfetados.map(ag => (
+                                        <div 
+                                            key={ag.id} 
+                                            onClick={() => {
+                                                if (selecionados.includes(ag.id)) setSelecionados(selecionados.filter(id => id !== ag.id));
+                                                else setSelecionados([...selecionados, ag.id]);
+                                            }}
+                                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                                selecionados.includes(ag.id) 
+                                                    ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700' 
+                                                    : 'bg-white border-slate-100 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700'
+                                            }`}
+                                        >
+                                            <div className={selecionados.includes(ag.id) ? "text-blue-600" : "text-slate-300"}>
+                                                {selecionados.includes(ag.id) ? <CheckSquare size={20}/> : <Square size={20}/>}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-sm text-slate-700 dark:text-white">{ag.paciente_nome}</div>
+                                                <div className="text-xs text-slate-500 flex items-center gap-2">
+                                                    <span>{ag.data} às {ag.horario}</span>
+                                                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                                    <span>{ag.paciente_telefone || "Sem Tel"}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="p-4 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-3">
+                                <button 
+                                    onClick={() => setModalDisparoOpen(false)}
+                                    className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg text-sm transition-colors"
+                                >
+                                    Não Enviar
+                                </button>
+                                <button 
+                                    onClick={handleEnviarEmMassa}
+                                    disabled={selecionados.length === 0 || enviandoWpp}
+                                    className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-green-200 dark:shadow-none transition-all active:scale-95"
+                                >
+                                    {enviandoWpp ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>}
+                                    Enviar ({selecionados.length})
+                                </button>
                             </div>
                         </div>
                     </div>
