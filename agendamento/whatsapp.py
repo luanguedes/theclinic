@@ -120,6 +120,7 @@ def enviar_mensagem_cancelamento_bloqueio(agendamento, motivo_personalizado=""):
         paciente = agendamento.paciente
         dados_clinica = get_dados_clinica()
         telefone = formatar_telefone(paciente.telefone)
+        nome_especialidade = get_nome_especialidade(agendamento, profissional)
         
         if not telefone: return
 
@@ -133,6 +134,7 @@ def enviar_mensagem_cancelamento_bloqueio(agendamento, motivo_personalizado=""):
             f"Informamos que sua consulta na *{dados_clinica['nome']}* precisou ser *CANCELADA*.\n\n"
             f"📅 Data original: *{data_fmt}* às *{hora_fmt}*\n"
             f"👨‍⚕️ Profissional: {agendamento.profissional.nome}\n"
+            f"🩺 Especialidade: *{nome_especialidade}*\n\n"
             f"{bloco_motivo}\n"
             f"Por favor, entre em contato conosco para realizarmos um novo agendamento o mais breve possível.\n\n"
             f"Pedimos desculpas pelo transtorno. 🙏"
@@ -163,6 +165,7 @@ def enviar_lembrete_24h(agendamento):
 
         paciente = agendamento.paciente
         profissional = agendamento.profissional
+        nome_especialidade = get_nome_especialidade(agendamento, profissional)
         dados_clinica = get_dados_clinica()
         telefone = formatar_telefone(paciente.telefone)
         
@@ -179,6 +182,7 @@ def enviar_lembrete_24h(agendamento):
             f"📅 *Amanhã, {data_fmt}*\n"
             f"⏰ Horário: *{hora_fmt}*\n"
             f"👨‍⚕️ Profissional: {profissional.nome}\n"
+            f"🩺 Especialidade: *{nome_especialidade}*\n\n"
             f"📍 Local: {dados_clinica['nome']}\n\n"
             f"Sua presença é muito importante. Caso não possa comparecer, avise-nos com antecedência.\n\n"
             f"Até lá!"
