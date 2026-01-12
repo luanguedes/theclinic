@@ -475,7 +475,7 @@ export default function ConfigurarAgenda() {
                                         <div key={idx} className="flex gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in duration-200 shadow-sm">
                                             <input type="time" value={h.time} onChange={e => updateHorarioFixo(idx, 'time', e.target.value)} className={inputModalClass}/>
                                             <input type="number" placeholder="Vagas" value={h.qtd} onChange={e => updateHorarioFixo(idx, 'qtd', e.target.value)} className={`${inputModalClass} w-24`}/>
-                                            <button type="button" onClick={() => removeHorarioFixo(idx)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-2 rounded-xl transition-colors"><Trash2 size={20}/></button>
+                                            <button type="button" onClick={() => removeHorarioFixo(idx)} className="text-red-400 hover:text-red-600 p-2 transition-colors"><Trash2 size={20}/></button>
                                         </div>
                                     ))}
                                     {editHorariosFixos.length === 0 && <div className="text-center py-8 text-slate-400 text-xs italic border-2 border-dashed rounded-2xl bg-slate-50/50">Nenhum horário definido.</div>}

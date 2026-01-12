@@ -1,232 +1,92 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNotification } from '../context/NotificationContext'; // Importado
+import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
-import { Plus, Pencil, Trash2, Tag, X, Save, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Search, Plus, Heart, Edit, Trash2, Save, X, Loader2, Activity } from 'lucide-react';
 
 export default function Especialidades() {
-  const { api } = useAuth();
-  const { notify, confirmDialog } = useNotification(); // Hook instanciado
-  
-  const [especialidades, setEspecialidades] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [nome, setNome] = useState('');
-  const [saving, setSaving] = useState(false);
+    const { api } = useAuth();
+    const { notify, confirmDialog } = useNotification();
+    const [items, setItems] = useState([]);
+    const [search, setSearch] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [modalOpen, setModalOpen] = useState(false);
+    const [form, setForm] = useState({ nome: '', descricao: '' });
+    const [editingId, setEditingId] = useState(null);
 
-  useEffect(() => {
-    if (api) loadData();
-  }, [api, page, search]);
+    useEffect(() => { if (api) fetchItems(); }, [api]);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      let pageSize = 15;
-      try {
-          const conf = await api.get('operadores/config/');
-          if (conf.data?.itens_por_pagina) pageSize = conf.data.itens_por_pagina;
-      } catch {}
+    const fetchItems = async () => {
+        setLoading(true);
+        try {
+            const { data } = await api.get('configuracoes/especialidades/');
+            setItems(Array.isArray(data) ? data : data.results);
+        } catch { notify.error("Erro ao carregar especialidades."); } 
+        finally { setLoading(false); }
+    };
 
-      const response = await api.get(`especialidades/?page=${page}&page_size=${pageSize}&search=${search}`);
-      const data = response.data;
+    const handleSave = async (e) => {
+        e.preventDefault();
+        try {
+            if (editingId) {
+                await api.put(`configuracoes/especialidades/${editingId}/`, form);
+                notify.success("Atualizado!");
+            } else {
+                await api.post('configuracoes/especialidades/', form);
+                notify.success("Criado!");
+            }
+            setModalOpen(false); fetchItems();
+        } catch { notify.error("Erro ao salvar."); }
+    };
 
-      if (data.results && Array.isArray(data.results)) {
-        setEspecialidades(data.results);
-        setTotalCount(data.count);
-        setTotalPages(Math.ceil(data.count / pageSize));
-      } else if (Array.isArray(data)) {
-        setEspecialidades(data);
-        setTotalPages(1);
-        setTotalCount(data.length);
-      } else {
-        setEspecialidades([]);
-      }
-    } catch (error) {
-      console.error("Erro", error);
-      notify.error("Erro ao carregar especialidades.");
-      if (page > 1) setPage(1);
-      setEspecialidades([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const handleDelete = async (id) => {
+        if (await confirmDialog("Excluir especialidade?", "Exclusão", "Sim", "Não", "danger")) {
+            try { await api.delete(`configuracoes/especialidades/${id}/`); notify.success("Removido."); fetchItems(); } 
+            catch { notify.error("Erro ao excluir."); }
+        }
+    };
 
-  const handleOpenModal = (item = null) => {
-    setEditingItem(item);
-    setNome(item ? item.nome : '');
-    setIsModalOpen(true);
-  };
+    return (
+        <Layout>
+            <div className="max-w-4xl mx-auto pb-20">
+                <div className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-2"><Heart className="text-pink-600"/> Especialidades</h1>
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Áreas de atuação da clínica</p>
+                    </div>
+                    <button onClick={() => { setForm({nome:'', descricao:''}); setEditingId(null); setModalOpen(true); }} className="bg-pink-600 hover:bg-pink-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg flex items-center gap-2 active:scale-95 transition-all"><Plus size={18}/> Nova</button>
+                </div>
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!nome.trim()) return notify.warning("Informe o nome da especialidade.");
-    
-    setSaving(true);
-    try {
-      if (editingItem) {
-        await api.put(`especialidades/${editingItem.id}/`, { nome });
-        notify.success("Especialidade atualizada com sucesso!");
-      } else {
-        await api.post('especialidades/', { nome });
-        notify.success("Nova especialidade cadastrada!");
-      }
-      setIsModalOpen(false);
-      loadData();
-    } catch (error) {
-      notify.error("Erro ao salvar especialidade. Verifique se o nome já existe.");
-    } finally {
-      setSaving(false);
-    }
-  };
+                <div className="bg-white dark:bg-slate-800 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50">
+                        <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Pesquisar..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-500 text-sm font-bold"/></div>
+                    </div>
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                        {items.filter(i => i.nome.toLowerCase().includes(search.toLowerCase())).map(item => (
+                            <div key={item.id} className="p-6 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-pink-50 text-pink-600 rounded-xl"><Activity size={20}/></div>
+                                    <div><h3 className="font-black text-slate-800 dark:text-white uppercase text-sm">{item.nome}</h3><p className="text-xs text-slate-500">{item.descricao || 'Sem descrição'}</p></div>
+                                </div>
+                                <div className="flex gap-2"><button onClick={() => { setForm(item); setEditingId(item.id); setModalOpen(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16}/></button><button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
 
-  const handleDelete = async (id) => {
-    const confirmado = await confirmDialog(
-        "Tem certeza que deseja excluir esta especialidade? Esta ação não poderá ser desfeita.",
-        "Excluir Especialidade",
-        "Confirmar Exclusão",
-        "Cancelar",
-        "danger"
+                {modalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+                            <div className="bg-pink-600 p-6 flex justify-between items-center text-white"><h3 className="font-black uppercase">{editingId ? 'Editar' : 'Nova'} Especialidade</h3><button onClick={() => setModalOpen(false)}><X/></button></div>
+                            <form onSubmit={handleSave} className="p-6 space-y-4">
+                                <div><label className="text-xs font-bold text-slate-500 uppercase">Nome</label><input value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} className="w-full bg-slate-50 border rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-pink-500" required/></div>
+                                <div><label className="text-xs font-bold text-slate-500 uppercase">Descrição</label><textarea value={form.descricao} onChange={e => setForm({...form, descricao: e.target.value})} className="w-full bg-slate-50 border rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-pink-500 h-24 resize-none"/></div>
+                                <button type="submit" className="w-full bg-pink-600 hover:bg-pink-700 text-white py-3 rounded-xl font-black uppercase text-xs shadow-lg active:scale-95 transition-all">Salvar</button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </Layout>
     );
-
-    if (confirmado) {
-      try {
-        await api.delete(`especialidades/${id}/`);
-        notify.success("Especialidade removida.");
-        loadData();
-      } catch (error) {
-        notify.error("Não é possível excluir uma especialidade que possui médicos vinculados.");
-      }
-    }
-  };
-
-  const paginationBtnClass = "p-2 border rounded-lg transition-colors disabled:opacity-50 bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700";
-  const actionBtnClass = "p-2 bg-transparent rounded-lg transition-colors";
-  const editBtnClass = `${actionBtnClass} text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30`;
-  const deleteBtnClass = `${actionBtnClass} text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30`;
-
-  return (
-    <Layout>
-      <div className="max-w-4xl mx-auto pb-10">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                    <Tag className="text-blue-600"/> Especialidades
-                </h1>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">Gerencie as áreas de atuação médica.</p>
-            </div>
-            <button 
-                onClick={() => handleOpenModal()} 
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-transform active:scale-95"
-            >
-                <Plus size={20}/> Nova Especialidade
-            </button>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-6 relative">
-            <Search className="absolute left-7 top-7 text-slate-400" size={18} />
-            <input 
-                placeholder="Pesquisar especialidade..." 
-                value={search} 
-                onChange={e => { setSearch(e.target.value); setPage(1); }}
-                className="w-full pl-10 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3 outline-none text-slate-700 dark:text-white transition-colors focus:border-blue-500"
-            />
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <table className="w-full text-left">
-                <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                    <tr>
-                        <th className="px-6 py-4">Nome da Especialidade</th>
-                        <th className="px-6 py-4 text-right">Ações</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {loading ? (
-                        <tr>
-                            <td colSpan="2" className="p-10 text-center">
-                                <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32}/>
-                                <span className="text-slate-400">Carregando dados...</span>
-                            </td>
-                        </tr>
-                    ) : (
-                        <>
-                            {especialidades.map((item) => (
-                                <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-700 dark:text-white">
-                                        {item.nome}
-                                    </td>
-                                    <td className="px-6 py-4 text-right flex justify-end gap-2">
-                                        <button onClick={() => handleOpenModal(item)} className={editBtnClass} title="Editar">
-                                            <Pencil size={18}/>
-                                        </button>
-                                        <button onClick={() => handleDelete(item.id)} className={deleteBtnClass} title="Excluir">
-                                            <Trash2 size={18}/>
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {especialidades.length === 0 && (
-                                <tr><td colSpan="2" className="p-8 text-center text-slate-400">Nenhuma especialidade encontrada.</td></tr>
-                            )}
-                        </>
-                    )}
-                </tbody>
-            </table>
-
-            {totalPages > 1 && (
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center text-slate-500 text-sm">
-                    <span>Página <strong>{page}</strong> de <strong>{totalPages}</strong> ({totalCount} itens)</span>
-                    <div className="flex gap-2">
-                        <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className={paginationBtnClass}><ChevronLeft size={16}/></button>
-                        <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className={paginationBtnClass}><ChevronRight size={16}/></button>
-                    </div>
-                </div>
-            )}
-        </div>
-
-        {isModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-100 transition-all">
-                    <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-700">
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white">
-                            {editingItem ? 'Editar Especialidade' : 'Nova Especialidade'}
-                        </h3>
-                        <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                            <X size={24} />
-                        </button>
-                    </div>
-                    
-                    <form onSubmit={handleSubmit} className="p-6">
-                        <div className="mb-6">
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 font-bold uppercase tracking-tight">Nome da Área</label>
-                            <input 
-                                autoFocus
-                                required
-                                type="text"
-                                placeholder="Ex: Cardiologia"
-                                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                value={nome}
-                                onChange={e => setNome(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="flex justify-end gap-3">
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">Cancelar</button>
-                            <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-50">
-                                {saving ? <Loader2 className="animate-spin" size={18}/> : <><Save size={18}/> Salvar</>}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        )}
-      </div>
-    </Layout>
-  );
 }

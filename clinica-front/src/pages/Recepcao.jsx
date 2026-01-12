@@ -5,7 +5,7 @@ import Layout from '../components/Layout';
 import { 
     Search, CalendarClock, User, CheckCircle2, 
     Clock, DollarSign, AlertCircle, X, Save, Loader2, Pencil, UserX, RotateCcw,
-    Star, Accessibility, Baby, Users, Heart, AlertTriangle, UserCog, MapPin
+    Star, Accessibility, Baby, Users, Heart, AlertTriangle, UserCog, MapPin, Stethoscope
 } from 'lucide-react';
 
 const PRIORIDADES = {
@@ -81,7 +81,7 @@ export default function Recepcao() {
         return Math.max(0, Math.floor(diffMs / 60000));
     };
 
-    // CORREÇÃO 1: Validação apenas de campos CRUCIAIS
+    // CORREÇÃO: Validação apenas de campos CRUCIAIS
     const isCadastroIncompleto = (item) => {
         // Se vier do agendamento (detalhes_pdf ou paciente_*)
         const cpf = item.paciente_cpf || item.detalhes_pdf?.paciente_cpf;
@@ -180,7 +180,7 @@ export default function Recepcao() {
         }
     };
 
-    // CORREÇÃO 4: Botão Confirmar Chegada agora abre o modal corretamente
+    // CORREÇÃO: Botão Confirmar Chegada agora abre o modal corretamente
     const abrirCheckin = (item) => {
         setSelectedItem(item);
         setFormCheckin({ 
@@ -240,7 +240,7 @@ export default function Recepcao() {
                     ))}
                 </div>
 
-                {/* CORREÇÃO 2: Min-Height e Overflow Visible para Popups funcionarem */}
+                {/* CORREÇÃO: Min-Height e Overflow Visible para Popups funcionarem */}
                 <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 min-h-[400px]">
                     <div className="overflow-visible">
                         <table className="w-full text-left">
@@ -249,7 +249,7 @@ export default function Recepcao() {
                                     <th className="px-8 py-5">🕒 Hora / Espera</th>
                                     <th className="px-8 py-5">📍 Status</th>
                                     <th className="px-8 py-5">👤 Paciente</th>
-                                    {/* CORREÇÃO 3: Trocado 'Médico' por 'Profissional' */}
+                                    {/* CORREÇÃO: Trocado 'Médico' por 'Profissional' */}
                                     <th className="px-8 py-5">🩺 Profissional</th>
                                     <th className="px-8 py-5 text-right">Ações</th>
                                 </tr>

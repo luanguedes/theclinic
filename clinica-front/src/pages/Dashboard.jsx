@@ -5,13 +5,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
     Users, DollarSign, Activity, Clock, TrendingUp, 
-    CalendarCheck, AlertCircle, ChevronRight, Stethoscope,
-    Calendar, Filter, Plus, Lock, Eye, EyeOff, Loader2 
+    CalendarCheck, ChevronRight, Stethoscope,
+    Calendar, Lock, Eye, EyeOff, Loader2 
 } from 'lucide-react';
 
-// --- COMPONENTE DE BLOQUEIO VISUAL (Melhorado) ---
+// --- COMPONENTE DE BLOQUEIO VISUAL (Mantido) ---
 const RestrictedOverlay = ({ label }) => (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/40 dark:bg-slate-900/60 backdrop-blur-[6px] rounded-2xl transition-all border-2 border-dashed border-slate-200 dark:border-slate-700">
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 dark:bg-slate-900/80 backdrop-blur-[4px] rounded-[24px] transition-all border-2 border-dashed border-slate-200 dark:border-slate-700">
         <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-xl mb-3 border border-slate-100 dark:border-slate-700">
             <Lock size={20} className="text-blue-500" />
         </div>
@@ -44,7 +44,7 @@ export default function Dashboard() {
     const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0, receitaEstimada: 0 });
     const [listaHoje, setListaHoje] = useState([]); 
     const [loading, setLoading] = useState(true);
-    const [showValues, setShowValues] = useState(false); // Olhinho para valores financeiros
+    const [showValues, setShowValues] = useState(false);
 
     useEffect(() => {
         if (api) carregarDados();
@@ -58,7 +58,7 @@ export default function Dashboard() {
             const dadosDiaBrutos = resDia.data.results || resDia.data;
             const agendaAtivaDia = dadosDiaBrutos.filter(a => a.status !== 'cancelado');
             
-            // Cálculo de Ocupação (Simulado: assumindo 20 slots diários como 100%)
+            // Simulação de ocupação baseada em meta de 20 atendimentos
             const perc = Math.min(Math.round((agendaAtivaDia.length / 20) * 100), 100);
 
             setListaHoje(agendaAtivaDia);
@@ -73,7 +73,8 @@ export default function Dashboard() {
             const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
             const dadosMesBrutos = resMes.data.results || resMes.data;
 
-            const pacientesValidosMes = dadosMesBrutos.filter(a => a.status !== 'cancelado' && a.status !== 'faltou');
+            // Filtra pacientes válidos (excluindo cancelados)
+            const pacientesValidosMes = dadosMesBrutos.filter(a => a.status !== 'cancelado');
 
             let receitaConfirmada = 0;
             let receitaEstimada = 0;
@@ -84,7 +85,7 @@ export default function Dashboard() {
                     .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
 
                 receitaEstimada = dadosMesBrutos
-                    .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
+                    .filter(a => a.status !== 'cancelado')
                     .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
             }
 
@@ -107,6 +108,7 @@ export default function Dashboard() {
         }
     };
 
+    // Componente de Card Reutilizável
     const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading, restricted, restrictedLabel, isCurrency }) => (
         <div className="relative bg-white dark:bg-slate-800 p-6 rounded-[24px] border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:shadow-xl hover:-translate-y-1 overflow-hidden group h-full flex flex-col justify-between">
             {restricted && <RestrictedOverlay label={restrictedLabel} />}
@@ -118,7 +120,7 @@ export default function Dashboard() {
                         <div className="h-10 w-2/3 bg-slate-100 dark:bg-slate-700 animate-pulse rounded-xl mt-2"></div>
                     ) : (
                         <div className="flex items-center gap-2">
-                            <h3 className={`text-2xl font-black text-slate-900 dark:text-white tracking-tighter ${isCurrency && !showValues && isFinanceiro ? 'blur-md select-none' : ''}`}>
+                            <h3 className={`text-2xl font-black text-slate-900 dark:text-white tracking-tighter ${isCurrency && !showValues && isFinanceiro ? 'blur-md select-none opacity-50' : ''}`}>
                                 {value}
                             </h3>
                             {isCurrency && isFinanceiro && (
@@ -129,13 +131,13 @@ export default function Dashboard() {
                         </div>
                     )}
                 </div>
-                <div className={`p-4 rounded-2xl ${colorClass} transition-transform group-hover:scale-110 duration-300`}>
+                <div className={`p-3 rounded-2xl ${colorClass} transition-transform group-hover:scale-110 duration-300`}>
                     <Icon size={24} />
                 </div>
             </div>
             
             <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700/50">
-                <p className={`text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate ${isCurrency && !showValues && isFinanceiro ? 'blur-[3px]' : ''}`}>
+                <p className={`text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate ${isCurrency && !showValues && isFinanceiro ? 'blur-[3px] opacity-50' : ''}`}>
                     {subValue}
                 </p>
             </div>
@@ -146,17 +148,18 @@ export default function Dashboard() {
         <Layout>
             <div className="max-w-7xl mx-auto pb-20">
                 
-                {/* HEADER COM FILTROS INTELIGENTES */}
+                {/* HEADER COM FILTROS */}
                 <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-6">
                     <div>
                         <div className="flex items-center gap-3 mb-1">
                             <div className="w-2 h-8 bg-blue-600 rounded-full"></div>
                             <h1 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter flex items-center gap-3 uppercase">
-                                Central de Comando
+                                Visão Geral
                             </h1>
                         </div>
-                        <p className="text-slate-400 dark:text-slate-500 text-sm font-medium ml-5">
-                            Olá, <span className="text-blue-600 font-bold">{user?.first_name || user?.username}</span>. Aqui está o pulso da clínica agora.
+                        {/* TEXTO CORRIGIDO AQUI */}
+                        <p className="text-slate-400 dark:text-slate-500 text-xs font-black uppercase tracking-[0.2em] ml-5">
+                            Gestão Estratégica • {user?.first_name || user?.username}
                         </p>
                     </div>
 
@@ -193,10 +196,11 @@ export default function Dashboard() {
                         loading={loading}
                     />
 
+                    {/* CORREÇÃO AQUI: Título e Subtítulo alterados */}
                     <StatCard 
-                        title="Conversão Mensal"
-                        value={`${statsMes.totalPacientes} Atendidos`}
-                        subValue={`Desconsiderando faltas e desistências`}
+                        title="Atendimentos Previstos"
+                        value={`${statsMes.totalPacientes} Pacientes`}
+                        subValue={`Total de agendamentos no mês (Previsto)`}
                         icon={Users}
                         colorClass="bg-purple-600 text-white shadow-lg shadow-purple-200 dark:shadow-none"
                         loading={loading}
@@ -205,7 +209,7 @@ export default function Dashboard() {
                     <StatCard 
                         title="Liquidez Confirmada"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
-                        subValue={`Projeção Bruta: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
+                        subValue={`De um total previsto de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
                         icon={DollarSign}
                         colorClass="bg-emerald-600 text-white shadow-lg shadow-emerald-200 dark:shadow-none"
                         loading={loading}
@@ -352,8 +356,8 @@ export default function Dashboard() {
                             </div>
                         </div>
                     </div>
-
                 </div>
+
             </div>
         </Layout>
     );
