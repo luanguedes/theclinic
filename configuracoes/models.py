@@ -50,12 +50,20 @@ class ConfiguracaoSistema(models.Model):
     tempo_sessao_minutos = models.IntegerField(default=60, help_text="Deslogar após inatividade")
 
     # 3. Regras de Negócio
+    janela_agendamento_meses = models.IntegerField(default=6, help_text="Meses à frente liberados na agenda")
+
+    # 1. Configurações dos Robôs
     enviar_whatsapp_global = models.BooleanField(
         default=True, 
         help_text="Se desmarcado, NENHUMA  mensagem será enviado pelo sistema."
     )
-    janela_agendamento_meses = models.IntegerField(default=6, help_text="Meses à frente liberados na agenda")
+    enviar_wpp_confirmacao = models.BooleanField(default=True, verbose_name="Enviar Confirmação (Novo Agendamento)")
+    enviar_wpp_bloqueio = models.BooleanField(default=True, verbose_name="Enviar Aviso de Bloqueio/Cancelamento")
+    enviar_wpp_lembrete = models.BooleanField(default=True, verbose_name="Enviar Lembrete (Dia Anterior)")
 
+    # 2. Configurações do Cron (Lembrete Automático)
+    horario_disparo_lembrete = models.TimeField(default="08:00", help_text="Horário alvo para o envio automático")
+    data_ultima_execucao_lembrete = models.DateField(null=True, blank=True, help_text="Data do último disparo automático realizado")
     class Meta:
         verbose_name = "Configuração do Sistema"
         verbose_name_plural = "Configurações do Sistema"

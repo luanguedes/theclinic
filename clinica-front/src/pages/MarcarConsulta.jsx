@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
 
-// --- ESTILOS DO CALENDÁRIO ATUALIZADOS ---
+// --- ESTILOS DO CALENDÁRIO ---
 const calendarStyles = `
   .react-calendar { width: 100%; border: none; font-family: inherit; background: transparent; }
   .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 2px solid #2563eb !important; }
@@ -35,6 +35,7 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
 
+    // Proteção de array
     const safeOptions = Array.isArray(options) ? options : [];
 
     useEffect(() => { 
@@ -126,7 +127,9 @@ export default function MarcarConsulta() {
   const [pacienteId, setPacienteId] = useState('');
   const [convenioId, setConvenioId] = useState('');
   const [convenioTravado, setConvenioTravado] = useState(false);
-  const [enviarWhatsapp, setEnviarWhatsapp] = useState(true); // <--- NOVO ESTADO
+  
+  const [enviarWhatsapp, setEnviarWhatsapp] = useState(true);
+  const [configSistema, setConfigSistema] = useState(null); // --- ESTADO DA CONFIGURAÇÃO ---
   
   const [encaixeHora, setEncaixeHora] = useState('');
   const [observacao, setObservacao] = useState('');
@@ -159,8 +162,14 @@ export default function MarcarConsulta() {
   const [vagasDoDia, setVagasDoDia] = useState([]);
   const [regrasProfissional, setRegrasProfissional] = useState([]); 
 
+  // Carrega listas iniciais (COM PROTEÇÃO)
   useEffect(() => {
     if (api) {
+        // --- BUSCA CONFIGURAÇÃO DO SISTEMA ---
+        api.get('configuracoes/sistema/').then(res => {
+            setConfigSistema(res.data);
+        }).catch(err => console.error("Erro config", err));
+
         api.get('profissionais/').then(res => {
             const data = res.data.results || res.data;
             setProfissionais(Array.isArray(data) ? data.map(p => ({ id: p.id, label: p.nome })) : []);
@@ -194,7 +203,7 @@ export default function MarcarConsulta() {
             } else {
                 setEspecialidades([]);
             }
-        }).catch(() => setEspecialidades([])); // <--- CORRIGIDO AQUI
+        }).catch(() => setEspecialidades([]));
         
         api.get(`agendas/config/?status=todos&profissional_id=${profissionalId}&nopage=true`)
             .then(res => {
@@ -222,12 +231,14 @@ export default function MarcarConsulta() {
     } catch (e) { console.error(e); setVagasDoDia([]); }
   };
 
+  // --- NOVA LÓGICA DE CORES NO CALENDÁRIO ---
   const getTileClassName = ({ date, view }) => {
     if (view !== 'month') return null;
     
     const dataIso = getLocalISODate(date);
     const diaMes = dataIso.slice(5);
 
+    // 1. Bloqueios e Feriados (Têm prioridade sobre a regra de agenda)
     const bloqueio = listaBloqueios.find(b => {
         const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
         const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
@@ -239,6 +250,7 @@ export default function MarcarConsulta() {
         return bloqueio.tipo === 'feriado' ? 'dia-feriado' : 'dia-bloqueado';
     }
 
+    // 2. Agendas (Verifica se existe regra para o dia)
     if (!especialidadeId) return null;
     const jsDay = date.getDay();
     
@@ -249,9 +261,11 @@ export default function MarcarConsulta() {
     );
 
     if (regraEncontrada) {
+        // Se a agenda existe, mas foi marcada como encerrada/inativa, usa VERMELHO
         if (regraEncontrada.situacao === false) {
             return 'dia-sem-vagas';
         }
+        // Se está ativa, usa VERDE
         return 'dia-livre'; 
     }
     
@@ -334,7 +348,7 @@ export default function MarcarConsulta() {
                 observacoes: a.observacoes,
                 is_encaixe: a.is_encaixe,
                 valor: parseFloat(a.valor || s.valor),
-                enviar_whatsapp: a.enviar_whatsapp // <--- Mapeia preferência salva
+                enviar_whatsapp: a.enviar_whatsapp
             };
         }
         return s;
@@ -351,10 +365,18 @@ export default function MarcarConsulta() {
         convenio_id: a.convenio,
         convenio_nome: a.nome_convenio,
         observacoes: a.observacoes,
-        enviar_whatsapp: a.enviar_whatsapp // <--- Mapeia preferência salva (Encaixe)
+        enviar_whatsapp: a.enviar_whatsapp
     }));
     
     setVagasDoDia(final.sort((a,b) => a.hora.localeCompare(b.hora)));
+  };
+
+  // --- LÓGICA DE BLOQUEIO DE BOTÃO ---
+  const isWhatsappDisabled = () => {
+      // Se não carregou ainda, assume habilitado (ou desabilitado, dependendo da sua preferência)
+      if (!configSistema) return false;
+      // Trava se o Global estiver OFF ou o Confirmação estiver OFF
+      return !configSistema.enviar_whatsapp_global || !configSistema.enviar_wpp_confirmacao;
   };
 
   const abrirAgendar = (slot) => {
@@ -364,7 +386,9 @@ export default function MarcarConsulta() {
       setTipoModal('normal');
       setPacienteId(''); 
       setObservacao('');
-      setEnviarWhatsapp(true); // <--- Reseta para TRUE
+      
+      // Reseta para TRUE apenas se o sistema permitir
+      setEnviarWhatsapp(!isWhatsappDisabled()); 
       
       if (slot.convenio_regra_id) {
           setConvenioId(slot.convenio_regra_id);
@@ -386,7 +410,7 @@ export default function MarcarConsulta() {
      setValorSelecionado(''); 
      setConvenioId('');
      setConvenioTravado(false);
-     setEnviarWhatsapp(true); // <--- Reseta para TRUE
+     setEnviarWhatsapp(!isWhatsappDisabled()); 
      setModalOpen(true); 
   };
 
@@ -401,7 +425,6 @@ export default function MarcarConsulta() {
       if(slot.is_encaixe) setEncaixeHora(slot.hora);
       setConvenioTravado(false);
       
-      // <--- Recupera preferência salva ou assume true
       setEnviarWhatsapp(slot.enviar_whatsapp !== false); 
       
       setModalOpen(true);
@@ -441,8 +464,8 @@ export default function MarcarConsulta() {
             convenio: convenioId || null, 
             valor: valorSelecionado, 
             observacoes: observacao, 
-            is_encaixe: tipoModal === 'encaixe',
-            enviar_whatsapp: enviarWhatsapp // <--- Envia Preferência
+            is_encaixe: tipoModal === 'encaixe', 
+            enviar_whatsapp: enviarWhatsapp // Envia a preferência
         };
         
         if(agendamentoIdEditar) {
@@ -549,7 +572,7 @@ export default function MarcarConsulta() {
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-4 h-4 rounded border" style={{backgroundColor: '#ffedd5', borderColor: '#fed7aa', textDecoration: 'line-through', color: '#c2410c'}}></div> 
-                                <span>Bloqueio (Férias/Manual)</span>
+                                <span>Bloqueios</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-4 h-4 rounded border" style={{backgroundColor: '#f3e8ff', borderColor: '#d8b4fe'}}></div> 
@@ -701,21 +724,20 @@ export default function MarcarConsulta() {
                         {tipoModal === 'encaixe' && <div><label className="block text-sm font-bold mb-1">Horário</label><input type="time" className="w-full border p-3 rounded-lg dark:bg-slate-900 dark:text-white" value={encaixeHora} onChange={e => setEncaixeHora(e.target.value)} /></div>}
                         <textarea placeholder="Observações..." className="w-full border p-3 rounded-lg h-24 dark:bg-slate-900 dark:text-white" value={observacao} onChange={e => setObservacao(e.target.value)}></textarea>
                         
-                        {/* --- CHECKBOX DO WHATSAPP (NOVA FUNCIONALIDADE) --- */}
-                        <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 dark:bg-slate-800/50 rounded-lg border border-blue-100 dark:border-slate-700">
+                        {/* --- CHECKBOX DO WHATSAPP (COM TRAVA VISUAL E LÓGICA) --- */}
+                        <div className={`flex items-center gap-2 mb-4 p-3 rounded-lg border transition-all ${isWhatsappDisabled() ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed' : 'bg-blue-50 border-blue-100 dark:bg-slate-800/50 dark:border-slate-700'}`}>
                             <input
                                 type="checkbox"
                                 id="enviar_whatsapp"
                                 name="enviar_whatsapp"
                                 checked={enviarWhatsapp}
+                                disabled={isWhatsappDisabled()} // Trava se configuração não permitir
                                 onChange={(e) => setEnviarWhatsapp(e.target.checked)}
-                                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300 cursor-pointer"
+                                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300 cursor-pointer disabled:cursor-not-allowed"
                             />
-                            <label htmlFor="enviar_whatsapp" className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300 select-none flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600">
-                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                                </svg>
-                                Enviar confirmação via WhatsApp
+                            <label htmlFor="enviar_whatsapp" className={`text-sm font-medium select-none flex items-center gap-2 ${isWhatsappDisabled() ? 'cursor-not-allowed text-slate-500' : 'cursor-pointer text-slate-700 dark:text-slate-300'}`}>
+                                <MessageCircle size={16} className={isWhatsappDisabled() ? 'text-slate-400' : 'text-green-600'} />
+                                {isWhatsappDisabled() ? 'Envio de mensagem desativado pelo Admin' : 'Enviar confirmação via WhatsApp'}
                             </label>
                         </div>
                         {/* ---------------------------------------------------- */}

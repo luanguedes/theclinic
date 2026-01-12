@@ -7,7 +7,7 @@ from configuracoes.models import DadosClinica, ConfiguracaoSistema
 
 # Logs no terminal do Railway
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('agendamento.whatsapp')
 
 def formatar_telefone(telefone):
     if not telefone: return None
@@ -32,7 +32,7 @@ def get_dados_clinica():
             "endereco": endereco_completo
         }
     except Exception as e:
-        print(f"❌ ERRO ao buscar clínica: {e}")
+        logger.error(f"Erro ao buscar clínica: {e}")
         return {"nome": "Clínica", "endereco": ""}
 
 def get_dia_semana(data_obj):
@@ -52,44 +52,40 @@ def get_nome_especialidade(agendamento, profissional):
 
         return "Especialista"
     except Exception as e:
-        print(f"⚠️ Erro ao ler especialidade: {e}")
+        logger.warning(f"Erro ao ler especialidade: {e}")
         return "Especialista"
 
+# --- FUNÇÃO 1: CONFIRMAÇÃO DE AGENDAMENTO ---
 def enviar_mensagem_agendamento(agendamento):
-    print("\n" + "="*40)
-    print(f"🚀 [DIAGNÓSTICO] Iniciando envio ID: {agendamento.id}")
-    
     try:
         config = ConfiguracaoSistema.load()
         
-        print(f"🧐 VALOR NO BANCO (GLOBAL): {config.enviar_whatsapp_global}")
-        print(f"🧐 VALOR NO AGENDAMENTO (INDIVIDUAL): {agendamento.enviar_whatsapp}")
-
+        # 1. Trava Mestre
         if not config.enviar_whatsapp_global:
-            print("🛑 BLOQUEADO: Configuração Global está como False (Desativado).")
-            print("="*40 + "\n")
+            logger.info("🚫 Envio cancelado: Sistema Global Desativado.")
             return
 
+        # 2. Trava Específica (Confirmação)
+        if not config.enviar_wpp_confirmacao:
+            logger.info("🚫 Envio cancelado: Módulo de Confirmação Desativado.")
+            return
+
+        # 3. Trava Individual (Paciente)
         if not agendamento.enviar_whatsapp:
-            print("🛑 BLOQUEADO: Checkbox Individual estava desmarcado.")
-            print("="*40 + "\n")
+            logger.info("🚫 Envio cancelado: Desmarcado no agendamento.")
             return
         
-        print("✅ TRAVAS APROVADAS: Prosseguindo para montagem da mensagem...")
-
+        # ... Prossegue com o envio ...
         paciente = agendamento.paciente
         profissional = agendamento.profissional
         dados_clinica = get_dados_clinica()
-        
         telefone = formatar_telefone(paciente.telefone)
-        if not telefone:
-            print("❌ Telefone inválido.")
-            return
+        
+        if not telefone: return
 
         data_fmt = agendamento.data.strftime('%d/%m/%Y')
         dia_semana = get_dia_semana(agendamento.data)
         hora_fmt = agendamento.horario.strftime('%H:%M')
-        
         nome_especialidade = get_nome_especialidade(agendamento, profissional)
 
         mensagem = (
@@ -103,67 +99,34 @@ def enviar_mensagem_agendamento(agendamento):
             f"Por favor, chegue com 15 minutos de antecedência. Em caso de dúvidas, entre em contato conosco!"
         )
 
-        url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
-        
-        payload = {
-            "number": telefone,
-            "textMessage": {
-                "text": mensagem
-            },
-            "options": {
-                "delay": 1200,
-                "linkPreview": False
-            }
-        }
-        
-        headers = {
-            "apikey": settings.EVOLUTION_API_KEY,
-            "Content-Type": "application/json"
-        }
-
-        print(f"📤 Enviando Request para API no número {telefone}...")
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
-        
-        print(f"📡 Status API: {response.status_code}")
-        
-        if response.status_code in [200, 201]:
-            print("✅ SUCESSO! Mensagem entregue.")
-        else:
-            print(f"⚠️ FALHA API: {response.text}")
+        _disparar_api(telefone, mensagem)
 
     except Exception as e:
-        print(f"🔥 ERRO CRÍTICO NO CÓDIGO: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    print("="*40 + "\n")
+        logger.exception(f"Erro crítico no envio: {e}")
 
-# --- FUNÇÃO NOVA ADICIONADA CORRETAMENTE FORA DO BLOCO EXCEPT ---
+# --- FUNÇÃO 2: CANCELAMENTO/BLOQUEIO ---
 def enviar_mensagem_cancelamento_bloqueio(agendamento, motivo_personalizado=""):
-    print(f"⚠️ [WHATSAPP] Enviando CANCELAMENTO para Agendamento ID: {agendamento.id}")
-    
     try:
-        # Verifica Config Global
         config = ConfiguracaoSistema.load()
+        
+        # 1. Trava Mestre
         if not config.enviar_whatsapp_global:
-            print("🛑 Envio cancelado: Bloqueio Global Ativo.")
+            return
+
+        # 2. Trava Específica (Bloqueio)
+        if not config.enviar_wpp_bloqueio:
             return
 
         paciente = agendamento.paciente
         dados_clinica = get_dados_clinica()
         telefone = formatar_telefone(paciente.telefone)
         
-        if not telefone: 
-            print("❌ Telefone inválido.")
-            return
+        if not telefone: return
 
         data_fmt = agendamento.data.strftime('%d/%m/%Y')
         hora_fmt = agendamento.horario.strftime('%H:%M')
         
-        # Se tiver motivo, adiciona na mensagem
-        bloco_motivo = ""
-        if motivo_personalizado:
-            bloco_motivo = f"\nℹ️ *Motivo:* _{motivo_personalizado}_\n"
+        bloco_motivo = f"\nℹ️ *Motivo:* _{motivo_personalizado}_\n" if motivo_personalizado else ""
 
         mensagem = (
             f"Olá, *{paciente.nome}*.\n\n"
@@ -175,21 +138,76 @@ def enviar_mensagem_cancelamento_bloqueio(agendamento, motivo_personalizado=""):
             f"Pedimos desculpas pelo transtorno. 🙏"
         )
 
-        url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
-        
-        payload = {
-            "number": telefone,
-            "textMessage": {"text": mensagem},
-            "options": {"delay": 1200, "linkPreview": False}
-        }
-        
-        headers = {
-            "apikey": settings.EVOLUTION_API_KEY,
-            "Content-Type": "application/json"
-        }
-
-        requests.post(url, json=payload, headers=headers, timeout=10)
-        print(f"✅ Cancelamento enviado para {telefone}")
+        _disparar_api(telefone, mensagem)
 
     except Exception as e:
-        print(f"🔥 Erro ao enviar cancelamento: {e}")
+        logger.exception(f"Erro no cancelamento: {e}")
+
+# --- FUNÇÃO 3: LEMBRETE (DIA SEGUINTE) ---
+def enviar_lembrete_24h(agendamento):
+    try:
+        config = ConfiguracaoSistema.load()
+        
+        # 1. Trava Mestre
+        if not config.enviar_whatsapp_global:
+            return False
+
+        # 2. Trava Específica (Lembrete)
+        if not config.enviar_wpp_lembrete:
+            return False
+
+        # 3. Trava Individual
+        if not agendamento.enviar_whatsapp:
+            return False
+
+        paciente = agendamento.paciente
+        profissional = agendamento.profissional
+        dados_clinica = get_dados_clinica()
+        telefone = formatar_telefone(paciente.telefone)
+        
+        if not telefone: return False
+
+        data_fmt = agendamento.data.strftime('%d/%m/%Y')
+        hora_fmt = agendamento.horario.strftime('%H:%M')
+        
+        mensagem = (
+            f"Olá, *{paciente.nome}*! 👋\n\n"
+            f"Passando para lembrar da sua consulta amanhã:\n\n"
+            f"📅 *Amanhã, {data_fmt}*\n"
+            f"⏰ Horário: *{hora_fmt}*\n"
+            f"👨‍⚕️ Profissional: {profissional.nome}\n"
+            f"📍 Local: {dados_clinica['nome']}\n\n"
+            f"Sua presença é muito importante. Caso não possa comparecer, avise-nos com antecedência.\n\n"
+            f"Até lá!"
+        )
+
+        return _disparar_api(telefone, mensagem)
+
+    except Exception as e:
+        logger.exception(f"Erro no lembrete: {e}")
+        return False
+
+# --- HELPER INTERNO PARA NÃO REPETIR CÓDIGO ---
+def _disparar_api(telefone, mensagem):
+    url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
+    payload = {
+        "number": telefone,
+        "textMessage": {"text": mensagem},
+        "options": {"delay": 1200, "linkPreview": False}
+    }
+    headers = {
+        "apikey": settings.EVOLUTION_API_KEY,
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code in [200, 201]:
+            logger.info(f"✅ Mensagem enviada para {telefone}")
+            return True
+        else:
+            logger.error(f"⚠️ Erro API: {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Erro conexão API: {e}")
+        return False

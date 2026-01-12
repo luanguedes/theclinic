@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X, Pencil, FileText, RotateCcw, MessageSquare, CheckSquare, Square, Send, Loader2
+    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X, Pencil, FileText, RotateCcw, MessageSquare, CheckSquare, Square, Send, Loader2, Lock
 } from 'lucide-react';
 import { generateConflictReport } from '../utils/generateReport';
 
@@ -32,6 +32,7 @@ export default function Bloqueios() {
     const [selecionados, setSelecionados] = useState([]);
     const [enviandoWpp, setEnviandoWpp] = useState(false);
     const [motivoSalvo, setMotivoSalvo] = useState('');
+    const [configSistema, setConfigSistema] = useState(null); // --- ESTADO DA CONFIGURAÇÃO ---
 
     useEffect(() => {
         if (api) loadData();
@@ -39,12 +40,14 @@ export default function Bloqueios() {
 
     const loadData = async () => {
         try {
-            const [resBloq, resProf] = await Promise.all([
+            const [resBloq, resProf, resConfig] = await Promise.all([
                 api.get('agendamento/bloqueios/'),
-                api.get('profissionais/')
+                api.get('profissionais/'),
+                api.get('configuracoes/sistema/') // Carrega config
             ]);
             setBloqueios(Array.isArray(resBloq.data.results || resBloq.data) ? (resBloq.data.results || resBloq.data) : []);
             setProfissionais(Array.isArray(resProf.data.results || resProf.data) ? (resProf.data.results || resProf.data) : []);
+            setConfigSistema(resConfig.data);
         } catch (e) { 
             notify.error("Erro ao carregar dados."); 
             setBloqueios([]);
@@ -151,6 +154,13 @@ export default function Bloqueios() {
         }
     }
 
+    // --- LÓGICA DE BLOQUEIO DO BOTÃO WHATSAPP ---
+    const isWhatsappDisabled = () => {
+        if (!configSistema) return false;
+        // Trava se o Global estiver OFF ou o Bloqueio estiver OFF
+        return !configSistema.enviar_whatsapp_global || !configSistema.enviar_wpp_bloqueio;
+    };
+
     const handleEnviarEmMassa = async () => {
         if (selecionados.length === 0) return;
         setEnviandoWpp(true);
@@ -178,6 +188,7 @@ export default function Bloqueios() {
                 </h1>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* FORMULÁRIO */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-fit">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="font-bold text-lg dark:text-white">{editingId ? 'Editar Bloqueio' : 'Novo Bloqueio'}</h2>
@@ -246,6 +257,7 @@ export default function Bloqueios() {
                         </form>
                     </div>
 
+                    {/* LISTA DE BLOQUEIOS */}
                     <div className="lg:col-span-2">
                         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                             <table className="w-full text-left">
@@ -301,6 +313,7 @@ export default function Bloqueios() {
                     </div>
                 </div>
 
+                {/* MODAL DE CONFLITO */}
                 {conflictData && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
@@ -334,6 +347,7 @@ export default function Bloqueios() {
                     </div>
                 )}
 
+                {/* MODAL DE DISPARO WHATSAPP */}
                 {modalDisparoOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
@@ -398,14 +412,23 @@ export default function Bloqueios() {
                                 >
                                     Não Enviar
                                 </button>
+                                
+                                {/* --- BOTÃO DE ENVIO COM TRAVA VISUAL --- */}
                                 <button 
                                     onClick={handleEnviarEmMassa}
-                                    disabled={selecionados.length === 0 || enviandoWpp}
-                                    className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-green-200 dark:shadow-none transition-all active:scale-95"
+                                    disabled={selecionados.length === 0 || enviandoWpp || isWhatsappDisabled()} // Trava funcional
+                                    className={`px-6 py-2 font-bold rounded-lg flex items-center gap-2 text-sm transition-all active:scale-95 shadow-lg shadow-green-200 dark:shadow-none
+                                        ${isWhatsappDisabled() 
+                                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                                            : 'bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed'
+                                        }
+                                    `}
+                                    title={isWhatsappDisabled() ? "Envio desativado nas Configurações" : "Enviar Mensagens"}
                                 >
-                                    {enviandoWpp ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>}
-                                    Enviar ({selecionados.length})
+                                    {enviandoWpp ? <Loader2 className="animate-spin" size={16}/> : isWhatsappDisabled() ? <Lock size={16}/> : <Send size={16}/>}
+                                    {isWhatsappDisabled() ? 'Envio Bloqueado' : `Enviar (${selecionados.length})`}
                                 </button>
+                                {/* --------------------------------------- */}
                             </div>
                         </div>
                     </div>

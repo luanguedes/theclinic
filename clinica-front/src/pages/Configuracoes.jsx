@@ -3,16 +3,17 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, Lock, MessageCircle
+    Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, Lock, MessageCircle, Play, CheckCircle2, Clock
 } from 'lucide-react';
 
 export default function Configuracoes() {
     const { api, user } = useAuth();
-    const { notify } = useNotification();
+    const { notify, confirmDialog } = useNotification();
     
-    const [activeTab, setActiveTab] = useState('seguranca');
+    const [activeTab, setActiveTab] = useState('comunicacao'); // Começa na aba nova para facilitar
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [runningBot, setRunningBot] = useState(false);
 
     // Estado inicial com valores padrão
     const [config, setConfig] = useState({
@@ -22,7 +23,14 @@ export default function Configuracoes() {
         itens_por_pagina: 10,
         modo_manutencao: false,
         janela_agendamento_meses: 6,
-        enviar_whatsapp_global: true // Padrão ligado
+        
+        // Comunicação
+        enviar_whatsapp_global: true, // Master Switch
+        enviar_wpp_confirmacao: true,
+        enviar_wpp_bloqueio: true,
+        enviar_wpp_lembrete: true,
+        horario_disparo_lembrete: '08:00',
+        data_ultima_execucao_lembrete: null
     });
 
     // Se não for admin, nem carrega
@@ -47,8 +55,6 @@ export default function Configuracoes() {
         try {
             const res = await api.get('configuracoes/sistema/');
             if(res.data) {
-                // Merge seguro: Mantém o estado atual e sobrescreve com o que veio da API
-                // Isso evita que o toggle trave se o campo vier null ou undefined
                 setConfig(prev => ({ ...prev, ...res.data }));
             }
         } catch (error) {
@@ -72,7 +78,6 @@ export default function Configuracoes() {
         }
     };
 
-    // Handler genérico para inputs de texto/numero
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
         setConfig(prev => ({
@@ -80,6 +85,36 @@ export default function Configuracoes() {
             [name]: type === 'checkbox' ? checked : value
         }));
     };
+
+    // --- FUNÇÃO PARA EXECUTAR O ROBÔ MANUALMENTE ---
+    const handleExecutarAgora = async () => {
+        const confirm = await confirmDialog(
+            "Isso irá buscar agendamentos de AMANHÃ que ainda não receberam lembrete e enviará a mensagem.",
+            "Executar Disparo Manual?",
+            "Sim, Executar", "Cancelar"
+        );
+        if (!confirm) return;
+
+        setRunningBot(true);
+        try {
+            // Chama a rota de execução manual
+            const res = await api.post('configuracoes/sistema/executar_lembretes/');
+            
+            notify.success("Rotina executada com sucesso!");
+            // Atualiza a data na tela se retornada
+            if(res.data.ultima_execucao) {
+                setConfig(prev => ({...prev, data_ultima_execucao_lembrete: res.data.ultima_execucao}));
+            }
+        } catch (e) {
+            notify.error("Erro ao executar rotina.");
+        } finally {
+            setRunningBot(false);
+        }
+    };
+
+    // Verifica se já rodou hoje
+    const hojeIso = new Date().toISOString().split('T')[0];
+    const jaRodouHoje = config.data_ultima_execucao_lembrete === hojeIso;
 
     const tabClass = (tab) => `
         flex items-center gap-2 px-6 py-4 font-bold border-b-2 transition-all whitespace-nowrap
@@ -167,7 +202,6 @@ export default function Configuracoes() {
                                                 <AlertTriangle size={20}/> Modo Manutenção
                                             </div>
                                             <div className="flex items-center gap-4">
-                                                {/* CORREÇÃO AQUI: Trocado div por label */}
                                                 <label className="relative inline-flex items-center cursor-pointer">
                                                     <input 
                                                         type="checkbox" 
@@ -202,33 +236,156 @@ export default function Configuracoes() {
                                     </div>
                                 )}
 
-                                {/* ABA COMUNICAÇÃO */}
+                                {/* ABA COMUNICAÇÃO (NOVA) */}
                                 {activeTab === 'comunicacao' && (
-                                    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
-                                        <div className="bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 p-5 rounded-xl">
-                                            <div className="flex items-center gap-2 mb-3 text-green-700 dark:text-green-400 font-bold">
-                                                <MessageCircle size={20}/> Disparos de WhatsApp
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                {/* CORREÇÃO AQUI: Trocado div por label e input verificado */}
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-left-4 duration-300">
+                                        
+                                        {/* SEÇÃO 0: MASTER SWITCH */}
+                                        <div className={`p-6 rounded-xl border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'}`}>
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h3 className={`font-bold text-lg mb-1 ${config.enviar_whatsapp_global ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
+                                                        {config.enviar_whatsapp_global ? 'Sistema de Mensagens ATIVO' : 'Sistema de Mensagens DESATIVADO'}
+                                                    </h3>
+                                                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                                                        Este é o controle mestre. Se desligado, nenhuma mensagem será enviada, independente das configurações abaixo.
+                                                    </p>
+                                                </div>
                                                 <label className="relative inline-flex items-center cursor-pointer">
                                                     <input 
                                                         type="checkbox" 
-                                                        name="enviar_whatsapp_global"
+                                                        name="enviar_whatsapp_global" 
                                                         className="sr-only peer" 
-                                                        checked={!!config.enviar_whatsapp_global} // Força boolean
+                                                        checked={!!config.enviar_whatsapp_global} 
                                                         onChange={handleChange} 
                                                     />
-                                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
+                                                    <div className={`w-14 h-7 peer-focus:outline-none peer-focus:ring-4 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all ${config.enviar_whatsapp_global ? 'bg-slate-200 peer-checked:bg-green-600' : 'bg-slate-200 peer-checked:bg-red-600'}`}></div>
                                                 </label>
-                                                <span className="font-bold text-slate-700 dark:text-slate-300 select-none">
-                                                    {config.enviar_whatsapp_global ? 'ENVIO ATIVADO' : 'ENVIO DESATIVADO'}
-                                                </span>
                                             </div>
-                                            <p className="text-sm text-green-600/80 mt-3 leading-relaxed">
-                                                Controle Mestre: Se desativado aqui, <strong>nenhuma</strong> mensagem será enviada pelo sistema, independente da configuração individual do agendamento.
-                                            </p>
                                         </div>
+
+                                        {/* SEÇÃO 1: TIPOS DE MENSAGENS (COM OPACIDADE CONDICIONAL) */}
+                                        <div className={`bg-slate-50 dark:bg-slate-900/30 p-5 rounded-xl border border-slate-100 dark:border-slate-700 transition-opacity duration-300 ${!config.enviar_whatsapp_global ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                                            <h3 className="font-bold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
+                                                <Settings size={18}/> Tipos de Mensagens Ativos
+                                            </h3>
+                                            <div className="space-y-4">
+                                                
+                                                {/* TOGGLE CONFIRMAÇÃO */}
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Confirmação de Agendamento</p>
+                                                        <p className="text-xs text-slate-500">Enviada imediatamente após criar um agendamento.</p>
+                                                    </div>
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            name="enviar_wpp_confirmacao" 
+                                                            className="sr-only peer" 
+                                                            checked={config.enviar_wpp_confirmacao} 
+                                                            onChange={handleChange}
+                                                            disabled={!config.enviar_whatsapp_global} // TRAVA
+                                                        />
+                                                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                                    </label>
+                                                </div>
+
+                                                <hr className="dark:border-slate-700"/>
+
+                                                {/* TOGGLE BLOQUEIO */}
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Aviso de Bloqueio/Cancelamento</p>
+                                                        <p className="text-xs text-slate-500">Enviada ao bloquear agenda e cancelar pacientes.</p>
+                                                    </div>
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            name="enviar_wpp_bloqueio" 
+                                                            className="sr-only peer" 
+                                                            checked={config.enviar_wpp_bloqueio} 
+                                                            onChange={handleChange}
+                                                            disabled={!config.enviar_whatsapp_global} // TRAVA
+                                                        />
+                                                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                                    </label>
+                                                </div>
+
+                                                <hr className="dark:border-slate-700"/>
+
+                                                {/* TOGGLE LEMBRETE */}
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Lembrete Automático (24h antes)</p>
+                                                        <p className="text-xs text-slate-500">Enviada no dia anterior à consulta.</p>
+                                                    </div>
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            name="enviar_wpp_lembrete" 
+                                                            className="sr-only peer" 
+                                                            checked={config.enviar_wpp_lembrete} 
+                                                            onChange={handleChange} 
+                                                            disabled={!config.enviar_whatsapp_global} // TRAVA
+                                                        />
+                                                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* SEÇÃO 2: CONFIGURAÇÃO DO ROBÔ (COM OPACIDADE CONDICIONAL) */}
+                                        <div className={`p-5 rounded-xl border transition-all ${config.enviar_whatsapp_global && config.enviar_wpp_lembrete ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-slate-600' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 opacity-50 pointer-events-none'}`}>
+                                            <h3 className="font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                                                <CalendarClock size={20} className="text-blue-600"/> Configuração do Robô de Lembretes
+                                            </h3>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário do Disparo</label>
+                                                        <div className="flex items-center gap-2">
+                                                            <input 
+                                                                type="time" 
+                                                                name="horario_disparo_lembrete"
+                                                                value={config.horario_disparo_lembrete} 
+                                                                onChange={handleChange} 
+                                                                className={inputClass}
+                                                            />
+                                                            <span className="text-xs text-slate-400 w-32">Horário alvo para execução diária.</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status de Hoje ({new Date().toLocaleDateString()})</label>
+                                                        <div className={`flex items-center gap-2 font-bold ${jaRodouHoje ? 'text-green-600' : 'text-orange-500'}`}>
+                                                            {jaRodouHoje ? <CheckCircle2 size={20}/> : <Clock size={20}/>}
+                                                            {jaRodouHoje ? 'Executado com Sucesso' : 'Ainda não executado'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center">
+                                                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3">
+                                                        Precisa reenviar ou adiantar o envio?
+                                                    </p>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={handleExecutarAgora}
+                                                        // Desabilita se o Global OU o Lembrete estiverem desligados
+                                                        disabled={runningBot || !config.enviar_wpp_lembrete || !config.enviar_whatsapp_global}
+                                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        {runningBot ? <Loader2 className="animate-spin" size={20}/> : <Play size={20} fill="currentColor"/>}
+                                                        Executar Disparo Manualmente
+                                                    </button>
+                                                    <p className="text-[10px] text-slate-400 mt-2">
+                                                        O sistema ignorará automaticamente pacientes que já receberam o lembrete hoje.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 )}
 
