@@ -5,13 +5,12 @@ import Layout from '../components/Layout';
 import { useNavigate } from 'react-router-dom';
 import { 
   CalendarRange, Search, Plus, Filter, Edit, Trash2, 
-  X, Save, Clock, CalendarDays, PlusCircle, Calculator, DollarSign, Pin, Hourglass, Repeat, ShieldCheck, Users, ListFilter, ChevronDown, Check, RotateCcw 
+  X, Save, Clock, CalendarDays, PlusCircle, Calculator, DollarSign, Pin, Hourglass, Repeat, ShieldCheck, Users, ListFilter, ChevronDown, Check, RotateCcw, Loader2 
 } from 'lucide-react';
 
-// --- HELPERS DE TEMPO (Para o Cálculo Real-Time) ---
+// --- HELPERS DE TEMPO (Mantidos para o Cálculo Real-Time) ---
 const timeToMinutes = (time) => {
     if (!time) return 0;
-    // Divide HH:MM:SS ou HH:MM e pega apenas os 2 primeiros
     const parts = String(time).split(':');
     const h = parseInt(parts[0], 10);
     const m = parseInt(parts[1], 10);
@@ -183,7 +182,6 @@ export default function ConfigurarAgenda() {
   // --- CARREGAMENTO INICIAL ---
   useEffect(() => {
     if (api) {
-        // Carrega opções e dados INICIAIS
         api.get(`agendas/config/filters_data/?status=${statusFilter}`).then(res => {
             setProfissionaisFilter(res.data.profissionais);
             setEspecialidadesFilter(res.data.especialidades);
@@ -196,12 +194,10 @@ export default function ConfigurarAgenda() {
             setAllConvenios(data.map(c => ({ id: c.id, nome: c.nome })));
         });
         
-        // Carga inicial explícita
         loadData();
     }
   }, [api, statusFilter]);
 
-  // Recarrega sempre que mudar os filtros ativos
   useEffect(() => { if(api) loadData(); }, [activeFilters]);
 
   const loadData = async () => {
@@ -252,16 +248,12 @@ export default function ConfigurarAgenda() {
       }
   };
 
-  // --- FUNÇÕES DO MODAL ---
-  
-  // 1. RECALCULO AUTOMÁTICO EM TEMPO REAL (CORRIGIDO)
+  // --- MOTOR DE CÁLCULO REAL-TIME (Mantido 100%) ---
   useEffect(() => {
     if (!isModalOpen || !editingItem) return;
     if (editingItem.tipo !== 'padrao' && editingItem.tipo !== 'tempo') return;
 
     const { hora_inicio, hora_fim, intervalo_minutos, quantidade_atendimentos } = editingItem;
-    
-    // Converte para números para cálculo seguro
     const intervalo = parseInt(intervalo_minutos, 10);
     const qtdAtual = parseInt(quantidade_atendimentos, 10);
     const inicioMin = timeToMinutes(hora_inicio);
@@ -269,51 +261,34 @@ export default function ConfigurarAgenda() {
     if (!hora_inicio || !intervalo || intervalo <= 0) return;
 
     if (editModoCalculo === 'final') {
-        // MODO FINAL: Calcula QTD baseado em Inicio/Fim
         if (!hora_fim) return;
         const fimMin = timeToMinutes(hora_fim);
-        
         if (fimMin <= inicioMin) { 
              if(qtdAtual !== 0) setEditingItem(prev => ({ ...prev, quantidade_atendimentos: 0 })); 
              return; 
         }
-
         const diff = fimMin - inicioMin;
         const novaQtd = Math.floor(diff / intervalo);
-        
-        if (novaQtd !== qtdAtual) { 
-            setEditingItem(prev => ({ ...prev, quantidade_atendimentos: novaQtd })); 
-        }
+        if (novaQtd !== qtdAtual) setEditingItem(prev => ({ ...prev, quantidade_atendimentos: novaQtd })); 
     } else {
-        // MODO QTD: Calcula Fim baseado em Inicio/Qtd
         if (!qtdAtual && qtdAtual !== 0) return;
-        
         const duracaoTotal = qtdAtual * intervalo;
         const fimMin = inicioMin + duracaoTotal;
-        
-        let novoFim = '';
-        if (fimMin >= 1440) novoFim = '23:59'; 
-        else novoFim = minutesToTime(fimMin);
-
-        // Compara em minutos para evitar loop de string ("08:00" vs "08:00:00")
-        if (timeToMinutes(novoFim) !== timeToMinutes(hora_fim)) { 
-            setEditingItem(prev => ({ ...prev, hora_fim: novoFim })); 
-        }
+        let novoFim = fimMin >= 1440 ? '23:59' : minutesToTime(fimMin);
+        if (timeToMinutes(novoFim) !== timeToMinutes(hora_fim)) setEditingItem(prev => ({ ...prev, hora_fim: novoFim })); 
     }
-  }, [
-      // Dependências primitivas para evitar loops infinitos
-      editingItem?.hora_inicio, 
-      editingItem?.hora_fim, 
-      editingItem?.intervalo_minutos, 
-      editingItem?.quantidade_atendimentos, 
-      editModoCalculo, 
-      isModalOpen
-  ]);
+  }, [editingItem?.hora_inicio, editingItem?.hora_fim, editingItem?.intervalo_minutos, editingItem?.quantidade_atendimentos, editModoCalculo, isModalOpen]);
 
   const handleDelete = async (item) => {
-    const msg = item.total_agendados > 0 ? `ATENÇÃO: Existem ${item.total_agendados} pacientes agendados! Se excluir, eles ficarão como 'Encaixe'.` : "Isso excluirá permanentemente esta agenda.";
+    const msg = item.total_agendados > 0 ? `ATENÇÃO: Existem ${item.total_agendados} pacientes agendados nesta regra! Se excluir, eles ficarão como 'Encaixe'. Deseja prosseguir?` : "Isso excluirá permanentemente esta agenda do sistema.";
     const confirmed = await confirmDialog(msg, "Excluir Agenda", "Sim, excluir", "Cancelar", "danger");
-    if (confirmed) { try { await api.put(`agendas/config/update-group/${item.group_id}/`, { dias_semana: [] }); loadData(); notify.success("Agenda excluída."); } catch (error) { notify.error("Erro ao excluir."); } }
+    if (confirmed) { 
+        try { 
+            await api.put(`agendas/config/update-group/${item.group_id}/`, { dias_semana: [] }); 
+            loadData(); 
+            notify.success("Agenda removida com sucesso."); 
+        } catch (error) { notify.error("Erro ao excluir."); } 
+    }
   };
 
   const handleEdit = (item) => {
@@ -335,14 +310,17 @@ export default function ConfigurarAgenda() {
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
-    if (editingDays.length === 0) return notify.warning("Selecione pelo menos um dia.");
+    if (editingDays.length === 0) return notify.warning("Selecione ao menos um dia da semana.");
     setSaving(true);
     try {
         const payload = { tipo: editingItem.tipo, dias_semana: editingDays, data_inicio: editingItem.data_inicio, data_fim: editingItem.data_fim, valor: editingItem.valor, convenio: editingItem.convenio || null, situacao: editingItem.situacao };
         if (editingItem.tipo === 'fixo') { payload.lista_horarios = editHorariosFixos.filter(h => h.time); } 
         else { payload.hora_inicio = editingItem.hora_inicio; payload.hora_fim = editingItem.hora_fim; payload.intervalo_minutos = editingItem.intervalo_minutos; payload.quantidade_atendimentos = editingItem.quantidade_atendimentos; }
-        await api.put(`agendas/config/update-group/${editingItem.group_id}/`, payload); setIsModalOpen(false); loadData(); notify.success("Agenda atualizada!");
-    } catch (error) { notify.error("Erro ao atualizar."); } finally { setSaving(false); }
+        await api.put(`agendas/config/update-group/${editingItem.group_id}/`, payload); 
+        setIsModalOpen(false); 
+        loadData(); 
+        notify.success("Configuração atualizada!");
+    } catch (error) { notify.error("Erro ao salvar alterações."); } finally { setSaving(false); }
   };
 
   const thClass = "px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider";
@@ -351,15 +329,16 @@ export default function ConfigurarAgenda() {
 
   return (
     <Layout>
-      <div className="max-w-6xl mx-auto pb-10">
+      <div className="max-w-6xl mx-auto pb-10 tracking-tight">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div>
                 <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><CalendarRange className="text-purple-600"/> Configuração de Horários</h1>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">Gerencie as regras de atendimento e vigência.</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">Gerencie regras de atendimento, valores e vigências.</p>
             </div>
-            <button onClick={() => navigate('/agenda/criar')} className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-transform active:scale-95"><Plus size={20}/> Nova Agenda</button>
+            <button onClick={() => navigate('/agenda/criar')} className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95"><Plus size={20}/> Nova Agenda</button>
         </div>
 
+        {/* FILTROS E BUSCAS */}
         <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 mb-6 flex flex-col lg:flex-row gap-4 items-start">
             <div className="flex-1 w-full">
                 <div className="flex shadow-sm h-12 w-full">
@@ -394,20 +373,25 @@ export default function ConfigurarAgenda() {
             </div>
         </div>
 
+        {/* TABELA DE DADOS */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="w-full">
-                    <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700 font-bold uppercase text-[10px] tracking-widest">
                         <tr><th className={thClass}>Situação</th><th className={thClass}>Profissional</th><th className={thClass}>Dias</th><th className={thClass}>Detalhes</th><th className={thClass}>Vigência</th><th className={thClass}>Agendados</th><th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Ações</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {configs.map((item, idx) => (
+                        {loading ? (
+                             <tr><td colSpan="7" className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-purple-600 mb-2" size={32}/><span className="text-slate-400">Carregando dados...</span></td></tr>
+                        ) : configs.length === 0 ? (
+                             <tr><td colSpan="7" className="p-10 text-center text-slate-400">Nenhuma configuração encontrada.</td></tr>
+                        ) : configs.map((item, idx) => (
                             <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                 <td className={tdClass}>{getStatusBadge(item)}</td>
-                                <td className={tdClass}><div className="font-bold text-slate-800 dark:text-white">{item.nome_profissional}</div><div className="text-xs text-slate-500">{item.nome_especialidade}</div><div className="flex items-center gap-1 text-xs text-blue-600 mt-1"><ShieldCheck size={12}/> {item.nome_convenio || 'Todos / Particular'}</div></td>
+                                <td className={tdClass}><div className="font-bold text-slate-800 dark:text-white">{item.nome_profissional}</div><div className="text-xs text-slate-500">{item.nome_especialidade}</div><div className="flex items-center gap-1 text-[10px] font-bold text-blue-600 mt-1 uppercase"><ShieldCheck size={12}/> {item.nome_convenio || 'Todos / Particular'}</div></td>
                                 <td className={tdClass}><div className="flex gap-1 flex-wrap max-w-[150px]">{item.dias_vinculados && item.dias_vinculados.length > 0 ? (item.dias_vinculados.map(d => <span key={d} className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded text-[10px] font-bold uppercase border border-blue-100 dark:border-blue-800">{diasMap.find(dm => dm.id === d)?.label}</span>)) : (<span className="px-1.5 py-0.5 bg-gray-50 text-gray-500 rounded text-[10px] font-bold uppercase border">{diasMap.find(dm => dm.id === item.dia_semana)?.label || '-'}</span>)}</div></td>
-                                <td className={tdClass}>{item.tipo === 'fixo' ? (<div><span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold mb-1 inline-block">FIXO</span><div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">{item.horarios_fixos_detalhes?.map((h, i) => <div key={i}>{String(h.time).slice(0,5)} - {h.qtd} vagas</div>)}</div></div>) : item.tipo === 'periodo' ? (<div><span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold mb-1 inline-block">QTD/HORA</span><div className="text-xs text-slate-500">{item.quantidade_atendimentos} vagas a cada {item.intervalo_minutos} min</div></div>) : (<div><span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold mb-1 inline-block">POR TEMPO</span><div className="text-xs text-slate-500">Intervalo de {item.intervalo_minutos} min</div></div>)}</td>
-                                <td className={tdClass}><div className="text-xs flex flex-col gap-1"><span className="flex items-center gap-1"><CalendarDays size={12}/> {formatData(item.data_inicio)}</span><span className="text-slate-400">até {formatData(item.data_fim)}</span>{item.valor > 0 && <span className="text-green-600 font-bold">R$ {Number(item.valor).toFixed(2)}</span>}</div></td>
+                                <td className={tdClass}>{item.tipo === 'fixo' ? (<div><span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-black mb-1 inline-block uppercase tracking-tighter">FIXO</span><div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">{item.horarios_fixos_detalhes?.map((h, i) => <div key={i}>{String(h.time).slice(0,5)} - {h.qtd} vagas</div>)}</div></div>) : item.tipo === 'periodo' ? (<div><span className="text-[9px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-black mb-1 inline-block uppercase tracking-tighter">QTD/HORA</span><div className="text-xs text-slate-500">{item.quantidade_atendimentos} vagas a cada {item.intervalo_minutos} min</div></div>) : (<div><span className="text-[9px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-black mb-1 inline-block uppercase tracking-tighter">POR TEMPO</span><div className="text-xs text-slate-500">Intervalo de {item.intervalo_minutos} min</div></div>)}</td>
+                                <td className={tdClass}><div className="text-xs flex flex-col gap-1"><span className="flex items-center gap-1 font-bold"><CalendarDays size={12}/> {formatData(item.data_inicio)}</span><span className="text-slate-400">até {formatData(item.data_fim)}</span>{item.valor > 0 && <span className="text-green-600 font-bold">R$ {Number(item.valor).toFixed(2)}</span>}</div></td>
                                 <td className={tdClass}><div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-bold text-xs ${item.total_agendados > 0 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}><Users size={12}/> {item.total_agendados}</div></td>
                                 <td className="px-6 py-4 text-right flex justify-end gap-2"><button onClick={() => handleEdit(item)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><Edit size={18}/></button><button onClick={() => handleDelete(item)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 size={18}/></button></td>
                             </tr>
@@ -417,40 +401,95 @@ export default function ConfigurarAgenda() {
             </div>
         </div>
 
+        {/* MODAL DE EDIÇÃO AVANÇADA (MOTOR DE CÁLCULO PRESERVADO) */}
         {isModalOpen && editingItem && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
-                    <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-700 shrink-0">
-                        <div><h3 className="text-lg font-bold text-slate-800 dark:text-white">Editar Regra</h3><p className="text-xs text-slate-500">{editingItem.nome_profissional}</p></div>
-                        <button onClick={() => setIsModalOpen(false)}><X className="text-slate-400 hover:text-slate-600"/></button>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col border border-white/10">
+                    <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700 shrink-0 bg-slate-50/50 dark:bg-slate-800/50">
+                        <div><h3 className="text-lg font-bold text-slate-800 dark:text-white uppercase tracking-tight">Editar Regra</h3><p className="text-xs text-slate-500 font-bold uppercase">{editingItem.nome_profissional}</p></div>
+                        <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white dark:hover:bg-slate-700 rounded-full transition-colors shadow-sm"><X size={20} className="text-slate-400"/></button>
                     </div>
-                    <form onSubmit={handleSaveEdit} className="p-6 space-y-5 overflow-y-auto">
-                        <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl flex items-center justify-between border border-slate-200 dark:border-slate-700">
-                            <div><span className="block text-sm font-bold text-slate-700 dark:text-white">Situação da Agenda</span><span className="text-xs text-slate-500">{editingItem.situacao ? 'Esta agenda está ativa.' : 'Esta agenda está encerrada (invisível).'}</span></div>
-                            <button type="button" onClick={() => setEditingItem({...editingItem, situacao: !editingItem.situacao})} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingItem.situacao ? 'bg-green-500' : 'bg-slate-300'}`}><span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingItem.situacao ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                    
+                    <form onSubmit={handleSaveEdit} className="p-8 space-y-6 overflow-y-auto">
+                        {/* Status Toggle */}
+                        <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl flex items-center justify-between border border-slate-200 dark:border-slate-700">
+                            <div><span className="block text-sm font-black text-slate-700 dark:text-white uppercase tracking-tight">Situação</span><span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{editingItem.situacao ? 'Ativa e visível na marcação' : 'Encerrada / Oculta'}</span></div>
+                            <button type="button" onClick={() => setEditingItem({...editingItem, situacao: !editingItem.situacao})} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all ${editingItem.situacao ? 'bg-green-500 shadow-lg shadow-green-500/20' : 'bg-slate-300'}`}><span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingItem.situacao ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                         </div>
-                        <div><label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">Dias de Atendimento</label><div className="flex flex-wrap gap-2">{diasMap.map(dia => (<button key={dia.id} type="button" onClick={() => toggleEditDay(dia.id)} className={`w-9 h-9 rounded-full font-bold flex items-center justify-center transition-all text-xs ${editingDays.includes(dia.id) ? 'bg-purple-600 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>{dia.label}</button>))}</div></div>
-                        <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-500 mb-1">Início</label><input type="date" value={editingItem.data_inicio} onChange={e => setEditingItem({...editingItem, data_inicio: e.target.value})} className={inputModalClass}/></div><div><label className="block text-xs font-medium text-slate-500 mb-1">Fim</label><input type="date" value={editingItem.data_fim} onChange={e => setEditingItem({...editingItem, data_fim: e.target.value})} className={inputModalClass}/></div></div>
+
+                        {/* Seletor de Dias */}
+                        <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Dias de Atendimento</label><div className="flex flex-wrap gap-2">{diasMap.map(dia => (<button key={dia.id} type="button" onClick={() => toggleEditDay(dia.id)} className={`w-10 h-10 rounded-xl font-black flex items-center justify-center transition-all text-xs ${editingDays.includes(dia.id) ? 'bg-purple-600 text-white shadow-xl shadow-purple-600/20' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>{dia.label}</button>))}</div></div>
+                        
+                        {/* Vigência das Datas */}
+                        <div className="grid grid-cols-2 gap-4"><div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Vigência Início</label><input type="date" value={editingItem.data_inicio} onChange={e => setEditingItem({...editingItem, data_inicio: e.target.value})} className={inputModalClass}/></div><div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Vigência Fim</label><input type="date" value={editingItem.data_fim} onChange={e => setEditingItem({...editingItem, data_fim: e.target.value})} className={inputModalClass}/></div></div>
+                        
+                        {/* Financeiro */}
                         <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block text-xs font-medium text-slate-500 mb-1">Convênio</label><select className={inputModalClass} value={editingItem.convenio || ''} onChange={e => setEditingItem({...editingItem, convenio: e.target.value || null})}><option value="">Todos / Particular</option>{allConvenios.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>
-                            <div><label className="block text-xs font-medium text-slate-500 mb-1">Valor (R$)</label><div className="relative"><DollarSign className="absolute left-2 top-2.5 text-slate-400" size={14}/><input type="number" step="0.01" value={editingItem.valor} onChange={e => setEditingItem({...editingItem, valor: e.target.value})} className={`${inputModalClass} pl-7`}/></div></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Convênio</label><select className={inputModalClass} value={editingItem.convenio || ''} onChange={e => setEditingItem({...editingItem, convenio: e.target.value || null})}><option value="">Particular / Todos</option>{allConvenios.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Valor Consulta</label><div className="relative"><DollarSign className="absolute left-2.5 top-3 text-slate-400" size={14}/><input type="number" step="0.01" value={editingItem.valor} onChange={e => setEditingItem({...editingItem, valor: e.target.value})} className={`${inputModalClass} pl-8 font-bold`}/></div></div>
                         </div>
+
                         <hr className="border-slate-100 dark:border-slate-700"/>
+
+                        {/* Motor de Recalculo (Padrão/Tempo) */}
                         {(editingItem.tipo === 'padrao' || editingItem.tipo === 'tempo') && (
-                            <div className="animate-in fade-in zoom-in duration-300">
-                                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-lg mb-4 w-fit mx-auto"><button type="button" onClick={() => setEditModoCalculo('final')} className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 transition-all ${editModoCalculo === 'final' ? 'bg-white dark:bg-slate-700 shadow text-purple-600 dark:text-white' : 'text-slate-500'}`}><Clock size={14}/> Calc. Final</button><button type="button" onClick={() => setEditModoCalculo('quantidade')} className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 transition-all ${editModoCalculo === 'quantidade' ? 'bg-white dark:bg-slate-700 shadow text-purple-600 dark:text-white' : 'text-slate-500'}`}><Calculator size={14}/> Calc. Qtd.</button></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-xs font-medium text-slate-500 mb-1">Início</label><input type="time" value={editingItem.hora_inicio} onChange={e => setEditingItem({...editingItem, hora_inicio: e.target.value})} className={inputModalClass}/></div>
-                                    <div><label className="block text-xs font-medium text-slate-500 mb-1">Tempo (min)</label><input type="number" value={editingItem.intervalo_minutos} onChange={e => setEditingItem({...editingItem, intervalo_minutos: e.target.value})} className={inputModalClass}/></div>
+                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400">
+                                <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl mb-5 w-fit mx-auto border dark:border-slate-700 shadow-inner">
+                                  <button type="button" onClick={() => setEditModoCalculo('final')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center gap-2 transition-all ${editModoCalculo === 'final' ? 'bg-white dark:bg-slate-700 shadow text-purple-600 dark:text-white' : 'text-slate-500'}`}><Clock size={14}/> Por Hora Fim</button>
+                                  <button type="button" onClick={() => setEditModoCalculo('quantidade')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center gap-2 transition-all ${editModoCalculo === 'quantidade' ? 'bg-white dark:bg-slate-700 shadow text-purple-600 dark:text-white' : 'text-slate-500'}`}><Calculator size={14}/> Por Qtd Vagas</button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-5">
+                                    <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Início Agenda</label><input type="time" value={editingItem.hora_inicio} onChange={e => setEditingItem({...editingItem, hora_inicio: e.target.value})} className={inputModalClass}/></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Tempo Médio (min)</label><input type="number" value={editingItem.intervalo_minutos} onChange={e => setEditingItem({...editingItem, intervalo_minutos: e.target.value})} className={inputModalClass}/></div>
                                     {editModoCalculo === 'final' ? (
-                                        <><div><label className="block text-xs font-medium text-slate-500 mb-1">Fim</label><input type="time" value={editingItem.hora_fim} onChange={e => setEditingItem({...editingItem, hora_fim: e.target.value})} className={inputModalClass}/></div><div className="flex flex-col justify-end"><div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-lg p-2.5 flex items-center justify-between h-[42px]"><span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase">Total</span><div><span className="text-lg font-bold text-purple-700 dark:text-white">{editingItem.quantidade_atendimentos}</span><span className="text-[10px] text-purple-600 dark:text-purple-300 ml-1">vagas</span></div></div></div></>
-                                    ) : (<><div><label className="block text-xs font-medium text-slate-500 mb-1">Qtd.</label><input type="number" value={editingItem.quantidade_atendimentos} onChange={e => setEditingItem({...editingItem, quantidade_atendimentos: e.target.value})} className={inputModalClass}/></div><div className="flex flex-col justify-end"><div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-lg p-2.5 flex items-center justify-between h-[42px]"><span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase">Término</span><span className="text-lg font-bold text-purple-700 dark:text-white">{editingItem.hora_fim}</span></div></div></>)}
+                                        <>
+                                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Término Agenda</label><input type="time" value={editingItem.hora_fim} onChange={e => setEditingItem({...editingItem, hora_fim: e.target.value})} className={inputModalClass}/></div>
+                                            <div className="flex flex-col justify-end"><div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-2xl px-4 py-2.5 flex items-center justify-between h-[45px] shadow-inner"><span className="text-[10px] font-black text-purple-700 dark:text-purple-300 uppercase tracking-widest">Vagas</span><div className="flex items-center gap-1"><span className="text-xl font-black text-purple-700 dark:text-white">{editingItem.quantidade_atendimentos}</span><Users size={14} className="text-purple-400"/></div></div></div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Qtd de Vagas</label><input type="number" value={editingItem.quantidade_atendimentos} onChange={e => setEditingItem({...editingItem, quantidade_atendimentos: e.target.value})} className={inputModalClass}/></div>
+                                            <div className="flex flex-col justify-end"><div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-2xl px-4 py-2.5 flex items-center justify-between h-[45px] shadow-inner"><span className="text-[10px] font-black text-purple-700 dark:text-purple-300 uppercase tracking-widest">Término</span><div className="flex items-center gap-2"><Clock size={14} className="text-purple-400"/><span className="text-lg font-black text-purple-700 dark:text-white">{editingItem.hora_fim}</span></div></div></div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         )}
-                        {editingItem.tipo === 'periodo' && (<div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-500 mb-1">Início</label><input type="time" value={editingItem.hora_inicio} onChange={e => setEditingItem({...editingItem, hora_inicio: e.target.value})} className={inputModalClass}/></div><div><label className="block text-xs font-medium text-slate-500 mb-1">Fim</label><input type="time" value={editingItem.hora_fim} onChange={e => setEditingItem({...editingItem, hora_fim: e.target.value})} className={inputModalClass}/></div><div><label className="block text-xs font-medium text-slate-500 mb-1">A cada (min)</label><input type="number" value={editingItem.intervalo_minutos} onChange={e => setEditingItem({...editingItem, intervalo_minutos: e.target.value})} className={inputModalClass}/></div><div><label className="block text-xs font-medium text-slate-500 mb-1">Vagas</label><input type="number" value={editingItem.quantidade_atendimentos} onChange={e => setEditingItem({...editingItem, quantidade_atendimentos: e.target.value})} className={inputModalClass}/></div></div>)}
-                        {editingItem.tipo === 'fixo' && (<div><label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">Lista de Horários Fixos</label><div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">{editHorariosFixos.map((h, idx) => (<div key={idx} className="flex gap-2"><input type="time" value={h.time} onChange={e => updateHorarioFixo(idx, 'time', e.target.value)} className={inputModalClass}/><input type="number" placeholder="Qtd" value={h.qtd} onChange={e => updateHorarioFixo(idx, 'qtd', e.target.value)} className={`${inputModalClass} w-24`}/><button type="button" onClick={() => removeHorarioFixo(idx)} className="text-red-500 p-2"><Trash2 size={18}/></button></div>))}</div><button type="button" onClick={addHorarioFixo} className="mt-2 text-blue-600 text-sm font-bold flex items-center gap-1"><PlusCircle size={16}/> Adicionar Horário</button></div>)}
-                        <div className="pt-4 flex justify-end gap-2 shrink-0"><button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancelar</button><button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg">{saving ? 'Salvando...' : <><Save size={18}/> Salvar Alterações</>}</button></div>
+
+                        {/* Período (Qtd/Hora) */}
+                        {editingItem.tipo === 'periodo' && (
+                            <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Hora Início</label><input type="time" value={editingItem.hora_inicio} onChange={e => setEditingItem({...editingItem, hora_inicio: e.target.value})} className={inputModalClass}/></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Hora Fim</label><input type="time" value={editingItem.hora_fim} onChange={e => setEditingItem({...editingItem, hora_fim: e.target.value})} className={inputModalClass}/></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">A cada (min)</label><input type="number" value={editingItem.intervalo_minutos} onChange={e => setEditingItem({...editingItem, intervalo_minutos: e.target.value})} className={inputModalClass}/></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Vagas p/ Bloco</label><input type="number" value={editingItem.quantidade_atendimentos} onChange={e => setEditingItem({...editingItem, quantidade_atendimentos: e.target.value})} className={inputModalClass}/></div>
+                            </div>
+                        )}
+
+                        {/* Horários Fixos (Lista Dinâmica) */}
+                        {editingItem.tipo === 'fixo' && (
+                            <div className="animate-in slide-in-from-bottom-2 duration-300">
+                                <div className="flex justify-between items-center mb-3"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lista de Horários Manuais</label><button type="button" onClick={addHorarioFixo} className="text-blue-600 text-[10px] font-black uppercase flex items-center gap-1 hover:underline tracking-tighter"><PlusCircle size={14}/> Add Horário</button></div>
+                                <div className="space-y-3 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+                                    {editHorariosFixos.map((h, idx) => (
+                                        <div key={idx} className="flex gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in duration-200 shadow-sm">
+                                            <input type="time" value={h.time} onChange={e => updateHorarioFixo(idx, 'time', e.target.value)} className={inputModalClass}/>
+                                            <input type="number" placeholder="Vagas" value={h.qtd} onChange={e => updateHorarioFixo(idx, 'qtd', e.target.value)} className={`${inputModalClass} w-24`}/>
+                                            <button type="button" onClick={() => removeHorarioFixo(idx)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-2 rounded-xl transition-colors"><Trash2 size={20}/></button>
+                                        </div>
+                                    ))}
+                                    {editHorariosFixos.length === 0 && <div className="text-center py-8 text-slate-400 text-xs italic border-2 border-dashed rounded-2xl bg-slate-50/50">Nenhum horário definido.</div>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Footer de Ações do Modal */}
+                        <div className="pt-8 flex justify-end gap-3 shrink-0 border-t dark:border-slate-700">
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2.5 text-slate-600 dark:text-slate-400 font-bold uppercase text-[10px] tracking-widest hover:bg-slate-100 rounded-xl transition-colors">Cancelar</button>
+                            <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center gap-2 shadow-xl shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50">
+                                {saving ? <Loader2 className="animate-spin" size={16}/> : <><Save size={16}/> Salvar Regra</>}
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>

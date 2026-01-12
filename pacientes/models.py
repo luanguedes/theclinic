@@ -7,9 +7,29 @@ class Paciente(models.Model):
         ('Outro', 'Outro'),
     ]
 
+    # --- DICIONÁRIO DE PRIORIDADES PARA O BACKEND ---
+    PRIORIDADE_CHOICES = [
+        (None, 'Nenhuma'),
+        ('idoso', 'Idoso (60+)'),
+        ('gestante', 'Gestante / Lactante'),
+        ('cadeirante', 'Cadeirante / Mobilidade Reduzida'),
+        ('autista', 'Transtorno do Espectro Autista'),
+        ('pcd', 'PCD / Deficiência Oculta'),
+    ]
+
     nome = models.CharField(max_length=255)
     nome_mae = models.CharField(max_length=255, blank=True, null=True, verbose_name="Nome da Mãe")
     sexo = models.CharField(max_length=20, choices=SEXO_CHOICES, blank=True, null=True)
+    
+    # NOVO CAMPO: PRIORIDADE
+    prioridade = models.CharField(
+        max_length=20, 
+        choices=PRIORIDADE_CHOICES, 
+        blank=True, 
+        null=True,
+        default=None,
+        verbose_name="Condição de Prioridade"
+    )
     
     cpf = models.CharField(max_length=14, unique=True)
     data_nascimento = models.DateField()
@@ -28,8 +48,7 @@ class Paciente(models.Model):
     
     criado_em = models.DateTimeField(auto_now_add=True)
     
-    # --- A CORREÇÃO É AQUI ---
-    # Mudamos de DateTimeField para DateField para compatibilidade com o banco
+    # Mantendo sua correção de DateField
     atualizado_em = models.DateField(auto_now=True) 
 
     def __str__(self):

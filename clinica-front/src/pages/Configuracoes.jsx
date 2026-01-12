@@ -36,9 +36,11 @@ export default function Configuracoes() {
         return (
             <Layout>
                 <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
-                    <Lock size={48} className="mb-4"/>
-                    <h2 className="text-xl font-bold">Acesso Restrito</h2>
-                    <p>Apenas administradores podem acessar as configurações do sistema.</p>
+                    <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-full mb-4">
+                        <Lock size={48} className="text-slate-400"/>
+                    </div>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">Acesso Restrito</h2>
+                    <p className="max-w-xs text-center mt-2">Apenas administradores de nível superior podem gerenciar as chaves do sistema.</p>
                 </div>
             </Layout>
         );
@@ -56,8 +58,7 @@ export default function Configuracoes() {
                 setConfig(prev => ({ ...prev, ...res.data }));
             }
         } catch (error) {
-            console.error(error);
-            notify.error("Erro ao carregar configurações.");
+            notify.error("Não foi possível carregar as configurações globais.");
         } finally {
             setLoading(false);
         }
@@ -65,19 +66,34 @@ export default function Configuracoes() {
 
     const handleSave = async (e) => {
         e.preventDefault();
+
+        // Validações Básicas
+        if (config.tempo_sessao_minutos < 5) return notify.warning("O tempo de sessão mínimo é 5 minutos.");
+        if (config.itens_por_pagina < 1) return notify.warning("A paginação mínima é 1 item.");
+
         setSaving(true);
         try {
             await api.put('configuracoes/sistema/', config);
-            notify.success("Configurações atualizadas com sucesso!");
+            notify.success("Alterações aplicadas com sucesso!");
         } catch (error) {
-            notify.error("Erro ao salvar.");
+            notify.error("Falha ao salvar. Tente novamente em instantes.");
         } finally {
             setSaving(false);
         }
     };
 
-    const handleChange = (e) => {
+    const handleChange = async (e) => {
         const { name, value, type, checked } = e.target;
+        
+        // Proteção extra para Modo Manutenção
+        if (name === 'modo_manutencao' && checked) {
+            const confirm = await confirmDialog(
+                "Ao ativar o Modo Manutenção, todos os operadores serão desconectados e novos logins serão bloqueados. Deseja continuar?",
+                "Ativar Modo Crítico", "Sim, Bloquear Sistema", "Cancelar", "danger"
+            );
+            if (!confirm) return;
+        }
+
         setConfig(prev => ({
             ...prev,
             [name]: type === 'checkbox' ? checked : value
@@ -85,18 +101,18 @@ export default function Configuracoes() {
     };
 
     const handleExecutarAgora = async () => {
+        const pendentes = config.stats_amanha?.pendentes || 0;
         const confirm = await confirmDialog(
-            `Existem ${config.stats_amanha?.pendentes || 0} pacientes pendentes para amanhã. Deseja disparar agora?`,
-            "Executar Disparo Manual?",
-            "Sim, Executar", "Cancelar"
+            `Existem ${pendentes} lembretes pendentes para amanhã. O disparo manual iniciará agora. Confirmar?`,
+            "Executar Robô Manual",
+            "Sim, Disparar Agora", "Cancelar", "info"
         );
         if (!confirm) return;
 
         setRunningBot(true);
         try {
             const res = await api.post('configuracoes/sistema/executar_lembretes/');
-            notify.success("Rotina executada com sucesso!");
-            
+            notify.success("Processamento concluído!");
             if(res.data) {
                 setConfig(prev => ({
                     ...prev, 
@@ -106,186 +122,168 @@ export default function Configuracoes() {
                 }));
             }
         } catch (e) {
-            notify.error("Erro ao executar rotina.");
+            notify.error("Erro na execução do robô.");
         } finally {
             setRunningBot(false);
         }
     };
 
-    const hojeIso = new Date().toISOString().split('T')[0];
-    const jaRodouHoje = config.data_ultima_execucao_lembrete === hojeIso;
-
     const tabClass = (tab) => `
-        flex items-center gap-2 px-6 py-4 font-bold border-b-2 transition-all whitespace-nowrap
+        flex items-center gap-2 px-6 py-4 font-black text-xs uppercase tracking-widest border-b-2 transition-all whitespace-nowrap
         ${activeTab === tab 
             ? 'border-blue-600 text-blue-600 bg-blue-50/50 dark:bg-blue-900/20' 
-            : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:text-slate-300 dark:hover:bg-slate-800'}
+            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}
     `;
 
-    const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white transition-all";
-    const labelClass = "block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide";
+    const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold dark:text-white transition-all";
+    const labelClass = "block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
 
     return (
         <Layout>
-            <div className="max-w-4xl mx-auto pb-20">
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-                        <Settings className="text-blue-600" size={32}/> Configurações do Sistema
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-2">
-                        Gerencie a segurança, interface e automação de comunicações da clínica.
-                    </p>
+            <div className="max-w-4xl mx-auto pb-20 tracking-tight">
+                <div className="mb-10 flex items-center gap-4">
+                    <div className="bg-blue-600 p-3 rounded-2xl shadow-xl shadow-blue-500/20 text-white">
+                        <Settings size={32}/>
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Configurações</h1>
+                        <p className="text-slate-400 dark:text-slate-500 text-sm font-medium">Painel de controle de políticas globais da clínica.</p>
+                    </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto scrollbar-hide">
-                        <button type="button" onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}><Shield size={18}/> Segurança</button>
-                        <button type="button" onClick={()=>setActiveTab('interface')} className={tabClass('interface')}><LayoutIcon size={18}/> Interface</button>
-                        <button type="button" onClick={()=>setActiveTab('agendamento')} className={tabClass('agendamento')}><CalendarClock size={18}/> Regras</button>
-                        <button type="button" onClick={()=>setActiveTab('comunicacao')} className={tabClass('comunicacao')}><MessageCircle size={18}/> Comunicação</button>
+                <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="flex border-b border-slate-100 dark:border-slate-700 overflow-x-auto scrollbar-hide bg-slate-50/50 dark:bg-slate-800/50">
+                        <button type="button" onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}><Shield size={16}/> Segurança</button>
+                        <button type="button" onClick={()=>setActiveTab('interface')} className={tabClass('interface')}><LayoutIcon size={16}/> Interface</button>
+                        <button type="button" onClick={()=>setActiveTab('agendamento')} className={tabClass('agendamento')}><CalendarClock size={16}/> Agendas</button>
+                        <button type="button" onClick={()=>setActiveTab('comunicacao')} className={tabClass('comunicacao')}><MessageCircle size={16}/> Automação</button>
                     </div>
 
-                    <div className="p-8">
+                    <div className="p-10">
                         {loading ? (
-                            <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={32}/></div>
+                            <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40}/></div>
                         ) : (
-                            <form onSubmit={handleSave} className="space-y-8">
+                            <form onSubmit={handleSave} className="space-y-10">
                                 
                                 {activeTab === 'seguranca' && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                         <div><label className={labelClass}>Max. Tentativas de Login</label><input type="number" name="max_tentativas_login" value={config.max_tentativas_login} onChange={handleChange} className={inputClass}/></div>
-                                        <div><label className={labelClass}>Tempo de Bloqueio (Min)</label><input type="number" name="tempo_bloqueio_minutos" value={config.tempo_bloqueio_minutos} onChange={handleChange} className={inputClass}/></div>
-                                        <div className="md:col-span-2"><label className={labelClass}>Expiração de Sessão (Minutos)</label><input type="number" name="tempo_sessao_minutos" value={config.tempo_sessao_minutos} onChange={handleChange} className={inputClass}/></div>
+                                        <div><label className={labelClass}>Tempo de Bloqueio (Minutos)</label><input type="number" name="tempo_bloqueio_minutos" value={config.tempo_bloqueio_minutos} onChange={handleChange} className={inputClass}/></div>
+                                        <div className="md:col-span-2"><label className={labelClass}>Expiração Automática de Sessão (Minutos)</label><input type="number" name="tempo_sessao_minutos" value={config.tempo_sessao_minutos} onChange={handleChange} className={inputClass}/></div>
                                     </div>
                                 )}
 
                                 {activeTab === 'interface' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div><label className={labelClass}>Itens por Página</label><input type="number" name="itens_por_pagina" value={config.itens_por_pagina} onChange={handleChange} className={inputClass + " max-w-[150px]"}/></div>
-                                        <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 p-5 rounded-xl">
-                                            <div className="flex items-center gap-2 mb-3 text-red-700 dark:text-red-400 font-bold"><AlertTriangle size={20}/> Modo Manutenção</div>
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                                <input type="checkbox" name="modo_manutencao" className="sr-only peer" checked={config.modo_manutencao} onChange={handleChange}/>
-                                                <div className="w-11 h-6 bg-slate-200 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-                                                <span className="ml-3 font-bold text-slate-700 dark:text-slate-300">{config.modo_manutencao ? 'BLOQUEADO' : 'NORMAL'}</span>
-                                            </label>
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <div><label className={labelClass}>Registros por Página nas Listagens</label><input type="number" name="itens_por_pagina" value={config.itens_por_pagina} onChange={handleChange} className={inputClass + " max-w-[150px] font-mono text-lg text-blue-600"}/></div>
+                                        <div className="bg-rose-50/50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/30 p-6 rounded-3xl">
+                                            <div className="flex items-center gap-3 mb-4 text-rose-700 dark:text-rose-400 font-black uppercase text-xs tracking-widest"><AlertTriangle size={20}/> Modo de Manutenção do Sistema</div>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs text-rose-600/70 font-medium max-w-sm">Ative apenas para atualizações críticas. Todos os acessos serão suspensos imediatamente.</p>
+                                                <label className="relative inline-flex items-center cursor-pointer scale-125 mr-4">
+                                                    <input type="checkbox" name="modo_manutencao" className="sr-only peer" checked={config.modo_manutencao} onChange={handleChange}/>
+                                                    <div className="w-11 h-6 bg-slate-200 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600 shadow-inner"></div>
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
 
                                 {activeTab === 'agendamento' && (
-                                    <div className="animate-in fade-in duration-300">
-                                        <label className={labelClass}>Janela de Agendamento Futuro (Meses)</label>
-                                        <input type="number" name="janela_agendamento_meses" value={config.janela_agendamento_meses} onChange={handleChange} className={inputClass + " max-w-[150px]"}/>
+                                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <label className={labelClass}>Janela Máxima de Agendamento Futuro (Meses)</label>
+                                        <div className="flex items-center gap-4">
+                                            <input type="number" name="janela_agendamento_meses" value={config.janela_agendamento_meses} onChange={handleChange} className={inputClass + " max-w-[150px] font-mono text-lg text-blue-600"}/>
+                                            <span className="text-slate-400 font-medium text-sm">meses à frente da data atual.</span>
+                                        </div>
                                     </div>
                                 )}
 
                                 {activeTab === 'comunicacao' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className={`p-6 rounded-xl border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800'}`}>
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-400">
+                                        {/* Master Switch */}
+                                        <div className={`p-8 rounded-3xl border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}>
                                             <div className="flex items-center justify-between">
-                                                <div><h3 className={`font-bold text-lg ${config.enviar_whatsapp_global ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>{config.enviar_whatsapp_global ? 'Mensagens Ativadas' : 'Mensagens Desativadas'}</h3><p className="text-sm opacity-80">Controle mestre de envios.</p></div>
-                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                <div>
+                                                    <h3 className={`font-black text-lg uppercase tracking-tight ${config.enviar_whatsapp_global ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500'}`}>
+                                                        {config.enviar_whatsapp_global ? 'Serviço de WhatsApp Ativo' : 'Serviço de WhatsApp Pausado'}
+                                                    </h3>
+                                                    <p className="text-xs font-medium opacity-60">Status da API de mensageria em tempo real.</p>
+                                                </div>
+                                                <label className="relative inline-flex items-center cursor-pointer scale-150 mr-4">
                                                     <input type="checkbox" name="enviar_whatsapp_global" className="sr-only peer" checked={!!config.enviar_whatsapp_global} onChange={handleChange}/>
-                                                    <div className={`w-14 h-7 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all ${config.enviar_whatsapp_global ? 'bg-slate-200 peer-checked:bg-green-600' : 'bg-slate-200 peer-checked:bg-red-600'}`}></div>
+                                                    <div className={`w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all ${config.enviar_whatsapp_global ? 'bg-slate-300 peer-checked:bg-emerald-600' : 'bg-slate-300'}`}></div>
                                                 </label>
                                             </div>
                                         </div>
 
-                                        <div className={`bg-slate-50 dark:bg-slate-900/30 p-5 rounded-xl border border-slate-200 dark:border-slate-700 ${!config.enviar_whatsapp_global ? 'opacity-40 grayscale' : ''}`}>
-                                            <h3 className="font-bold mb-4 flex items-center gap-2"><MessageCircle size={18}/> Gatilhos de Mensagem</h3>
-                                            <div className="space-y-4">
+                                        {/* Sub Gatilhos */}
+                                        <div className={`bg-slate-50/50 dark:bg-slate-900/30 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 ${!config.enviar_whatsapp_global ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+                                            <h3 className="font-black text-xs uppercase tracking-[0.2em] mb-8 text-slate-400 flex items-center gap-2"><MessageCircle size={16}/> Gatilhos de Disparo</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                                 {[
-                                                    { id: 'enviar_wpp_confirmacao', label: 'Confirmação Imediata', sub: 'No ato da marcação.' },
-                                                    { id: 'enviar_wpp_bloqueio', label: 'Aviso de Cancelamento', sub: 'Em caso de bloqueio de agenda.' },
-                                                    { id: 'enviar_wpp_lembrete', label: 'Lembrete Automático', sub: 'Enviado 24h antes da consulta.' }
+                                                    { id: 'enviar_wpp_confirmacao', label: 'Confirmação', sub: 'No ato da marcação.' },
+                                                    { id: 'enviar_wpp_bloqueio', label: 'Agenda', sub: 'Bloqueios/Feriados.' },
+                                                    { id: 'enviar_wpp_lembrete', label: 'Lembretes', sub: '24h antes da data.' }
                                                 ].map((item) => (
-                                                    <div key={item.id} className="flex items-center justify-between pb-3 border-b last:border-0 dark:border-slate-700">
-                                                        <div><p className="text-sm font-bold text-slate-700 dark:text-slate-200">{item.label}</p><p className="text-[10px] text-slate-500">{item.sub}</p></div>
+                                                    <div key={item.id} className="flex flex-col gap-3">
                                                         <label className="relative inline-flex items-center cursor-pointer">
-                                                            <input type="checkbox" name={item.id} className="sr-only peer" checked={config[item.id]} onChange={handleChange} disabled={!config.enviar_whatsapp_global}/>
-                                                            <div className="w-10 h-5 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                                            <input type="checkbox" name={item.id} className="sr-only peer" checked={config[item.id]} onChange={handleChange}/>
+                                                            <div className="w-10 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
+                                                            <span className="ml-3 text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-tighter">{item.label}</span>
                                                         </label>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase ml-1">{item.sub}</p>
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
 
-                                        <div className={`p-6 rounded-2xl border transition-all ${config.enviar_whatsapp_global && config.enviar_wpp_lembrete ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-slate-600' : 'bg-slate-100 opacity-50 grayscale'}`}>
-                                            <div className="flex items-center justify-between mb-6">
-                                                <h3 className="font-bold flex items-center gap-2 text-blue-600"><CalendarClock size={20}/> Monitoramento do Robô</h3>
-                                                <div className="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-full text-[10px] font-bold text-slate-500 uppercase">
-                                                    <Clock size={12}/> Última Execução: {jaRodouHoje ? 'Hoje' : config.data_ultima_execucao_lembrete || 'Pendente'}
-                                                </div>
-                                            </div>
-
-                                            {/* PAINEL DE STATUS DUPLO */}
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-3 flex justify-between">
-                                                        <span>Consultas de HOJE</span>
-                                                        <span>{new Date().toLocaleDateString()}</span>
-                                                    </p>
-                                                    <div className="flex gap-4">
-                                                        <div className="flex-1">
-                                                            <span className="block text-2xl font-bold text-blue-600">{config.stats_hoje?.enviados || 0}</span>
-                                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Enviados</span>
-                                                        </div>
-                                                        <div className="w-px h-10 bg-slate-200 dark:bg-slate-700"></div>
-                                                        <div className="flex-1">
-                                                            <span className="block text-2xl font-bold text-red-400">{config.stats_hoje?.pendentes || 0}</span>
-                                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Não Enviados</span>
-                                                        </div>
+                                        {/* Monitor do Robô */}
+                                        <div className={`p-8 rounded-[32px] border transition-all ${config.enviar_whatsapp_global && config.enviar_wpp_lembrete ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-slate-700 shadow-xl shadow-blue-500/5' : 'bg-slate-100 opacity-50'}`}>
+                                            <div className="flex items-center justify-between mb-8">
+                                                <div>
+                                                    <h3 className="font-black text-lg text-blue-600 uppercase tracking-tighter flex items-center gap-2"><CalendarClock size={24}/> Monitor do Robô</h3>
+                                                    <div className="flex items-center gap-2 mt-1 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-full text-[9px] font-black text-blue-600 uppercase tracking-widest w-fit">
+                                                        <Clock size={12}/> Último Ciclo: {jaRodouHoje ? 'Finalizado Hoje' : config.data_ultima_execucao_lembrete || 'Nunca Executado'}
                                                     </div>
                                                 </div>
+                                                <input type="time" name="horario_disparo_lembrete" value={config.horario_disparo_lembrete} onChange={handleChange} className="bg-slate-100 dark:bg-slate-900 border-none rounded-xl p-3 font-black text-xl text-blue-600 outline-none ring-2 ring-slate-100 dark:ring-slate-700 focus:ring-blue-500"/>
+                                            </div>
 
-                                                <div className="bg-blue-50/30 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-800/30">
-                                                    <p className="text-[10px] font-bold text-blue-400 uppercase mb-3 flex justify-between">
-                                                        <span>Consultas de AMANHÃ</span>
-                                                        <span>{new Date(Date.now() + 86400000).toLocaleDateString()}</span>
-                                                    </p>
-                                                    <div className="flex gap-4">
-                                                        <div className="flex-1">
-                                                            <span className="block text-2xl font-bold text-slate-700 dark:text-white">{config.stats_amanha?.enviados || 0}</span>
-                                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Antecipados</span>
-                                                        </div>
-                                                        <div className="w-px h-10 bg-slate-200 dark:bg-slate-700"></div>
-                                                        <div className="flex-1">
-                                                            <span className="block text-2xl font-bold text-orange-500">{config.stats_amanha?.pendentes || 0}</span>
-                                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Aguardando</span>
-                                                        </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-4 tracking-widest">Consultas de HOJE</p>
+                                                    <div className="flex items-end gap-1">
+                                                        <span className="text-4xl font-black text-blue-600 leading-none">{config.stats_hoje?.enviados || 0}</span>
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase pb-1">/ {config.stats_hoje?.total || 0} Enviados</span>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                                                    <p className="text-[9px] font-black text-blue-400 uppercase mb-4 tracking-widest">Aguardando p/ AMANHÃ</p>
+                                                    <div className="flex items-end gap-1">
+                                                        <span className="text-4xl font-black text-slate-700 dark:text-white leading-none">{config.stats_amanha?.pendentes || 0}</span>
+                                                        <span className="text-[10px] font-bold text-orange-500 uppercase pb-1 italic">Pendentes</span>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="flex flex-col md:flex-row gap-4 items-center bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                                                <div className="flex-1">
-                                                    <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Configuração de Horário</label>
-                                                    <div className="flex items-center gap-3">
-                                                        <input type="time" name="horario_disparo_lembrete" value={config.horario_disparo_lembrete} onChange={handleChange} className="bg-white dark:bg-slate-800 border-none rounded-lg p-2 font-bold text-blue-600 outline-none ring-1 ring-slate-200 dark:ring-slate-700 focus:ring-blue-500"/>
-                                                        <span className="text-[10px] text-slate-500 leading-tight">O robô executará automaticamente neste horário (UTC-3).</span>
-                                                    </div>
-                                                </div>
-                                                <button 
-                                                    type="button"
-                                                    onClick={handleExecutarAgora}
-                                                    disabled={runningBot || !config.enviar_wpp_lembrete || !config.enviar_whatsapp_global || config.stats_amanha?.pendentes === 0}
-                                                    className={`h-12 px-6 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50
-                                                        ${config.stats_amanha?.pendentes > 0 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-none' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}
-                                                    `}
-                                                >
-                                                    {runningBot ? <Loader2 className="animate-spin" size={18}/> : config.stats_amanha?.pendentes === 0 ? <Check size={18}/> : <Play size={18} fill="currentColor"/>}
-                                                    {config.stats_amanha?.pendentes === 0 ? 'Tudo Enviado' : 'Disparar Amanhã Agora'}
-                                                </button>
-                                            </div>
+                                            <button 
+                                                type="button"
+                                                onClick={handleExecutarAgora}
+                                                disabled={runningBot || !config.enviar_wpp_lembrete || !config.enviar_whatsapp_global || config.stats_amanha?.pendentes === 0}
+                                                className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-xs tracking-widest rounded-2xl transition-all shadow-lg shadow-blue-500/20 active:scale-[0.98] disabled:opacity-30 flex items-center justify-center gap-3"
+                                            >
+                                                {runningBot ? <Loader2 className="animate-spin" size={20}/> : <Play size={18} fill="currentColor"/>}
+                                                Disparar Fila de Lembretes Agora
+                                            </button>
                                         </div>
                                     </div>
                                 )}
 
-                                <div className="pt-6 border-t border-slate-100 dark:border-slate-700 flex justify-end">
-                                    <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-bold shadow-xl shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 transition-all active:scale-95">
+                                <div className="pt-8 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                                    <button type="submit" disabled={saving} className="bg-slate-900 dark:bg-blue-600 hover:bg-black dark:hover:bg-blue-700 text-white px-12 py-5 rounded-[20px] font-black uppercase text-xs tracking-widest shadow-2xl transition-all active:scale-95 disabled:opacity-50 flex items-center gap-3">
                                         {saving ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>} 
-                                        Salvar Configurações
+                                        Aplicar Todas as Configurações
                                     </button>
                                 </div>
                             </form>

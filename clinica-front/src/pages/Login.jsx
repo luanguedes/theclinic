@@ -1,28 +1,38 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext'; // Importado
 import { useNavigate } from 'react-router-dom';
-import { HeartPulse, Lock, User, Activity } from 'lucide-react';
+import { HeartPulse, Lock, User, Activity, Loader2 } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const { login } = useAuth();
+  const { notify } = useNotification(); // Hook instanciado
   const navigate = useNavigate();
-  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    if (!username || !password) {
+        return notify.warning("Por favor, preencha todos os campos.");
+    }
+
     setIsLoading(true);
     
-    // Passamos o 'rememberMe' para a função de login
-    const success = await login(username, password, rememberMe);
-    
-    setIsLoading(false);
-    if (success) navigate('/dashboard');
-    else setError('Usuário ou senha incorretos.');
+    try {
+        const success = await login(username, password, rememberMe);
+        if (success) {
+            navigate('/dashboard');
+        } else {
+            notify.error('Usuário ou senha incorretos.');
+        }
+    } catch (err) {
+        notify.error("Erro de conexão com o servidor. Tente novamente mais tarde.");
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -78,7 +88,6 @@ export default function Login() {
                 <input 
                   id="username"
                   name="username"
-                  // ADICIONADO: Ajuda o navegador a saber que é um usuário
                   autoComplete="username" 
                   className="block w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
                   placeholder="ID do Operador" 
@@ -97,7 +106,6 @@ export default function Login() {
                 <input 
                   id="password"
                   name="password"
-                  // ADICIONADO: Ajuda o navegador a saber que é a senha atual
                   autoComplete="current-password"
                   className="block w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
                   type="password" 
@@ -119,24 +127,27 @@ export default function Login() {
                 <span className="text-sm text-slate-500 group-hover:text-slate-700 transition-colors">Lembrar-me</span>
               </label>
 
-              <a href="#" className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors">
+              <button 
+                type="button"
+                onClick={() => notify.info("Contate o administrador para resetar sua senha.")}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors bg-transparent border-none"
+              >
                 Esqueceu a senha?
-              </a>
+              </button>
             </div>
-
-            {error && (
-              <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-100 flex items-center animate-shake">
-                <span className="font-bold mr-2">Erro:</span> {error}
-              </div>
-            )}
 
             <div className="pt-2">
               <button 
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-lg shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex justify-center items-center"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-lg shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex justify-center items-center gap-2"
               >
-                {isLoading ? 'Acessando...' : 'Entrar no Sistema'}
+                {isLoading ? (
+                    <>
+                        <Loader2 className="animate-spin" size={20} />
+                        Acessando...
+                    </>
+                ) : 'Entrar no Sistema'}
               </button>
             </div>
           </form>

@@ -3,7 +3,7 @@
     "cronSchedules": [
       {
         "command": "python manage.py enviar_lembretes",
-        "schedule": "0 * * * *"
+        "schedule": "*/10 * * * *"
       }
     ]
   }

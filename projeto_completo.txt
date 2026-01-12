@@ -366,6 +366,7 @@ class BloqueioAgenda(models.Model):
     hora_inicio = models.TimeField(default='00:00')
     hora_fim = models.TimeField(default='23:59')
     motivo = models.CharField(max_length=255)
+    observacao = models.TextField(blank=True, null=True, help_text="Observação para enviar aos pacientes")
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='bloqueio')
     recorrente = models.BooleanField(default=False)
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -386,7 +387,7 @@ class Agendamento(models.Model):
     especialidade = models.ForeignKey(Especialidade, on_delete=models.CASCADE)
     paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE)
     convenio = models.ForeignKey(Convenio, on_delete=models.SET_NULL, null=True, blank=True)
-    
+    enviar_whatsapp = models.BooleanField(default=True, verbose_name="Enviar Confirmação?")
     data = models.DateField()
     horario = models.TimeField()
     is_encaixe = models.BooleanField(default=False)
@@ -397,19 +398,29 @@ class Agendamento(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AGENDADO)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    lembrete_enviado = models.BooleanField(default=False, verbose_name="Lembrete 24h enviado?")
+    bloqueio_origem = models.ForeignKey(
+        BloqueioAgenda, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='pacientes_cancelados'
+    )
 
     class Meta:
         ordering = ['data', 'horario']
         constraints = [
             models.UniqueConstraint(
                 fields=['profissional', 'data', 'horario', 'paciente'], 
+                # CRÍTICO: Agora a trava de "horário único" ignora agendamentos cancelados.
+                # Isso permite que o paciente marque outro horário se o anterior foi cancelado.
                 condition=Q(status__in=['agendado', 'aguardando', 'em_atendimento']),
                 name='unique_paciente_horario'
             )
         ]
 
     def __str__(self):
-        return f"{self.paciente} - {self.data} {self.horario}"
+        return f"{self.paciente} - {self.data} {self.horario} [{self.status}]"
 
 ============================================================
 ARQUIVO: agendamento/apps.py
@@ -454,15 +465,19 @@ ARQUIVO: agendamento/views.py
 ============================================================
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db.models import Case, When, Value, IntegerField
 from django.db import transaction 
 from datetime import date
+from django.conf import settings
+import requests
+import threading
 
-# Versão COMPLETA com Bloqueios
 from .models import BloqueioAgenda, Agendamento
 from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
+from .whatsapp import enviar_mensagem_agendamento, enviar_mensagem_cancelamento_bloqueio
 
 class BloqueioAgendaViewSet(viewsets.ModelViewSet):
     queryset = BloqueioAgenda.objects.all().order_by('-data_inicio')
@@ -504,17 +519,8 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def relatorio(self, request, pk=None):
         bloqueio = self.get_object()
+        conflitos = Agendamento.objects.filter(bloqueio_origem=bloqueio)
         
-        # Busca agendamentos que coincidem com o período do bloqueio
-        conflitos = Agendamento.objects.filter(
-            data__range=[bloqueio.data_inicio, bloqueio.data_fim],
-            horario__gte=bloqueio.hora_inicio,
-            horario__lte=bloqueio.hora_fim
-        )
-        
-        if bloqueio.profissional:
-            conflitos = conflitos.filter(profissional=bloqueio.profissional)
-
         dados_pacientes = []
         for c in conflitos:
             dados_pacientes.append({
@@ -526,41 +532,148 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
                 'medico': c.profissional.nome,
                 'data': c.data,
                 'horario': c.horario,
-                'status': c.get_status_display() # Mostra se está Agendado ou Cancelado
+                'status': c.get_status_display()
             })
 
         return Response(dados_pacientes)
 
     def create(self, request, *args, **kwargs):
         acao_conflito = request.data.pop('acao_conflito', 'manter')
+        observacao_texto = request.data.get('observacao', '')
+        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         bloqueio = serializer.save()
 
+        if observacao_texto:
+            bloqueio.observacao = observacao_texto
+            bloqueio.save()
+
+        afetados_response = []
+
         if acao_conflito == 'cancelar':
             prof_id = bloqueio.profissional.id if bloqueio.profissional else None
+            
             conflitos = Agendamento.objects.filter(
                 data__range=[bloqueio.data_inicio, bloqueio.data_fim],
                 horario__gte=bloqueio.hora_inicio, horario__lte=bloqueio.hora_fim,
                 status__in=['agendado', 'aguardando']
             )
-            if prof_id: conflitos = conflitos.filter(profissional_id=prof_id)
-            conflitos.update(status='cancelado', observacoes=f"Bloqueio: {bloqueio.motivo}")
+            
+            if prof_id:
+                conflitos = conflitos.filter(profissional_id=prof_id)
+            
+            for ag in conflitos:
+                ag.status = 'cancelado'
+                ag.bloqueio_origem = bloqueio
+                ag.observacoes = f"Cancelado por bloqueio. Motivo: {bloqueio.observacao or 'Administrativo'}"
+                ag.save()
+                
+                afetados_response.append({
+                    'id': ag.id,
+                    'paciente_nome': ag.paciente.nome,
+                    'paciente_telefone': ag.paciente.telefone,
+                    'data': ag.data.strftime('%d/%m/%Y'),
+                    'horario': ag.horario.strftime('%H:%M')
+                })
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response({
+            'bloqueio': serializer.data,
+            'afetados': afetados_response
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def notificar_cancelados(self, request):
+        ids = request.data.get('agendamentos_ids', [])
+        motivo = request.data.get('motivo', '')
+        
+        enviados = 0
+        erros = 0
+        
+        for ag_id in ids:
+            try:
+                ag = Agendamento.objects.get(id=ag_id)
+                enviar_mensagem_cancelamento_bloqueio(ag, motivo)
+                enviados += 1
+            except Exception as e:
+                print(f"Erro no envio ID {ag_id}: {e}")
+                erros += 1
+                
+        return Response({'status': 'Processado', 'enviados': enviados, 'erros': erros})
+
 
 class AgendamentoViewSet(viewsets.ModelViewSet):
-    # ... (Mantenha o mesmo código da AgendamentoViewSet que passei no Passo 1 acima) ...
+    queryset = Agendamento.objects.all()
     serializer_class = AgendamentoSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
+    
     filter_backends = [filters.SearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
 
-    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.status = 'cancelado'
+        instance.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny]) 
+    def testar_conexao(self, request):
+        numero_destino = request.query_params.get('numero')
+        
+        if not numero_destino:
+            return Response({
+                "erro": "Informe um número na URL.",
+                "exemplo": "/api/agendamento/testar_conexao/?numero=5511999999999"
+            }, status=400)
+
+        url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
+        
+        payload = {
+            "number": numero_destino,
+            "textMessage": {
+                "text": "🤖 Teste de Conexão: O Django conseguiu falar com o WhatsApp!"
+            },
+            "options": {
+                "delay": 0,
+                "linkPreview": False
+            }
+        }
+        
+        headers = {
+            "apikey": settings.EVOLUTION_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            
+            return Response({
+                "status_django": "Enviado",
+                "status_code_whatsapp": response.status_code,
+                "resposta_whatsapp": response.json() if response.status_code in [200, 201] else response.text,
+                "url_usada": url
+            })
+
+        except Exception as e:
+            return Response({
+                "status": "ERRO CRÍTICO NO DJANGO",
+                "detalhe": str(e),
+                "url_tentada": url
+            }, status=500)
+
+    def perform_create(self, serializer):
+        agendamento = serializer.save()
+        threading.Thread(target=enviar_mensagem_agendamento, args=(agendamento,)).start()
 
     def get_queryset(self):
         queryset = Agendamento.objects.all()
+
+        if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
+            return queryset
+
+        queryset = queryset.exclude(status='cancelado')
+
         profissional = self.request.query_params.get('profissional')
         especialidade = self.request.query_params.get('especialidade')
         data_filtro = self.request.query_params.get('data')
@@ -586,12 +699,12 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                 When(status='aguardando', then=Value(2)),
                 When(status='em_atendimento', then=Value(3)),
                 When(status='finalizado', then=Value(4)),
-                When(status='cancelado', then=Value(5)),
-                When(status='faltou', then=Value(6)),
+                When(status='faltou', then=Value(5)),
                 default=Value(10),
                 output_field=IntegerField(),
             )
         ).order_by('prioridade_status', 'horario')
+        
         return queryset
 
     @action(detail=True, methods=['post'])
@@ -806,6 +919,311 @@ ARQUIVO: agendamento/__init__.py
 
 
 ============================================================
+ARQUIVO: agendamento/whatsapp.py
+============================================================
+import requests
+import logging
+import re
+import sys
+from django.conf import settings
+from configuracoes.models import DadosClinica, ConfiguracaoSistema 
+
+# Logs no terminal do Railway
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logger = logging.getLogger('agendamento.whatsapp')
+
+def formatar_telefone(telefone):
+    if not telefone: return None
+    nums = re.sub(r'\D', '', str(telefone))
+    if len(nums) < 10: return None
+    if not nums.startswith('55') and len(nums) <= 11:
+        nums = '55' + nums
+    return nums
+
+def get_dados_clinica():
+    try:
+        clinica = DadosClinica.objects.first()
+        if not clinica:
+            return {"nome": "The Clinic", "endereco": "Endereço não cadastrado"}
+        
+        endereco_completo = f"{clinica.logradouro}, {clinica.numero}"
+        if clinica.bairro: endereco_completo += f" - {clinica.bairro}"
+        if clinica.complemento: endereco_completo += f" ({clinica.complemento})"
+            
+        return {
+            "nome": clinica.nome_fantasia or "A Clínica",
+            "endereco": endereco_completo
+        }
+    except Exception as e:
+        logger.error(f"Erro ao buscar clínica: {e}")
+        return {"nome": "Clínica", "endereco": ""}
+
+def get_dia_semana(data_obj):
+    dias = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado", 6: "Domingo"}
+    return dias.get(data_obj.weekday(), "")
+
+def get_nome_especialidade(agendamento, profissional):
+    try:
+        if hasattr(agendamento, 'especialidade') and agendamento.especialidade:
+            return getattr(agendamento.especialidade, 'nome', str(agendamento.especialidade))
+
+        if hasattr(profissional, 'especialidades_vinculo'):
+            vinculos = profissional.especialidades_vinculo.all()
+            if vinculos.exists():
+                nomes = [v.especialidade.nome for v in vinculos if v.especialidade]
+                return " / ".join(nomes)
+
+        return "Especialista"
+    except Exception as e:
+        logger.warning(f"Erro ao ler especialidade: {e}")
+        return "Especialista"
+
+# --- FUNÇÃO 1: CONFIRMAÇÃO DE AGENDAMENTO ---
+def enviar_mensagem_agendamento(agendamento):
+    try:
+        config = ConfiguracaoSistema.load()
+        
+        # 1. Trava Mestre
+        if not config.enviar_whatsapp_global:
+            logger.info("🚫 Envio cancelado: Sistema Global Desativado.")
+            return
+
+        # 2. Trava Específica (Confirmação)
+        if not config.enviar_wpp_confirmacao:
+            logger.info("🚫 Envio cancelado: Módulo de Confirmação Desativado.")
+            return
+
+        # 3. Trava Individual (Paciente)
+        if not agendamento.enviar_whatsapp:
+            logger.info("🚫 Envio cancelado: Desmarcado no agendamento.")
+            return
+        
+        # ... Prossegue com o envio ...
+        paciente = agendamento.paciente
+        profissional = agendamento.profissional
+        dados_clinica = get_dados_clinica()
+        telefone = formatar_telefone(paciente.telefone)
+        
+        if not telefone: return
+
+        data_fmt = agendamento.data.strftime('%d/%m/%Y')
+        dia_semana = get_dia_semana(agendamento.data)
+        hora_fmt = agendamento.horario.strftime('%H:%M')
+        nome_especialidade = get_nome_especialidade(agendamento, profissional)
+
+        mensagem = (
+            f"Olá, *{paciente.nome}*! 👋\n\n"
+            f"Sua consulta na *{dados_clinica['nome']}* está confirmada!\n\n"
+            f"📅 Data: *{data_fmt}* - _{dia_semana}_\n"
+            f"⏰ Horário: *{hora_fmt}*\n"
+            f"👨‍⚕️ Profissional: {profissional.nome}\n"
+            f"🩺 Especialidade: *{nome_especialidade}*\n\n"
+            f"📍 Endereço: {dados_clinica['endereco']}\n\n"
+            f"Por favor, chegue com 15 minutos de antecedência. Em caso de dúvidas, entre em contato conosco!"
+        )
+
+        _disparar_api(telefone, mensagem)
+
+    except Exception as e:
+        logger.exception(f"Erro crítico no envio: {e}")
+
+# --- FUNÇÃO 2: CANCELAMENTO/BLOQUEIO ---
+def enviar_mensagem_cancelamento_bloqueio(agendamento, motivo_personalizado=""):
+    try:
+        config = ConfiguracaoSistema.load()
+        
+        # 1. Trava Mestre
+        if not config.enviar_whatsapp_global:
+            return
+
+        # 2. Trava Específica (Bloqueio)
+        if not config.enviar_wpp_bloqueio:
+            return
+
+        paciente = agendamento.paciente
+        dados_clinica = get_dados_clinica()
+        telefone = formatar_telefone(paciente.telefone)
+        profissional = agendamento.profissional
+        nome_especialidade = get_nome_especialidade(agendamento, profissional)
+        
+        if not telefone: return
+
+        data_fmt = agendamento.data.strftime('%d/%m/%Y')
+        hora_fmt = agendamento.horario.strftime('%H:%M')
+        
+        bloco_motivo = f"\nℹ️ *Motivo:* _{motivo_personalizado}_\n" if motivo_personalizado else ""
+
+        mensagem = (
+            f"Olá, *{paciente.nome}*.\n\n"
+            f"Informamos que sua consulta na *{dados_clinica['nome']}* precisou ser *CANCELADA*.\n\n"
+            f"📅 Data original: *{data_fmt}* às *{hora_fmt}*\n"
+            f"👨‍⚕️ Profissional: {profissional.nome}\n"
+            f"🩺 Especialidade: *{nome_especialidade}*\n\n"
+            f"{bloco_motivo}\n"
+            f"Por favor, entre em contato conosco para realizarmos um novo agendamento o mais breve possível.\n\n"
+            f"Pedimos desculpas pelo transtorno. 🙏"
+        )
+
+        _disparar_api(telefone, mensagem)
+
+    except Exception as e:
+        logger.exception(f"Erro no cancelamento: {e}")
+
+# --- FUNÇÃO 3: LEMBRETE (DIA SEGUINTE) ---
+def enviar_lembrete_24h(agendamento):
+    try:
+        config = ConfiguracaoSistema.load()
+        
+        # 1. Trava Mestre (Global)
+        if not config.enviar_whatsapp_global:
+            logger.info("🚫 Lembrete cancelado: Sistema Global Desativado.")
+            return False
+
+        # 2. Trava Específica (Lembrete)
+        if not config.enviar_wpp_lembrete:
+            logger.info("🚫 Lembrete cancelado: Módulo de Lembrete Desativado.")
+            return False
+
+        # --- TRAVA INDIVIDUAL REMOVIDA A PEDIDO ---
+        # Enviamos mesmo que agendamento.enviar_whatsapp seja False
+
+        paciente = agendamento.paciente
+        profissional = agendamento.profissional
+        nome_especialidade = get_nome_especialidade(agendamento, profissional)
+        dados_clinica = get_dados_clinica()
+        telefone = formatar_telefone(paciente.telefone)
+        
+        if not telefone: 
+            logger.warning(f"⚠️ Paciente {paciente.nome} sem telefone válido.")
+            return False
+
+        data_fmt = agendamento.data.strftime('%d/%m/%Y')
+        hora_fmt = agendamento.horario.strftime('%H:%M')
+        
+        mensagem = (
+            f"Olá, *{paciente.nome}*! 👋\n\n"
+            f"Passando para lembrar da sua consulta amanhã na *{dados_clinica['nome']}*\n\n"
+            f"📅 *Amanhã, {data_fmt}*\n"
+            f"⏰ Horário: *{hora_fmt}*\n"
+            f"👨‍⚕️ Profissional: {profissional.nome}\n"
+            f"🩺 Especialidade: *{nome_especialidade}*\n\n"
+            f"📍 Endereço: {dados_clinica['endereco']}\n\n"
+            f"Sua presença é muito importante. Caso não possa comparecer, avise-nos com antecedência.\n\n"
+            f"Até lá!"
+        )
+
+        # --- DEFINIÇÃO DA URL E PAYLOAD (Onde estava o erro) ---
+        url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
+        
+        payload = {
+            "number": telefone,
+            "textMessage": {"text": mensagem},
+            "options": {"delay": 1200, "linkPreview": False}
+        }
+        
+        headers = {
+            "apikey": settings.EVOLUTION_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        # --- DISPARO ---
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code in [200, 201]:
+            logger.info(f"✅ Lembrete enviado com sucesso para {paciente.nome}")
+            return True
+        else:
+            logger.error(f"❌ Falha na API Evolution: {response.text}")
+            return False
+
+    except Exception as e:
+        logger.exception(f"🔥 Erro crítico no envio de lembrete: {e}")
+        return False
+
+# --- HELPER INTERNO PARA NÃO REPETIR CÓDIGO ---
+def _disparar_api(telefone, mensagem):
+    url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
+    payload = {
+        "number": telefone,
+        "textMessage": {"text": mensagem},
+        "options": {"delay": 1200, "linkPreview": False}
+    }
+    headers = {
+        "apikey": settings.EVOLUTION_API_KEY,
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code in [200, 201]:
+            logger.info(f"✅ Mensagem enviada para {telefone}")
+            return True
+        else:
+            logger.error(f"⚠️ Erro API: {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Erro conexão API: {e}")
+        return False
+
+============================================================
+ARQUIVO: agendamento/management/commands/enviar_lembretes.py
+============================================================
+from django.core.management.base import BaseCommand
+from datetime import datetime, timedelta, date
+
+class Command(BaseCommand):
+    def handle(self, *args, **kwargs):
+        from configuracoes.models import ConfiguracaoSistema
+        from agendamento.models import Agendamento
+        from agendamento.whatsapp import enviar_lembrete_24h
+
+        config = ConfiguracaoSistema.load()
+        hoje = date.today()
+        
+        # 1. PEGAR HORÁRIOS
+        agendado_str = config.horario_disparo_lembrete  # Ex: "10:30"
+        agora_dt = datetime.now()
+        
+        # Converte o horário do banco para comparação numérica
+        hora_ag, min_ag = map(int, agendado_str.split(':'))
+        
+        # 2. VERIFICAÇÃO DE SEGURANÇA (A JANELA)
+        # Se ainda não chegou a hora ou o minuto, encerra.
+        if agora_dt.hour < hora_ag or (agora_dt.hour == hora_ag and agora_dt.minute < min_ag):
+            self.stdout.write(f"Aguardando... Horário agendado: {agendado_str}")
+            return
+
+        # 3. VERIFICAÇÃO DE DUPLICIDADE (O BLOQUEIO)
+        # Se já passou do horário, mas o campo 'data_ultima_execucao' já é HOJE,
+        # significa que o trabalho do dia já foi feito.
+        if config.data_ultima_execucao_lembrete == hoje:
+            self.stdout.write("Trabalho de hoje já concluído. Voltarei amanhã!")
+            return
+
+        # 4. DISPARO
+        self.stdout.write(f"🚀 Iniciando disparos! (Agendado: {agendado_str} | Agora: {agora_dt.strftime('%H:%M')})")
+        
+        amanha = hoje + timedelta(days=1)
+        pendentes = Agendamento.objects.filter(
+            data=amanha,
+            status='agendado',
+            lembrete_enviado=False
+        )
+
+        enviados = 0
+        for ag in pendentes:
+            if enviar_lembrete_24h(ag):
+                ag.lembrete_enviado = True
+                ag.save()
+                enviados += 1
+        
+        # CRÍTICO: Marca que hoje está pago!
+        config.data_ultima_execucao_lembrete = hoje
+        config.save()
+
+        self.stdout.write(self.style.SUCCESS(f"✅ Sucesso: {enviados} lembretes enviados."))
+
+============================================================
 ARQUIVO: usuarios/models.py
 ============================================================
 from django.contrib.auth.models import AbstractUser
@@ -980,8 +1398,39 @@ urlpatterns = [
 ARQUIVO: usuarios/serializers.py
 ============================================================
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import Operador
 
+# --- ESSA ERA A CLASSE QUE FALTAVA ---
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+
+        # Adiciona dados básicos do usuário ao token
+        token['username'] = user.username
+        token['first_name'] = user.first_name
+        token['is_superuser'] = user.is_superuser
+        
+        # Adiciona as PERMISSÕES EXPLICITAS (Booleanos)
+        # O getattr evita erro se o campo não existir por algum motivo
+        token['acesso_agendamento'] = getattr(user, 'acesso_agendamento', False)
+        token['acesso_atendimento'] = getattr(user, 'acesso_atendimento', False)
+        token['acesso_faturamento'] = getattr(user, 'acesso_faturamento', False)
+        token['acesso_cadastros'] = getattr(user, 'acesso_cadastros', False)
+        token['acesso_configuracoes'] = getattr(user, 'acesso_configuracoes', False)
+
+        # Adiciona ID do Profissional se estiver vinculado
+        if user.profissional:
+            token['profissional_id'] = user.profissional.id
+            try:
+                token['profissional_nome'] = user.profissional.nome
+            except:
+                token['profissional_nome'] = ""
+
+        return token
+
+# --- SEU SERIALIZER ORIGINAL (MANTIDO) ---
 class OperadorSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     profissional_nome = serializers.CharField(source='profissional.nome', read_only=True)
@@ -1266,6 +1715,7 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=120),  # O login vai durar 2 horas direto
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),      # O sistema pode renovar por 1 dia
+    'TOKEN_OBTAIN_SERIALIZER': 'usuarios.serializers.CustomTokenObtainPairSerializer',
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': False,
@@ -1291,18 +1741,29 @@ SIMPLE_JWT = {
     'JTI_CLAIM': 'jti',
 }
 
+# Configurações Evolution API (WhatsApp)
+EVOLUTION_API_URL = "https://theclinic-api.up.railway.app"
+EVOLUTION_API_KEY = "Luan@4957"
+EVOLUTION_INSTANCE_NAME = "zap_turbo"
+
+
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media' 
 
-CORS_ALLOW_ALL_ORIGINS = True # Pode restringir depois
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",          # Para seus testes locais (Vite/React)
+    "http://localhost:3000",          # Caso use outra porta local
+    "https://theclinic.up.railway.app", # SEU FRONTEND EM PRODUÇÃO (Sem barra no final)
+]
 
+CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "https://theclinic.up.railway.app", # Frontend
     "https://theclinic-production.up.railway.app", # Backend
 ]
 
-CORS_ALLOW_CREDENTIALS = True
 
 
 
@@ -1442,6 +1903,20 @@ ARQUIVO: pacientes/__init__.py
 
 
 ============================================================
+ARQUIVO: configuracoes/railway.json
+============================================================
+{
+  "deploy": {
+    "cronSchedules": [
+      {
+        "command": "python manage.py enviar_lembretes",
+        "schedule": "*/10 * * * *"
+      }
+    ]
+  }
+}
+
+============================================================
 ARQUIVO: configuracoes/models.py
 ============================================================
 from django.db import models
@@ -1463,19 +1938,21 @@ class DadosClinica(models.Model):
     cnpj = models.CharField(max_length=18, blank=True, null=True)
     telefone = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
+    
+    # Campo de Imagem (Requer: pip install Pillow)
     logo = models.ImageField(upload_to='clinica_logos/', blank=True, null=True)
     
     # Endereço
     logradouro = models.CharField(max_length=255, blank=True, null=True)
     numero = models.CharField(max_length=20, blank=True, null=True)
-    complemento = models.CharField(max_length=100, blank=True, null=True) # <-- Novo campo
+    complemento = models.CharField(max_length=100, blank=True, null=True)
     bairro = models.CharField(max_length=100, blank=True, null=True)
     cidade = models.CharField(max_length=100, blank=True, null=True)
     estado = models.CharField(max_length=2, blank=True, null=True)
     cep = models.CharField(max_length=10, blank=True, null=True)
 
     def save(self, *args, **kwargs):
-        self.pk = 1 # Garante que só exista um registro
+        self.pk = 1 # Trava o ID em 1
         super().save(*args, **kwargs)
 
     @classmethod
@@ -1496,9 +1973,26 @@ class ConfiguracaoSistema(models.Model):
     # 3. Regras de Negócio
     janela_agendamento_meses = models.IntegerField(default=6, help_text="Meses à frente liberados na agenda")
 
+    # 1. Configurações dos Robôs
+    enviar_whatsapp_global = models.BooleanField(
+        default=True, 
+        help_text="Se desmarcado, NENHUMA  mensagem será enviado pelo sistema."
+    )
+    enviar_wpp_confirmacao = models.BooleanField(default=True, verbose_name="Enviar Confirmação (Novo Agendamento)")
+    enviar_wpp_bloqueio = models.BooleanField(default=True, verbose_name="Enviar Aviso de Bloqueio/Cancelamento")
+    enviar_wpp_lembrete = models.BooleanField(default=True, verbose_name="Enviar Lembrete (Dia Anterior)")
+
+    # 2. Configurações do Cron (Lembrete Automático)
+    horario_disparo_lembrete = models.TimeField(default="08:00", help_text="Horário alvo para o envio automático")
+    data_ultima_execucao_lembrete = models.DateField(null=True, blank=True, help_text="Data do último disparo automático realizado")
     class Meta:
         verbose_name = "Configuração do Sistema"
         verbose_name_plural = "Configurações do Sistema"
+
+    # --- SUGESTÃO: Adicionei o save aqui também para padronizar ---
+    def save(self, *args, **kwargs):
+        self.pk = 1 
+        super().save(*args, **kwargs)
 
     @classmethod
     def load(cls):
@@ -1542,13 +2036,16 @@ from rest_framework import viewsets, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.parsers import MultiPartParser, FormParser 
+from django.core.management import call_command
+from datetime import timedelta, date
 from .models import Convenio, DadosClinica, ConfiguracaoSistema
+from agendamento.models import Agendamento
 from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer
 
 class ConvenioViewSet(viewsets.ModelViewSet):
     queryset = Convenio.objects.all().order_by('nome')
     serializer_class = ConvenioSerializer
-    # Garante que a API exija o login
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
@@ -1556,26 +2053,61 @@ class ConvenioViewSet(viewsets.ModelViewSet):
 
 class DadosClinicaView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
 
     def get(self, request):
         dados = DadosClinica.load()
-        return Response(DadosClinicaSerializer(dados).data)
+        serializer = DadosClinicaSerializer(dados, context={'request': request}) 
+        return Response(serializer.data)
 
     def put(self, request):
         dados = DadosClinica.load()
-        serializer = DadosClinicaSerializer(dados, data=request.data)
+        serializer = DadosClinicaSerializer(
+            dados, 
+            data=request.data, 
+            partial=True,
+            context={'request': request} 
+        )
+        
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ConfiguracaoSistemaView(APIView):
-    permission_classes = [permissions.IsAdminUser] # Apenas Admin pode mexer aqui
+    permission_classes = [permissions.IsAdminUser] 
 
     def get(self, request):
         config = ConfiguracaoSistema.load()
         serializer = ConfiguracaoSistemaSerializer(config)
-        return Response(serializer.data)
+        
+        # Datas
+        hoje = date.today()
+        amanha = hoje + timedelta(days=1)
+        
+        # --- ESTATÍSTICAS DE HOJE ---
+        agendamentos_hoje = Agendamento.objects.filter(data=hoje, status='agendado')
+        enviados_hoje = agendamentos_hoje.filter(lembrete_enviado=True).count()
+        falhas_hoje = agendamentos_hoje.filter(lembrete_enviado=False).count()
+
+        # --- ESTATÍSTICAS DE AMANHÃ ---
+        agendamentos_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
+        enviados_amanha = agendamentos_amanha.filter(lembrete_enviado=True).count()
+        pendentes_amanha = agendamentos_amanha.filter(lembrete_enviado=False).count()
+        
+        data = serializer.data
+        data['stats_hoje'] = {
+            'total': agendamentos_hoje.count(),
+            'enviados': enviados_hoje,
+            'pendentes': falhas_hoje
+        }
+        data['stats_amanha'] = {
+            'total': agendamentos_amanha.count(),
+            'enviados': enviados_amanha,
+            'pendentes': pendentes_amanha
+        }
+        
+        return Response(data)
 
     def put(self, request):
         config = ConfiguracaoSistema.load()
@@ -1584,6 +2116,38 @@ class ConfiguracaoSistemaView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request):
+        if 'executar_lembretes' in request.path:
+            try:
+                call_command('enviar_lembretes')
+                config = ConfiguracaoSistema.load()
+                
+                hoje = date.today()
+                amanha = hoje + timedelta(days=1)
+                
+                # Recalcula estatísticas após execução para atualizar o front
+                ag_hoje = Agendamento.objects.filter(data=hoje, status='agendado')
+                ag_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
+
+                return Response({
+                    'status': 'sucesso', 
+                    'ultima_execucao': config.data_ultima_execucao_lembrete,
+                    'stats_hoje': {
+                        'total': ag_hoje.count(),
+                        'enviados': ag_hoje.filter(lembrete_enviado=True).count(),
+                        'pendentes': ag_hoje.filter(lembrete_enviado=False).count(),
+                    },
+                    'stats_amanha': {
+                        'total': ag_amanha.count(),
+                        'enviados': ag_amanha.filter(lembrete_enviado=True).count(),
+                        'pendentes': ag_amanha.filter(lembrete_enviado=False).count(),
+                    }
+                })
+            except Exception as e:
+                return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response({'error': 'Ação não permitida'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 ============================================================
 ARQUIVO: configuracoes/urls.py
@@ -1598,7 +2162,12 @@ router.register(r'convenios', ConvenioViewSet)
 urlpatterns = [
     path('', include(router.urls)),
     path('clinica/', DadosClinicaView.as_view()),
+    
+    # Rota base das configurações
     path('sistema/', ConfiguracaoSistemaView.as_view(), name='config-sistema'),
+    
+    # --- NOVA ROTA PARA O DISPARO MANUAL ---
+    path('sistema/executar_lembretes/', ConfiguracaoSistemaView.as_view(), name='executar-lembretes'),
 ]
 
 ============================================================
@@ -1613,6 +2182,8 @@ class ConvenioSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class DadosClinicaSerializer(serializers.ModelSerializer):
+    logo = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = DadosClinica
         fields = '__all__'
@@ -1620,7 +2191,7 @@ class DadosClinicaSerializer(serializers.ModelSerializer):
 class ConfiguracaoSistemaSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfiguracaoSistema
-        fields = '__all__'        
+        fields = '__all__'
 
 ============================================================
 ARQUIVO: configuracoes/__init__.py
@@ -39396,6 +39967,7 @@ export default function Navbar() {
               <DropdownLink to="/recepcao" text="Recepção" />
               <DropdownLink to="/agenda/marcar" text="Marcar Consulta" />
               <div className="border-t border-slate-100 dark:border-slate-700 my-1"></div>
+              <DropdownLink to="/agenda/configurar" text="Configurar Agendas" />
               <DropdownLink to="/agenda/bloqueios" text="Bloqueios e Feriados" />
             </NavItem>
           )}
@@ -41479,28 +42051,44 @@ ARQUIVO: clinica-front/src/pages/Dashboard.jsx
 ============================================================
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNotification } from '../context/NotificationContext';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
     Users, DollarSign, Activity, Clock, TrendingUp, 
     CalendarCheck, AlertCircle, ChevronRight, Stethoscope,
-    Calendar, Filter, Plus
+    Calendar, Filter, Plus, Lock 
 } from 'lucide-react';
+
+// --- COMPONENTE DE BLOQUEIO VISUAL ---
+const RestrictedOverlay = ({ label }) => (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-[3px] rounded-2xl transition-all">
+        <div className="bg-white dark:bg-slate-800 p-3 rounded-full shadow-lg mb-2">
+            <Lock size={24} className="text-slate-400 dark:text-slate-500" />
+        </div>
+        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-3 py-1 bg-white/80 dark:bg-slate-800/80 rounded-full shadow-sm">
+            {label || "Acesso Restrito"}
+        </span>
+    </div>
+);
 
 export default function Dashboard() {
     const { user, api } = useAuth();
-    const { notify } = useNotification();
     const navigate = useNavigate();
+    
+    // --- PERMISSÕES ---
+    const isSuperUser = user?.is_superuser;
+    const isProfissional = user?.acesso_atendimento || !!user?.profissional_id || isSuperUser;
+    const isRecepcao = user?.acesso_agendamento || isSuperUser;
+    const isFinanceiro = user?.acesso_faturamento || isSuperUser;
 
-    // --- ESTADOS DOS FILTROS ---
+    // --- FILTROS ---
     const hoje = new Date().toISOString().split('T')[0];
     const mesAtual = new Date().toISOString().slice(0, 7);
 
     const [filtroDia, setFiltroDia] = useState(hoje);
     const [filtroMes, setFiltroMes] = useState(mesAtual);
 
-    // --- ESTADOS DOS DADOS ---
+    // --- DADOS ---
     const [statsDia, setStatsDia] = useState({ total: 0, aguardando: 0 });
     const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0, receitaEstimada: 0 });
     const [listaHoje, setListaHoje] = useState([]); 
@@ -41515,49 +42103,66 @@ export default function Dashboard() {
     const carregarDados = async () => {
         setLoading(true);
         try {
-            // 1. DADOS DO DIA
+            // =======================================================
+            // 1. CARREGAR E PROCESSAR DADOS DO DIA
+            // =======================================================
             const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true`);
-            const dadosDia = resDia.data.results || resDia.data;
+            const dadosDiaBrutos = resDia.data.results || resDia.data;
             
-            const totalAgendadosDia = dadosDia.length;
-            const aguardando = dadosDia.filter(a => a.status === 'aguardando').length;
+            // REGRA: Na lista do dia e contagem diária, ignoramos apenas CANCELADOS.
+            // Faltosos aparecem para sabermos que faltaram.
+            const agendaAtivaDia = dadosDiaBrutos.filter(a => a.status !== 'cancelado');
+            
+            setListaHoje(agendaAtivaDia);
+            setStatsDia({ 
+                total: agendaAtivaDia.length, 
+                aguardando: agendaAtivaDia.filter(a => a.status === 'aguardando').length 
+            });
 
-            setStatsDia({ total: totalAgendadosDia, aguardando });
-            setListaHoje(dadosDia);
-
-            // 2. DADOS DO MÊS
+            // =======================================================
+            // 2. CARREGAR E PROCESSAR DADOS DO MÊS
+            // =======================================================
             const [ano, mes] = filtroMes.split('-');
             const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
-            const dadosMes = resMes.data.results || resMes.data;
+            const dadosMesBrutos = resMes.data.results || resMes.data;
 
-            const totalPacientesMes = dadosMes.length;
+            // REGRA KPI 1: Contagem de Pacientes do Mês
+            // "Desconsiderar cancelados e faltosos"
+            const pacientesValidosMes = dadosMesBrutos.filter(a => 
+                a.status !== 'cancelado' && a.status !== 'faltou'
+            );
 
-            const receitaConfirmada = dadosMes
-                .filter(a => a.fatura_pago === true && a.status !== 'cancelado')
-                .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+            // REGRA KPI 2: Financeiro
+            let receitaConfirmada = 0;
+            let receitaEstimada = 0;
 
-            const receitaEstimada = dadosMes
-                .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
-                .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+            if (isFinanceiro) {
+                // Confirmada: Soma tudo que tem flag 'pago=True', exceto cancelados (estorno)
+                receitaConfirmada = dadosMesBrutos
+                    .filter(a => a.fatura_pago === true && a.status !== 'cancelado')
+                    .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+
+                // Estimada: Soma tudo que NÃO é cancelado e NÃO é falta (potencial de ganho)
+                receitaEstimada = dadosMesBrutos
+                    .filter(a => a.status !== 'cancelado' && a.status !== 'faltou')
+                    .reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+            }
 
             setStatsMes({ 
-                totalPacientes: totalPacientesMes, 
-                receitaConfirmada: receitaConfirmada,
-                receitaEstimada: receitaEstimada
+                totalPacientes: pacientesValidosMes.length, 
+                receitaConfirmada,
+                receitaEstimada
             });
 
         } catch (error) {
-            console.error("Erro dashboard", error);
+            console.error("Erro ao calcular dashboard", error);
         } finally {
             setLoading(false);
         }
     };
 
     const handleRealizarAtendimento = () => {
-        if (!user.profissional_id) {
-            notify.error("Apenas profissionais de saúde podem realizar atendimento.");
-            return;
-        }
+        if (!isProfissional) return;
         navigate('/triagem'); 
     };
 
@@ -41567,15 +42172,16 @@ export default function Dashboard() {
             case 'aguardando': return 'bg-yellow-50 text-yellow-700 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800';
             case 'em_atendimento': return 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
             case 'finalizado': return 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800';
-            case 'faltou': return 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
-            case 'cancelado': return 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
+            case 'faltou': return 'bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800';
             default: return 'bg-gray-100 text-gray-600';
         }
     };
 
-    const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading }) => (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start mb-4">
+    const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading, restricted, restrictedLabel }) => (
+        <div className="relative bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow overflow-hidden h-full flex flex-col justify-between">
+            {restricted && <RestrictedOverlay label={restrictedLabel} />}
+            
+            <div className="flex justify-between items-start mb-2">
                 <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{title}</p>
                     {loading ? (
@@ -41588,9 +42194,10 @@ export default function Dashboard() {
                     <Icon size={24} />
                 </div>
             </div>
+            
             {subValue && (
-                <div className="flex items-center gap-2 text-sm">
-                    <span className="flex items-center text-slate-400 font-medium">
+                <div className="flex items-center gap-2 text-sm mt-2 pt-2 border-t border-slate-50 dark:border-slate-700/50">
+                    <span className="flex items-center text-slate-400 font-medium truncate">
                        {subValue}
                     </span>
                 </div>
@@ -41653,9 +42260,9 @@ export default function Dashboard() {
                     />
 
                     <StatCard 
-                        title="Total Agendamentos (Mês)"
+                        title="Atendimentos (Mês)"
                         value={statsMes.totalPacientes}
-                        subValue={`Referente a ${filtroMes.split('-')[1]}/${filtroMes.split('-')[0]}`}
+                        subValue={`Exclui faltas e cancelamentos`}
                         icon={Users}
                         colorClass="bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400"
                         loading={loading}
@@ -41664,18 +42271,25 @@ export default function Dashboard() {
                     <StatCard 
                         title="Receita Confirmada"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
-                        subValue={`Estimado Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
+                        subValue={`Previsto Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaEstimada)}`}
                         icon={DollarSign}
                         colorClass="bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400"
                         loading={loading}
+                        restricted={!isFinanceiro}
+                        restrictedLabel="Acesso Financeiro"
                     />
                 </div>
 
                 {/* ÁREA PRINCIPAL */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
-                    {/* COLUNA ESQUERDA: AGENDA DE HOJE */}
-                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[400px]">
+                    {/* AGENDA DE HOJE */}
+                    <div className="relative lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[400px]">
+                        
+                        {(!isProfissional && !isRecepcao) && (
+                            <RestrictedOverlay label="Restrito à Recepção/Profissionais" />
+                        )}
+
                         <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                             <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
                                 <Clock size={20} className="text-slate-400"/> Agenda do Dia
@@ -41700,10 +42314,18 @@ export default function Dashboard() {
                                         Nenhum paciente agendado para hoje ({filtroDia.split('-')[2]}/{filtroDia.split('-')[1]}).
                                     </p>
                                     <button 
-                                        onClick={() => navigate('/agenda/marcar')} 
-                                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none transition-all active:scale-95"
+                                        onClick={() => isRecepcao && navigate('/agenda/marcar')} 
+                                        disabled={!isRecepcao}
+                                        className={`
+                                            font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 transition-all 
+                                            ${isRecepcao 
+                                                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200 dark:shadow-none active:scale-95" 
+                                                : "bg-slate-200 text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
+                                            }
+                                        `}
                                     >
-                                        <Plus size={18}/> Novo Agendamento
+                                        {isRecepcao ? <Plus size={18}/> : <Lock size={18}/>} 
+                                        {isRecepcao ? "Novo Agendamento" : "Apenas Recepção/Agendamento"}
                                     </button>
                                 </div>
                             ) : (
@@ -41742,40 +42364,30 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    {/* COLUNA DIREITA */}
+                    {/* COLUNA LATERAL */}
                     <div className="flex flex-col gap-6">
                         
-                        {/* CARD 'AGUARDANDO' (AGORA BRANCO E CLEAN) */}
-                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden flex flex-col justify-center items-center text-center">
-                            {/* Borda de status no topo */}
+                        {/* CARD AGUARDANDO */}
+                        <div className="relative bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col justify-center items-center text-center">
+                            {!isProfissional && <RestrictedOverlay label="Acesso Profissional" />}
                             <div className="absolute top-0 left-0 right-0 h-1.5 bg-yellow-400"></div>
-
                             <div className="relative z-10 w-full">
                                 <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-full mb-4 inline-flex items-center justify-center ring-8 ring-yellow-50/50 dark:ring-yellow-900/10">
                                     <AlertCircle size={32} className="text-yellow-600 dark:text-yellow-400"/>
                                 </div>
-                                
                                 <h3 className="text-5xl font-extrabold text-slate-800 dark:text-white mb-1 tracking-tighter">
                                     {statsDia.aguardando}
                                 </h3>
                                 <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">
                                     Pacientes Aguardando
                                 </p>
-                                
-                                {user?.profissional_id ? (
-                                    <button 
-                                        onClick={handleRealizarAtendimento}
-                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2 active:scale-95"
-                                    >
-                                        <Stethoscope size={18}/> Iniciar Atendimento
-                                    </button>
-                                ) : (
-                                    <div className="bg-slate-50 dark:bg-slate-700/50 px-4 py-3 rounded-lg border border-slate-100 dark:border-slate-700">
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                            Acesso ao atendimento restrito a médicos.
-                                        </p>
-                                    </div>
-                                )}
+                                <button 
+                                    onClick={handleRealizarAtendimento}
+                                    disabled={!isProfissional}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <Stethoscope size={18}/> Iniciar Atendimento
+                                </button>
                             </div>
                         </div>
                         
@@ -41787,15 +42399,16 @@ export default function Dashboard() {
                             <div className="space-y-4">
                                 <div>
                                     <div className="flex justify-between text-xs mb-2 font-medium">
-                                        <span className="text-slate-500">Ocupação da Agenda</span>
+                                        <span className="text-slate-500">Fluxo de Agenda</span>
                                         <span className="text-slate-800 dark:text-white">Normal</span>
                                     </div>
+                                    {/* Barra de progresso visual baseada na ocupação */}
                                     <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
-                                        <div className="bg-green-500 h-full rounded-full w-[65%]"></div>
+                                        <div className="bg-green-500 h-full rounded-full" style={{ width: '65%' }}></div>
                                     </div>
                                 </div>
                                 <p className="text-xs text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-700 pt-3 mt-2">
-                                    Dados atualizados em tempo real conforme movimentação da recepção.
+                                    Dados atualizados em tempo real. Faltas e cancelamentos não contabilizam nos KPIs mensais.
                                 </p>
                             </div>
                         </div>
@@ -42161,9 +42774,9 @@ export default function CadastroOperador() {
                   {/* SELEÇÃO DE PROFISSIONAL VINCULADO */}
                   <div className="col-span-2">
                     <hr className="my-2 border-slate-100 dark:border-slate-700"/>
-                    <p className="text-xs text-blue-500 font-bold mb-2 uppercase tracking-wider flex items-center gap-1"><Stethoscope size={12}/> Vínculo Profissional (Médico)</p>
+                    <p className="text-xs text-blue-500 font-bold mb-2 uppercase tracking-wider flex items-center gap-1"><Stethoscope size={12}/> Vínculo Profissional</p>
                     <SearchableSelect 
-                        label="Este operador é um médico?" 
+                        label="Este operador é um Profissional?" 
                         placeholder="Pesquise o profissional..." 
                         options={profissionais} 
                         value={formData.profissional} // <--- NOME CORRETO
@@ -42712,30 +43325,35 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, Lock
+    Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, Lock, MessageCircle, Play, CheckCircle2, Clock, Check
 } from 'lucide-react';
 
 export default function Configuracoes() {
     const { api, user } = useAuth();
-    const { notify } = useNotification();
+    const { notify, confirmDialog } = useNotification();
     
-    const [activeTab, setActiveTab] = useState('seguranca');
+    const [activeTab, setActiveTab] = useState('comunicacao');
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [runningBot, setRunningBot] = useState(false);
 
     const [config, setConfig] = useState({
-        // Segurança
         max_tentativas_login: 5,
         tempo_bloqueio_minutos: 15,
         tempo_sessao_minutos: 60,
-        // Interface
         itens_por_pagina: 10,
         modo_manutencao: false,
-        // Agendamento
-        janela_agendamento_meses: 6
+        janela_agendamento_meses: 6,
+        enviar_whatsapp_global: true,
+        enviar_wpp_confirmacao: true,
+        enviar_wpp_bloqueio: true,
+        enviar_wpp_lembrete: true,
+        horario_disparo_lembrete: '08:00',
+        data_ultima_execucao_lembrete: null,
+        stats_hoje: { total: 0, enviados: 0, pendentes: 0 },
+        stats_amanha: { total: 0, enviados: 0, pendentes: 0 }
     });
 
-    // Se não for admin, nem carrega
     if (user && !user.is_superuser) {
         return (
             <Layout>
@@ -42756,7 +43374,9 @@ export default function Configuracoes() {
         setLoading(true);
         try {
             const res = await api.get('configuracoes/sistema/');
-            if(res.data) setConfig(res.data);
+            if(res.data) {
+                setConfig(prev => ({ ...prev, ...res.data }));
+            }
         } catch (error) {
             console.error(error);
             notify.error("Erro ao carregar configurações.");
@@ -42778,8 +43398,47 @@ export default function Configuracoes() {
         }
     };
 
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setConfig(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
+    };
+
+    const handleExecutarAgora = async () => {
+        const confirm = await confirmDialog(
+            `Existem ${config.stats_amanha?.pendentes || 0} pacientes pendentes para amanhã. Deseja disparar agora?`,
+            "Executar Disparo Manual?",
+            "Sim, Executar", "Cancelar"
+        );
+        if (!confirm) return;
+
+        setRunningBot(true);
+        try {
+            const res = await api.post('configuracoes/sistema/executar_lembretes/');
+            notify.success("Rotina executada com sucesso!");
+            
+            if(res.data) {
+                setConfig(prev => ({
+                    ...prev, 
+                    data_ultima_execucao_lembrete: res.data.ultima_execucao,
+                    stats_hoje: res.data.stats_hoje,
+                    stats_amanha: res.data.stats_amanha
+                }));
+            }
+        } catch (e) {
+            notify.error("Erro ao executar rotina.");
+        } finally {
+            setRunningBot(false);
+        }
+    };
+
+    const hojeIso = new Date().toISOString().split('T')[0];
+    const jaRodouHoje = config.data_ultima_execucao_lembrete === hojeIso;
+
     const tabClass = (tab) => `
-        flex items-center gap-2 px-6 py-4 font-bold border-b-2 transition-all
+        flex items-center gap-2 px-6 py-4 font-bold border-b-2 transition-all whitespace-nowrap
         ${activeTab === tab 
             ? 'border-blue-600 text-blue-600 bg-blue-50/50 dark:bg-blue-900/20' 
             : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:text-slate-300 dark:hover:bg-slate-800'}
@@ -42796,101 +43455,157 @@ export default function Configuracoes() {
                         <Settings className="text-blue-600" size={32}/> Configurações do Sistema
                     </h1>
                     <p className="text-slate-500 dark:text-slate-400 mt-2">
-                        Defina as regras globais de comportamento, segurança e interface da plataforma.
+                        Gerencie a segurança, interface e automação de comunicações da clínica.
                     </p>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    
-                    {/* ABAS */}
-                    <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
-                        <button onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}>
-                            <Shield size={18}/> Segurança
-                        </button>
-                        <button onClick={()=>setActiveTab('interface')} className={tabClass('interface')}>
-                            <LayoutIcon size={18}/> Interface
-                        </button>
-                        <button onClick={()=>setActiveTab('agendamento')} className={tabClass('agendamento')}>
-                            <CalendarClock size={18}/> Regras de Negócio
-                        </button>
+                    <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto scrollbar-hide">
+                        <button type="button" onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}><Shield size={18}/> Segurança</button>
+                        <button type="button" onClick={()=>setActiveTab('interface')} className={tabClass('interface')}><LayoutIcon size={18}/> Interface</button>
+                        <button type="button" onClick={()=>setActiveTab('agendamento')} className={tabClass('agendamento')}><CalendarClock size={18}/> Regras</button>
+                        <button type="button" onClick={()=>setActiveTab('comunicacao')} className={tabClass('comunicacao')}><MessageCircle size={18}/> Comunicação</button>
                     </div>
 
-                    {/* CONTEÚDO */}
                     <div className="p-8">
                         {loading ? (
                             <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={32}/></div>
                         ) : (
                             <form onSubmit={handleSave} className="space-y-8">
                                 
-                                {/* ABA SEGURANÇA */}
                                 {activeTab === 'seguranca' && (
-                                    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div>
-                                                <label className={labelClass}>Max. Tentativas de Login</label>
-                                                <input type="number" min="1" max="10" value={config.max_tentativas_login} onChange={e=>setConfig({...config, max_tentativas_login: e.target.value})} className={inputClass}/>
-                                                <p className="text-xs text-slate-400 mt-1.5">Bloqueia o usuário após X erros consecutivos.</p>
-                                            </div>
-                                            <div>
-                                                <label className={labelClass}>Tempo de Bloqueio (Min)</label>
-                                                <input type="number" min="1" max="1440" value={config.tempo_bloqueio_minutos} onChange={e=>setConfig({...config, tempo_bloqueio_minutos: e.target.value})} className={inputClass}/>
-                                                <p className="text-xs text-slate-400 mt-1.5">Duração do bloqueio por excesso de tentativas.</p>
-                                            </div>
-                                            <div className="md:col-span-2">
-                                                <label className={labelClass}>Expiração de Sessão (Minutos)</label>
-                                                <input type="number" min="5" max="1440" value={config.tempo_sessao_minutos} onChange={e=>setConfig({...config, tempo_sessao_minutos: e.target.value})} className={inputClass}/>
-                                                <p className="text-xs text-slate-400 mt-1.5">Desloga automaticamente por inatividade (Compliance LGPD).</p>
-                                            </div>
-                                        </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+                                        <div><label className={labelClass}>Max. Tentativas de Login</label><input type="number" name="max_tentativas_login" value={config.max_tentativas_login} onChange={handleChange} className={inputClass}/></div>
+                                        <div><label className={labelClass}>Tempo de Bloqueio (Min)</label><input type="number" name="tempo_bloqueio_minutos" value={config.tempo_bloqueio_minutos} onChange={handleChange} className={inputClass}/></div>
+                                        <div className="md:col-span-2"><label className={labelClass}>Expiração de Sessão (Minutos)</label><input type="number" name="tempo_sessao_minutos" value={config.tempo_sessao_minutos} onChange={handleChange} className={inputClass}/></div>
                                     </div>
                                 )}
 
-                                {/* ABA INTERFACE */}
                                 {activeTab === 'interface' && (
-                                    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
-                                        <div>
-                                            <label className={labelClass}>Paginação Padrão (Itens por Página)</label>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <input type="number" min="5" max="100" value={config.itens_por_pagina} onChange={e=>setConfig({...config, itens_por_pagina: e.target.value})} className={inputClass}/>
-                                            </div>
-                                            <p className="text-xs text-slate-400 mt-1.5">Define quantos registros aparecem nas tabelas de listagem.</p>
-                                        </div>
-
+                                    <div className="space-y-6 animate-in fade-in duration-300">
+                                        <div><label className={labelClass}>Itens por Página</label><input type="number" name="itens_por_pagina" value={config.itens_por_pagina} onChange={handleChange} className={inputClass + " max-w-[150px]"}/></div>
                                         <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 p-5 rounded-xl">
-                                            <div className="flex items-center gap-2 mb-3 text-red-700 dark:text-red-400 font-bold">
-                                                <AlertTriangle size={20}/> Modo Manutenção
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                <div className="relative inline-flex items-center cursor-pointer">
-                                                    <input type="checkbox" className="sr-only peer" checked={config.modo_manutencao} onChange={e=>setConfig({...config, modo_manutencao: e.target.checked})} />
-                                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 dark:peer-focus:ring-red-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-red-600"></div>
-                                                </div>
-                                                <span className="font-bold text-slate-700 dark:text-slate-300">
-                                                    {config.modo_manutencao ? 'SISTEMA BLOQUEADO' : 'Operação Normal'}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm text-red-600/80 mt-3 leading-relaxed">
-                                                Ao ativar, <strong>apenas administradores</strong> conseguirão fazer login. Use durante atualizações críticas.
-                                            </p>
+                                            <div className="flex items-center gap-2 mb-3 text-red-700 dark:text-red-400 font-bold"><AlertTriangle size={20}/> Modo Manutenção</div>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" name="modo_manutencao" className="sr-only peer" checked={config.modo_manutencao} onChange={handleChange}/>
+                                                <div className="w-11 h-6 bg-slate-200 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                                                <span className="ml-3 font-bold text-slate-700 dark:text-slate-300">{config.modo_manutencao ? 'BLOQUEADO' : 'NORMAL'}</span>
+                                            </label>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* ABA AGENDAMENTO */}
                                 {activeTab === 'agendamento' && (
-                                    <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
-                                        <div>
-                                            <label className={labelClass}>Janela de Agendamento Futuro (Meses)</label>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <input type="number" min="1" max="24" value={config.janela_agendamento_meses} onChange={e=>setConfig({...config, janela_agendamento_meses: e.target.value})} className={inputClass}/>
+                                    <div className="animate-in fade-in duration-300">
+                                        <label className={labelClass}>Janela de Agendamento Futuro (Meses)</label>
+                                        <input type="number" name="janela_agendamento_meses" value={config.janela_agendamento_meses} onChange={handleChange} className={inputClass + " max-w-[150px]"}/>
+                                    </div>
+                                )}
+
+                                {activeTab === 'comunicacao' && (
+                                    <div className="space-y-6 animate-in fade-in duration-300">
+                                        <div className={`p-6 rounded-xl border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800'}`}>
+                                            <div className="flex items-center justify-between">
+                                                <div><h3 className={`font-bold text-lg ${config.enviar_whatsapp_global ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>{config.enviar_whatsapp_global ? 'Mensagens Ativadas' : 'Mensagens Desativadas'}</h3><p className="text-sm opacity-80">Controle mestre de envios.</p></div>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" name="enviar_whatsapp_global" className="sr-only peer" checked={!!config.enviar_whatsapp_global} onChange={handleChange}/>
+                                                    <div className={`w-14 h-7 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all ${config.enviar_whatsapp_global ? 'bg-slate-200 peer-checked:bg-green-600' : 'bg-slate-200 peer-checked:bg-red-600'}`}></div>
+                                                </label>
                                             </div>
-                                            <p className="text-xs text-slate-400 mt-1.5">Define até quantos meses à frente a agenda fica aberta para marcação.</p>
+                                        </div>
+
+                                        <div className={`bg-slate-50 dark:bg-slate-900/30 p-5 rounded-xl border border-slate-200 dark:border-slate-700 ${!config.enviar_whatsapp_global ? 'opacity-40 grayscale' : ''}`}>
+                                            <h3 className="font-bold mb-4 flex items-center gap-2"><MessageCircle size={18}/> Gatilhos de Mensagem</h3>
+                                            <div className="space-y-4">
+                                                {[
+                                                    { id: 'enviar_wpp_confirmacao', label: 'Confirmação Imediata', sub: 'No ato da marcação.' },
+                                                    { id: 'enviar_wpp_bloqueio', label: 'Aviso de Cancelamento', sub: 'Em caso de bloqueio de agenda.' },
+                                                    { id: 'enviar_wpp_lembrete', label: 'Lembrete Automático', sub: 'Enviado 24h antes da consulta.' }
+                                                ].map((item) => (
+                                                    <div key={item.id} className="flex items-center justify-between pb-3 border-b last:border-0 dark:border-slate-700">
+                                                        <div><p className="text-sm font-bold text-slate-700 dark:text-slate-200">{item.label}</p><p className="text-[10px] text-slate-500">{item.sub}</p></div>
+                                                        <label className="relative inline-flex items-center cursor-pointer">
+                                                            <input type="checkbox" name={item.id} className="sr-only peer" checked={config[item.id]} onChange={handleChange} disabled={!config.enviar_whatsapp_global}/>
+                                                            <div className="w-10 h-5 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                                        </label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className={`p-6 rounded-2xl border transition-all ${config.enviar_whatsapp_global && config.enviar_wpp_lembrete ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-slate-600' : 'bg-slate-100 opacity-50 grayscale'}`}>
+                                            <div className="flex items-center justify-between mb-6">
+                                                <h3 className="font-bold flex items-center gap-2 text-blue-600"><CalendarClock size={20}/> Monitoramento do Robô</h3>
+                                                <div className="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-full text-[10px] font-bold text-slate-500 uppercase">
+                                                    <Clock size={12}/> Última Execução: {jaRodouHoje ? 'Hoje' : config.data_ultima_execucao_lembrete || 'Pendente'}
+                                                </div>
+                                            </div>
+
+                                            {/* PAINEL DE STATUS DUPLO */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-3 flex justify-between">
+                                                        <span>Consultas de HOJE</span>
+                                                        <span>{new Date().toLocaleDateString()}</span>
+                                                    </p>
+                                                    <div className="flex gap-4">
+                                                        <div className="flex-1">
+                                                            <span className="block text-2xl font-bold text-blue-600">{config.stats_hoje?.enviados || 0}</span>
+                                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Enviados</span>
+                                                        </div>
+                                                        <div className="w-px h-10 bg-slate-200 dark:bg-slate-700"></div>
+                                                        <div className="flex-1">
+                                                            <span className="block text-2xl font-bold text-red-400">{config.stats_hoje?.pendentes || 0}</span>
+                                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Não Enviados</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-blue-50/30 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-800/30">
+                                                    <p className="text-[10px] font-bold text-blue-400 uppercase mb-3 flex justify-between">
+                                                        <span>Consultas de AMANHÃ</span>
+                                                        <span>{new Date(Date.now() + 86400000).toLocaleDateString()}</span>
+                                                    </p>
+                                                    <div className="flex gap-4">
+                                                        <div className="flex-1">
+                                                            <span className="block text-2xl font-bold text-slate-700 dark:text-white">{config.stats_amanha?.enviados || 0}</span>
+                                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Antecipados</span>
+                                                        </div>
+                                                        <div className="w-px h-10 bg-slate-200 dark:bg-slate-700"></div>
+                                                        <div className="flex-1">
+                                                            <span className="block text-2xl font-bold text-orange-500">{config.stats_amanha?.pendentes || 0}</span>
+                                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Aguardando</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col md:flex-row gap-4 items-center bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Configuração de Horário</label>
+                                                    <div className="flex items-center gap-3">
+                                                        <input type="time" name="horario_disparo_lembrete" value={config.horario_disparo_lembrete} onChange={handleChange} className="bg-white dark:bg-slate-800 border-none rounded-lg p-2 font-bold text-blue-600 outline-none ring-1 ring-slate-200 dark:ring-slate-700 focus:ring-blue-500"/>
+                                                        <span className="text-[10px] text-slate-500 leading-tight">O robô executará automaticamente neste horário (UTC-3).</span>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onClick={handleExecutarAgora}
+                                                    disabled={runningBot || !config.enviar_wpp_lembrete || !config.enviar_whatsapp_global || config.stats_amanha?.pendentes === 0}
+                                                    className={`h-12 px-6 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50
+                                                        ${config.stats_amanha?.pendentes > 0 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-none' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}
+                                                    `}
+                                                >
+                                                    {runningBot ? <Loader2 className="animate-spin" size={18}/> : config.stats_amanha?.pendentes === 0 ? <Check size={18}/> : <Play size={18} fill="currentColor"/>}
+                                                    {config.stats_amanha?.pendentes === 0 ? 'Tudo Enviado' : 'Disparar Amanhã Agora'}
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
 
                                 <div className="pt-6 border-t border-slate-100 dark:border-slate-700 flex justify-end">
-                                    <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 transition-transform active:scale-95">
+                                    <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-bold shadow-xl shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 transition-all active:scale-95">
                                         {saving ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>} 
                                         Salvar Configurações
                                     </button>
@@ -42912,7 +43627,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X, Pencil, Printer, FileText, RotateCcw
+    CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X, Pencil, FileText, RotateCcw, MessageSquare, CheckSquare, Square, Send, Loader2, Lock
 } from 'lucide-react';
 import { generateConflictReport } from '../utils/generateReport';
 
@@ -42924,18 +43639,24 @@ export default function Bloqueios() {
     const [profissionais, setProfissionais] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Estado de Edição
     const [editingId, setEditingId] = useState(null);
 
     const formInicial = {
         profissional: '', data_inicio: '', data_fim: '', 
         hora_inicio: '00:00', hora_fim: '23:59', 
-        motivo: '', tipo: 'bloqueio', recorrente: false
+        motivo: '', tipo: 'bloqueio', recorrente: false,
+        observacao: '' 
     };
     const [form, setForm] = useState(formInicial);
 
-    // Modal de Conflito (Apenas na criação)
     const [conflictData, setConflictData] = useState(null);
+
+    const [modalDisparoOpen, setModalDisparoOpen] = useState(false);
+    const [listaAfetados, setListaAfetados] = useState([]);
+    const [selecionados, setSelecionados] = useState([]);
+    const [enviandoWpp, setEnviandoWpp] = useState(false);
+    const [motivoSalvo, setMotivoSalvo] = useState('');
+    const [configSistema, setConfigSistema] = useState(null); // --- ESTADO DA CONFIGURAÇÃO ---
 
     useEffect(() => {
         if (api) loadData();
@@ -42943,12 +43664,14 @@ export default function Bloqueios() {
 
     const loadData = async () => {
         try {
-            const [resBloq, resProf] = await Promise.all([
+            const [resBloq, resProf, resConfig] = await Promise.all([
                 api.get('agendamento/bloqueios/'),
-                api.get('profissionais/')
+                api.get('profissionais/'),
+                api.get('configuracoes/sistema/') // Carrega config
             ]);
             setBloqueios(Array.isArray(resBloq.data.results || resBloq.data) ? (resBloq.data.results || resBloq.data) : []);
             setProfissionais(Array.isArray(resProf.data.results || resProf.data) ? (resProf.data.results || resProf.data) : []);
+            setConfigSistema(resConfig.data);
         } catch (e) { 
             notify.error("Erro ao carregar dados."); 
             setBloqueios([]);
@@ -42965,7 +43688,8 @@ export default function Bloqueios() {
             hora_fim: bloqueio.hora_fim,
             motivo: bloqueio.motivo,
             tipo: bloqueio.tipo,
-            recorrente: bloqueio.recorrente
+            recorrente: bloqueio.recorrente,
+            observacao: bloqueio.observacao || ''
         });
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -42981,15 +43705,11 @@ export default function Bloqueios() {
         
         try {
             if (editingId) {
-                // --- MODO EDIÇÃO (PUT) ---
-                // Na edição, não verificamos conflitos automaticamente para não travar o fluxo,
-                // assume-se que o gestor sabe o que está fazendo ao alterar datas.
                 await api.put(`agendamento/bloqueios/${editingId}/`, form);
                 notify.success("Bloqueio atualizado com sucesso!");
                 handleCancelEdit();
                 loadData();
             } else {
-                // --- MODO CRIAÇÃO (POST) com Verificação ---
                 const res = await api.post('agendamento/bloqueios/verificar_conflitos/', form);
                 
                 if (res.data.conflito) {
@@ -43013,8 +43733,17 @@ export default function Bloqueios() {
 
     const resolverConflito = async (acao) => {
         try {
-            await api.post('agendamento/bloqueios/', { ...form, acao_conflito: acao });
-            notify.success(`Bloqueio criado!`);
+            const res = await api.post('agendamento/bloqueios/', { ...form, acao_conflito: acao });
+            
+            if (res.data.afetados && res.data.afetados.length > 0) {
+                setListaAfetados(res.data.afetados);
+                setSelecionados(res.data.afetados.map(a => a.id));
+                setMotivoSalvo(form.observacao); 
+                setModalDisparoOpen(true);
+            } else {
+                notify.success(`Bloqueio criado!`);
+            }
+
             setConflictData(null);
             setForm(formInicial);
             loadData();
@@ -43048,6 +43777,30 @@ export default function Bloqueios() {
             } catch (error) { notify.error("Erro ao remover."); }
         }
     }
+
+    // --- LÓGICA DE BLOQUEIO DO BOTÃO WHATSAPP ---
+    const isWhatsappDisabled = () => {
+        if (!configSistema) return false;
+        // Trava se o Global estiver OFF ou o Bloqueio estiver OFF
+        return !configSistema.enviar_whatsapp_global || !configSistema.enviar_wpp_bloqueio;
+    };
+
+    const handleEnviarEmMassa = async () => {
+        if (selecionados.length === 0) return;
+        setEnviandoWpp(true);
+        try {
+            await api.post('agendamento/bloqueios/notificar_cancelados/', {
+                agendamentos_ids: selecionados,
+                motivo: motivoSalvo
+            });
+            notify.success("Mensagens enviadas com sucesso!");
+            setModalDisparoOpen(false);
+        } catch (e) {
+            notify.error("Erro ao enviar mensagens.");
+        } finally {
+            setEnviandoWpp(false);
+        }
+    };
 
     const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-red-500 text-sm dark:text-white";
 
@@ -43101,7 +43854,18 @@ export default function Bloqueios() {
                                 </div>
                             )}
 
-                            <div><label className="block text-xs font-bold text-slate-500 mb-1">Motivo</label><input value={form.motivo} onChange={e=>setForm({...form, motivo: e.target.value})} className={inputClass} placeholder="Ex: Férias, Natal..." required/></div>
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1">Motivo Interno</label><input value={form.motivo} onChange={e=>setForm({...form, motivo: e.target.value})} className={inputClass} placeholder="Ex: Férias" required/></div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">Observação para o Paciente</label>
+                                <textarea 
+                                    value={form.observacao} 
+                                    onChange={e=>setForm({...form, observacao: e.target.value})} 
+                                    className={inputClass} 
+                                    placeholder="Ex: Médico testou positivo para COVID..."
+                                    rows="2"
+                                />
+                            </div>
 
                             {form.tipo === 'feriado' && (
                                 <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -43111,13 +43875,13 @@ export default function Bloqueios() {
                             )}
 
                             <button type="submit" disabled={loading} className={`w-full text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-800 hover:bg-slate-900'}`}>
-                                {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save size={18}/>} 
+                                {loading ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
                                 {editingId ? 'Atualizar Bloqueio' : 'Salvar Bloqueio'}
                             </button>
                         </form>
                     </div>
 
-                    {/* LISTA */}
+                    {/* LISTA DE BLOQUEIOS */}
                     <div className="lg:col-span-2">
                         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                             <table className="w-full text-left">
@@ -43202,6 +43966,93 @@ export default function Bloqueios() {
                                         <span className="text-[10px] font-normal opacity-70">Cancela todos os agendamentos</span>
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL DE DISPARO WHATSAPP */}
+                {modalDisparoOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="bg-orange-600 p-4 text-white flex justify-between items-center">
+                                <h2 className="text-lg font-bold flex items-center gap-2">
+                                    <MessageSquare size={20}/> Avisar Pacientes Cancelados
+                                </h2>
+                                <button onClick={() => setModalDisparoOpen(false)}><X size={20}/></button>
+                            </div>
+                            
+                            <div className="p-5 overflow-y-auto flex-1">
+                                <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl text-orange-800 dark:text-orange-200 text-sm mb-4 border border-orange-100 dark:border-orange-800">
+                                    <p className="font-bold mb-1">Bloqueio realizado com sucesso!</p>
+                                    <p>Encontramos <strong>{listaAfetados.length} pacientes</strong> que tiveram suas consultas canceladas. Deseja enviar um aviso via WhatsApp para eles?</p>
+                                </div>
+
+                                <div className="flex justify-between items-center mb-3 px-1">
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lista de Envio</span>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setSelecionados(selecionados.length === listaAfetados.length ? [] : listaAfetados.map(a=>a.id))} 
+                                        className="text-xs text-blue-600 font-bold hover:underline"
+                                    >
+                                        {selecionados.length === listaAfetados.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+                                    </button>
+                                </div>
+
+                                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                    {listaAfetados.map(ag => (
+                                        <div 
+                                            key={ag.id} 
+                                            onClick={() => {
+                                                if (selecionados.includes(ag.id)) setSelecionados(selecionados.filter(id => id !== ag.id));
+                                                else setSelecionados([...selecionados, ag.id]);
+                                            }}
+                                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                                selecionados.includes(ag.id) 
+                                                    ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700' 
+                                                    : 'bg-white border-slate-100 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700'
+                                            }`}
+                                        >
+                                            <div className={selecionados.includes(ag.id) ? "text-blue-600" : "text-slate-300"}>
+                                                {selecionados.includes(ag.id) ? <CheckSquare size={20}/> : <Square size={20}/>}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-sm text-slate-700 dark:text-white">{ag.paciente_nome}</div>
+                                                <div className="text-xs text-slate-500 flex items-center gap-2">
+                                                    <span>{ag.data} às {ag.horario}</span>
+                                                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                                    <span>{ag.paciente_telefone || "Sem Tel"}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="p-4 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-3">
+                                <button 
+                                    onClick={() => setModalDisparoOpen(false)}
+                                    className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg text-sm transition-colors"
+                                >
+                                    Não Enviar
+                                </button>
+                                
+                                {/* --- BOTÃO DE ENVIO COM TRAVA VISUAL --- */}
+                                <button 
+                                    onClick={handleEnviarEmMassa}
+                                    disabled={selecionados.length === 0 || enviandoWpp || isWhatsappDisabled()} // Trava funcional
+                                    className={`px-6 py-2 font-bold rounded-lg flex items-center gap-2 text-sm transition-all active:scale-95 shadow-lg shadow-green-200 dark:shadow-none
+                                        ${isWhatsappDisabled() 
+                                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                                            : 'bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed'
+                                        }
+                                    `}
+                                    title={isWhatsappDisabled() ? "Envio desativado nas Configurações" : "Enviar Mensagens"}
+                                >
+                                    {enviandoWpp ? <Loader2 className="animate-spin" size={16}/> : isWhatsappDisabled() ? <Lock size={16}/> : <Send size={16}/>}
+                                    {isWhatsappDisabled() ? 'Envio Bloqueado' : `Enviar (${selecionados.length})`}
+                                </button>
+                                {/* --------------------------------------- */}
                             </div>
                         </div>
                     </div>
@@ -43624,11 +44475,11 @@ import Layout from '../components/Layout';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { 
-  Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, MapPin, ChevronDown, Check, AlertCircle, DollarSign, Printer, ShieldCheck, Lock 
+  Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, MapPin, ChevronDown, Check, AlertCircle, DollarSign, Printer, ShieldCheck, Lock, MessageCircle 
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
 
-// --- ESTILOS DO CALENDÁRIO ATUALIZADOS ---
+// --- ESTILOS DO CALENDÁRIO ---
 const calendarStyles = `
   .react-calendar { width: 100%; border: none; font-family: inherit; background: transparent; }
   .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 2px solid #2563eb !important; }
@@ -43747,6 +44598,9 @@ export default function MarcarConsulta() {
   const [convenioId, setConvenioId] = useState('');
   const [convenioTravado, setConvenioTravado] = useState(false);
   
+  const [enviarWhatsapp, setEnviarWhatsapp] = useState(true);
+  const [configSistema, setConfigSistema] = useState(null); // --- ESTADO DA CONFIGURAÇÃO ---
+  
   const [encaixeHora, setEncaixeHora] = useState('');
   const [observacao, setObservacao] = useState('');
   const [loadingSave, setLoadingSave] = useState(false);
@@ -43781,6 +44635,11 @@ export default function MarcarConsulta() {
   // Carrega listas iniciais (COM PROTEÇÃO)
   useEffect(() => {
     if (api) {
+        // --- BUSCA CONFIGURAÇÃO DO SISTEMA ---
+        api.get('configuracoes/sistema/').then(res => {
+            setConfigSistema(res.data);
+        }).catch(err => console.error("Erro config", err));
+
         api.get('profissionais/').then(res => {
             const data = res.data.results || res.data;
             setProfissionais(Array.isArray(data) ? data.map(p => ({ id: p.id, label: p.nome })) : []);
@@ -43958,7 +44817,8 @@ export default function MarcarConsulta() {
                 convenio_nome: a.nome_convenio, 
                 observacoes: a.observacoes,
                 is_encaixe: a.is_encaixe,
-                valor: parseFloat(a.valor || s.valor)
+                valor: parseFloat(a.valor || s.valor),
+                enviar_whatsapp: a.enviar_whatsapp
             };
         }
         return s;
@@ -43974,10 +44834,19 @@ export default function MarcarConsulta() {
         paciente_id: a.paciente,
         convenio_id: a.convenio,
         convenio_nome: a.nome_convenio,
-        observacoes: a.observacoes
+        observacoes: a.observacoes,
+        enviar_whatsapp: a.enviar_whatsapp
     }));
     
     setVagasDoDia(final.sort((a,b) => a.hora.localeCompare(b.hora)));
+  };
+
+  // --- LÓGICA DE BLOQUEIO DE BOTÃO ---
+  const isWhatsappDisabled = () => {
+      // Se não carregou ainda, assume habilitado (ou desabilitado, dependendo da sua preferência)
+      if (!configSistema) return false;
+      // Trava se o Global estiver OFF ou o Confirmação estiver OFF
+      return !configSistema.enviar_whatsapp_global || !configSistema.enviar_wpp_confirmacao;
   };
 
   const abrirAgendar = (slot) => {
@@ -43987,6 +44856,9 @@ export default function MarcarConsulta() {
       setTipoModal('normal');
       setPacienteId(''); 
       setObservacao('');
+      
+      // Reseta para TRUE apenas se o sistema permitir
+      setEnviarWhatsapp(!isWhatsappDisabled()); 
       
       if (slot.convenio_regra_id) {
           setConvenioId(slot.convenio_regra_id);
@@ -44008,6 +44880,7 @@ export default function MarcarConsulta() {
      setValorSelecionado(''); 
      setConvenioId('');
      setConvenioTravado(false);
+     setEnviarWhatsapp(!isWhatsappDisabled()); 
      setModalOpen(true); 
   };
 
@@ -44021,6 +44894,9 @@ export default function MarcarConsulta() {
       setTipoModal(slot.is_encaixe ? 'encaixe' : 'normal');
       if(slot.is_encaixe) setEncaixeHora(slot.hora);
       setConvenioTravado(false);
+      
+      setEnviarWhatsapp(slot.enviar_whatsapp !== false); 
+      
       setModalOpen(true);
   };
 
@@ -44058,7 +44934,8 @@ export default function MarcarConsulta() {
             convenio: convenioId || null, 
             valor: valorSelecionado, 
             observacoes: observacao, 
-            is_encaixe: tipoModal === 'encaixe' 
+            is_encaixe: tipoModal === 'encaixe', 
+            enviar_whatsapp: enviarWhatsapp // Envia a preferência
         };
         
         if(agendamentoIdEditar) {
@@ -44165,7 +45042,7 @@ export default function MarcarConsulta() {
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-4 h-4 rounded border" style={{backgroundColor: '#ffedd5', borderColor: '#fed7aa', textDecoration: 'line-through', color: '#c2410c'}}></div> 
-                                <span>Bloqueio (Férias/Manual)</span>
+                                <span>Bloqueios</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-4 h-4 rounded border" style={{backgroundColor: '#f3e8ff', borderColor: '#d8b4fe'}}></div> 
@@ -44243,7 +45120,7 @@ export default function MarcarConsulta() {
                                                     
                                                     {slot.convenio_regra_nome && (
                                                         <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1 truncate">
-                                                            <ShieldCheck size={12}/> {slot.convenio_regra_nome}
+                                                                <ShieldCheck size={12}/> {slot.convenio_regra_nome}
                                                         </div>
                                                     )}
                                                     {slot.valor > 0 && <div className="text-xs font-semibold text-slate-500 mt-0.5">R$ {Number(slot.valor).toFixed(2)}</div>}
@@ -44317,6 +45194,24 @@ export default function MarcarConsulta() {
                         {tipoModal === 'encaixe' && <div><label className="block text-sm font-bold mb-1">Horário</label><input type="time" className="w-full border p-3 rounded-lg dark:bg-slate-900 dark:text-white" value={encaixeHora} onChange={e => setEncaixeHora(e.target.value)} /></div>}
                         <textarea placeholder="Observações..." className="w-full border p-3 rounded-lg h-24 dark:bg-slate-900 dark:text-white" value={observacao} onChange={e => setObservacao(e.target.value)}></textarea>
                         
+                        {/* --- CHECKBOX DO WHATSAPP (COM TRAVA VISUAL E LÓGICA) --- */}
+                        <div className={`flex items-center gap-2 mb-4 p-3 rounded-lg border transition-all ${isWhatsappDisabled() ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed' : 'bg-blue-50 border-blue-100 dark:bg-slate-800/50 dark:border-slate-700'}`}>
+                            <input
+                                type="checkbox"
+                                id="enviar_whatsapp"
+                                name="enviar_whatsapp"
+                                checked={enviarWhatsapp}
+                                disabled={isWhatsappDisabled()} // Trava se configuração não permitir
+                                onChange={(e) => setEnviarWhatsapp(e.target.checked)}
+                                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                            <label htmlFor="enviar_whatsapp" className={`text-sm font-medium select-none flex items-center gap-2 ${isWhatsappDisabled() ? 'cursor-not-allowed text-slate-500' : 'cursor-pointer text-slate-700 dark:text-slate-300'}`}>
+                                <MessageCircle size={16} className={isWhatsappDisabled() ? 'text-slate-400' : 'text-green-600'} />
+                                {isWhatsappDisabled() ? 'Envio de mensagem desativado pelo Admin' : 'Enviar confirmação via WhatsApp'}
+                            </label>
+                        </div>
+                        {/* ---------------------------------------------------- */}
+
                         <div className="grid grid-cols-2 gap-3 mt-4">
                             <button onClick={salvarAgendamento} disabled={loadingSave} className={`col-span-2 w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 ${agendamentoIdEditar ? '' : 'col-span-2'}`}>
                                 {loadingSave ? <Loader2 className="animate-spin" /> : <Save size={20}/>} 
@@ -44597,7 +45492,7 @@ export default function Operadores() {
                         <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 text-xs uppercase font-bold">
                             <tr>
                                 <th className="px-6 py-4">Nome / Usuário</th>
-                                <th className="px-6 py-4">Médico Vinculado</th>
+                                <th className="px-6 py-4">Profissional Vinculado</th>
                                 <th className="px-6 py-4">Permissões</th>
                                 <th className="px-6 py-4 text-right">Ações</th>
                             </tr>

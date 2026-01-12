@@ -1,13 +1,10 @@
 import jsPDF from 'jspdf';
 
-// Função auxiliar para carregar imagem via URL
 const getDataUri = (url) => {
     return new Promise((resolve) => {
         if (!url) { resolve(null); return; }
-        
         const image = new Image();
-        image.setAttribute('crossOrigin', 'anonymous'); // Tenta evitar CORS
-        
+        image.setAttribute('crossOrigin', 'anonymous');
         image.onload = () => {
             const canvas = document.createElement('canvas');
             canvas.width = image.width;
@@ -15,160 +12,159 @@ const getDataUri = (url) => {
             canvas.getContext('2d').drawImage(image, 0, 0);
             resolve(canvas.toDataURL('image/png'));
         };
-        
-        image.onerror = () => {
-            // Se der erro ao carregar (ex: 404), retorna null e segue sem logo
-            resolve(null);
-        };
-
+        image.onerror = () => resolve(null);
         image.src = url;
     });
 }
 
-// Transformei em ASYNC para esperar a imagem
 export const generateAppointmentReceipt = async (agendamento) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+    });
+
     const pdfData = agendamento.detalhes_pdf || {};
-    
-    // --- CARREGAR LOGO ---
+    const primaryColor = [37, 99, 235]; // Blue 600
+    const secondaryColor = [100, 116, 139]; // Slate 500
+    const textColor = [30, 41, 59]; // Slate 800
+
+    // Carregamento do Logo
     let logoData = null;
     if (pdfData.clinica_logo) {
         logoData = await getDataUri(pdfData.clinica_logo);
     }
 
-    // --- CONFIGURAÇÕES DE FONTE ---
-    const setBold = () => doc.setFont("helvetica", "bold");
-    const setNormal = () => doc.setFont("helvetica", "normal");
-    const setSmall = () => doc.setFontSize(9);
-    const setRegular = () => doc.setFontSize(10);
-    const setLarge = () => doc.setFontSize(12);
-
+    // --- CONFIGURAÇÕES GERAIS ---
+    const marginLeft = 20;
+    const contentWidth = 170;
     let y = 20;
 
-    // ================= CABEÇALHO COM LOGO =================
-    
-    // Se tiver logo, desenha na esquerda (x=10, y=10) e empurra o texto pra direita
-    const textX = logoData ? 50 : 20; 
-
+    // ================= 1. CABEÇALHO (BRANDING) =================
     if (logoData) {
-        // addImage(data, format, x, y, width, height)
-        doc.addImage(logoData, 'PNG', 10, 10, 30, 30);
-        // Ajusta Y para ficar alinhado ao lado do logo
-        y = 20; 
+        doc.addImage(logoData, 'PNG', marginLeft, y, 25, 25);
+        // Texto ao lado da logo
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(pdfData.clinica_nome?.toUpperCase() || "THECLINIC", 52, y + 10);
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        doc.text("COMPROVANTE DE AGENDAMENTO", 52, y + 16);
+    } else {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(22);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(pdfData.clinica_nome?.toUpperCase() || "THECLINIC", marginLeft, y);
+        y += 10;
     }
 
-    setBold(); setLarge();
-    doc.text(pdfData.clinica_nome || "TheClinic System", textX, y);
+    y = logoData ? 55 : 40;
+
+    // ================= 2. CARD DE DATA E HORA (DESTAQUE) =================
+    doc.setFillColor(248, 250, 252); // bg-slate-50
+    doc.roundedRect(marginLeft, y, contentWidth, 25, 3, 3, 'F');
     
-    y += 6;
-    setNormal(); setSmall();
-    doc.text("Comprovante de Agendamento de Consultas", textX, y);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text("DETALHES DA CONSULTA", marginLeft + 5, y + 8);
+
+    doc.setFontSize(14);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    const dataFormatada = new Date(agendamento.data).toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    doc.text(`${dataFormatada.toUpperCase()}`, marginLeft + 5, y + 17);
     
-    // Se tiver logo, garantimos que a linha comece abaixo dele
-    y = logoData ? 45 : y + 10;
+    doc.setFontSize(16);
+    doc.text(`HORÁRIO: ${agendamento.horario.substring(0, 5)}`, marginLeft + 115, y + 17);
 
-    doc.setLineWidth(0.5);
-    doc.line(10, y, 200, y);
-    y += 6;
+    y += 40;
 
-    // ================= DADOS DO PACIENTE =================
-    setBold(); setLarge();
-    doc.text("DADOS DO PACIENTE", 10, y);
-    y += 8;
-
-    setBold(); setRegular();
-    doc.text("Paciente:", 10, y);
-    setNormal();
-    doc.text(`${agendamento.nome_paciente} - CPF: ${pdfData.paciente_cpf || '-'}`, 35, y);
-    y += 6;
-
-    setBold();
-    doc.text("Nascimento:", 10, y);
-    setNormal();
-    const nasc = pdfData.paciente_nascimento ? new Date(pdfData.paciente_nascimento).toLocaleDateString('pt-BR') : '-';
-    doc.text(nasc, 35, y);
-
-    setBold();
-    doc.text("Sexo:", 80, y);
-    setNormal();
-    doc.text(pdfData.paciente_sexo || '-', 95, y);
-
-    setBold();
-    doc.text("Telefone:", 140, y);
-    setNormal();
-    doc.text(agendamento.telefone_paciente || '-', 160, y);
-    y += 6;
-
-    setBold();
-    doc.text("Nome da Mãe:", 10, y);
-    setNormal();
-    doc.text(pdfData.paciente_mae || 'Não informado', 38, y);
-    y += 6;
-
-    setBold();
-    doc.text("Endereço:", 10, y);
-    setNormal();
-    doc.text(`${pdfData.paciente_endereco || ''} - ${pdfData.paciente_cidade || ''}`, 30, y);
+    // ================= 3. INFORMAÇÕES DO PACIENTE =================
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text("INFORMAÇÕES DO PACIENTE", marginLeft, y);
     
-    y += 4;
-    doc.line(10, y, 200, y);
-    y += 6;
+    doc.setDrawColor(226, 232, 240); // Slate 200
+    doc.line(marginLeft, y + 2, marginLeft + contentWidth, y + 2);
+    y += 10;
 
-    // ================= LOCAL DE ATENDIMENTO =================
-    setBold(); setLarge();
-    doc.text("LOCAL DE ATENDIMENTO", 10, y);
-    y += 8;
+    const drawField = (label, value, xPos, yPos, w) => {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        doc.text(label.toUpperCase(), xPos, yPos);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.text(value || "-", xPos, yPos + 5);
+    };
 
-    setBold(); setRegular();
-    doc.text("Data/Hora:", 10, y);
-    setNormal();
-    const dataF = new Date(agendamento.data + 'T' + agendamento.horario).toLocaleString('pt-BR');
-    doc.text(dataF, 35, y);
-    y += 6;
+    drawField("Nome Completo", agendamento.nome_paciente, marginLeft, y, 100);
+    drawField("CPF / Documento", pdfData.paciente_cpf, marginLeft + 110, y, 60);
+    y += 15;
+    drawField("Data de Nascimento", pdfData.paciente_nascimento ? new Date(pdfData.paciente_nascimento).toLocaleDateString('pt-BR') : "-", marginLeft, y, 50);
+    drawField("Telefone de Contato", agendamento.telefone_paciente, marginLeft + 60, y, 50);
+    drawField("Sexo", pdfData.paciente_sexo, marginLeft + 110, y, 40);
+    y += 15;
+    drawField("Endereço", `${pdfData.paciente_endereco || ''}, ${pdfData.paciente_cidade || ''}`, marginLeft, y, 170);
 
-    setBold();
-    doc.text("Local:", 10, y);
-    setNormal();
-    doc.text(pdfData.clinica_nome || "Consultório Principal", 35, y);
-    y += 6;
+    y += 25;
 
-    setBold();
-    doc.text("Endereço:", 10, y);
-    setNormal();
-    doc.text(`${pdfData.clinica_endereco || ''} - ${pdfData.clinica_bairro || ''}`, 35, y);
-    y += 6;
+    // ================= 4. INFORMAÇÕES MÉDICAS =================
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text("CORPO CLÍNICO E LOCAL", marginLeft, y);
+    doc.line(marginLeft, y + 2, marginLeft + contentWidth, y + 2);
+    y += 10;
 
-    // ================= PROFISSIONAL =================
-    setBold();
-    doc.text("Profissional:", 10, y);
-    setNormal();
-    doc.text(agendamento.nome_profissional, 35, y);
-    y += 6;
+    drawField("Profissional", agendamento.nome_profissional, marginLeft, y, 80);
+    drawField("Especialidade", agendamento.nome_especialidade, marginLeft + 80, y, 50);
+    drawField("Registro Profissional", pdfData.profissional_registro, marginLeft + 130, y, 40);
+    y += 15;
+    drawField("Convênio / Plano", agendamento.nome_convenio || "PARTICULAR", marginLeft, y, 80);
+    drawField("Unidade de Atendimento", pdfData.clinica_nome || "CONSULTÓRIO CENTRAL", marginLeft + 80, y, 90);
+    y += 15;
+    drawField("Endereço da Unidade", `${pdfData.clinica_endereco || ''} - ${pdfData.clinica_bairro || ''}`, marginLeft, y, 170);
 
-    setBold();
-    doc.text("Especialidade:", 10, y);
-    setNormal();
-    doc.text(agendamento.nome_especialidade, 38, y);
+    // ================= 5. OBSERVAÇÕES E ORIENTAÇÕES =================
+    y += 30;
+    doc.setFillColor(241, 245, 249); // bg-slate-100
+    doc.roundedRect(marginLeft, y, contentWidth, 35, 2, 2, 'F');
     
-    setBold();
-    doc.text("Registro:", 140, y);
-    setNormal();
-    doc.text(pdfData.profissional_registro || '', 160, y);
-    y += 6;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text("ORIENTAÇÕES IMPORTANTES", marginLeft + 5, y + 7);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    const lines = [
+        "- Chegue com 15 minutos de antecedência para triagem e recepção.",
+        "- Apresente documento original com foto e carteirinha do convênio (se aplicável).",
+        "- Em caso de desistência, avise com no mínimo 24 horas de antecedência.",
+        `- Observações: ${agendamento.observacoes || "Nenhuma observação específica para este atendimento."}`
+    ];
+    doc.text(lines, marginLeft + 5, y + 14);
 
-    setBold();
-    doc.text("Convênio:", 10, y);
-    setNormal();
-    doc.text(agendamento.nome_convenio || "Particular", 35, y);
+    // ================= 6. RODAPÉ (FOOTER) =================
+    const footerY = 280;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(marginLeft, footerY - 5, marginLeft + contentWidth, footerY - 5);
+    
+    doc.setFontSize(7);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text(`Este documento é um comprovante oficial de agendamento gerado pelo sistema TheClinic.`, marginLeft, footerY);
+    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, marginLeft, footerY + 4);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("VIA DO PACIENTE", 175, footerY, { align: 'right' });
 
-    y += 8;
-    doc.line(10, y, 200, y);
-    y += 6;
-
-    // Rodapé
-    setNormal(); setSmall();
-    doc.text("Emitido em: " + new Date().toLocaleString('pt-BR'), 10, y);
-    doc.text("TheClinic", 170, y);
-
+    // Output
     window.open(doc.output('bloburl'), '_blank');
 };

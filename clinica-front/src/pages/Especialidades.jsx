@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext'; // Importado
 import Layout from '../components/Layout';
-import { Plus, Pencil, Trash2, Tag, X, Save, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, Tag, X, Save, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 export default function Especialidades() {
   const { api } = useAuth();
+  const { notify, confirmDialog } = useNotification(); // Hook instanciado
   
   const [especialidades, setEspecialidades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,7 +36,6 @@ export default function Especialidades() {
       const response = await api.get(`especialidades/?page=${page}&page_size=${pageSize}&search=${search}`);
       const data = response.data;
 
-      // BLINDAGEM AQUI
       if (data.results && Array.isArray(data.results)) {
         setEspecialidades(data.results);
         setTotalCount(data.count);
@@ -44,10 +45,11 @@ export default function Especialidades() {
         setTotalPages(1);
         setTotalCount(data.length);
       } else {
-        setEspecialidades([]); // Garante array vazio se vier erro
+        setEspecialidades([]);
       }
     } catch (error) {
       console.error("Erro", error);
+      notify.error("Erro ao carregar especialidades.");
       if (page > 1) setPage(1);
       setEspecialidades([]);
     } finally {
@@ -63,29 +65,42 @@ export default function Especialidades() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!nome.trim()) return notify.warning("Informe o nome da especialidade.");
+    
     setSaving(true);
     try {
       if (editingItem) {
         await api.put(`especialidades/${editingItem.id}/`, { nome });
+        notify.success("Especialidade atualizada com sucesso!");
       } else {
         await api.post('especialidades/', { nome });
+        notify.success("Nova especialidade cadastrada!");
       }
       setIsModalOpen(false);
       loadData();
     } catch (error) {
-      alert("Erro ao salvar.");
+      notify.error("Erro ao salvar especialidade. Verifique se o nome já existe.");
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Tem certeza que deseja excluir?")) {
+    const confirmado = await confirmDialog(
+        "Tem certeza que deseja excluir esta especialidade? Esta ação não poderá ser desfeita.",
+        "Excluir Especialidade",
+        "Confirmar Exclusão",
+        "Cancelar",
+        "danger"
+    );
+
+    if (confirmado) {
       try {
         await api.delete(`especialidades/${id}/`);
+        notify.success("Especialidade removida.");
         loadData();
       } catch (error) {
-        alert("Não é possível excluir item em uso.");
+        notify.error("Não é possível excluir uma especialidade que possui médicos vinculados.");
       }
     }
   };
@@ -97,7 +112,7 @@ export default function Especialidades() {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto pb-10">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div>
                 <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
@@ -132,24 +147,34 @@ export default function Especialidades() {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {/* BLINDAGEM NO MAP */}
-                    {Array.isArray(especialidades) && especialidades.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                            <td className="px-6 py-4 font-medium text-slate-700 dark:text-white">
-                                {item.nome}
-                            </td>
-                            <td className="px-6 py-4 text-right flex justify-end gap-2">
-                                <button onClick={() => handleOpenModal(item)} className={editBtnClass} title="Editar">
-                                    <Pencil size={18}/>
-                                </button>
-                                <button onClick={() => handleDelete(item.id)} className={deleteBtnClass} title="Excluir">
-                                    <Trash2 size={18}/>
-                                </button>
+                    {loading ? (
+                        <tr>
+                            <td colSpan="2" className="p-10 text-center">
+                                <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32}/>
+                                <span className="text-slate-400">Carregando dados...</span>
                             </td>
                         </tr>
-                    ))}
-                    {(!especialidades || especialidades.length === 0) && !loading && (
-                        <tr><td colSpan="2" className="p-8 text-center text-slate-400">Nenhuma especialidade encontrada.</td></tr>
+                    ) : (
+                        <>
+                            {especialidades.map((item) => (
+                                <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                    <td className="px-6 py-4 font-medium text-slate-700 dark:text-white">
+                                        {item.nome}
+                                    </td>
+                                    <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                        <button onClick={() => handleOpenModal(item)} className={editBtnClass} title="Editar">
+                                            <Pencil size={18}/>
+                                        </button>
+                                        <button onClick={() => handleDelete(item.id)} className={deleteBtnClass} title="Excluir">
+                                            <Trash2 size={18}/>
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {especialidades.length === 0 && (
+                                <tr><td colSpan="2" className="p-8 text-center text-slate-400">Nenhuma especialidade encontrada.</td></tr>
+                            )}
+                        </>
                     )}
                 </tbody>
             </table>
@@ -179,22 +204,22 @@ export default function Especialidades() {
                     
                     <form onSubmit={handleSubmit} className="p-6">
                         <div className="mb-6">
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Nome</label>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 font-bold uppercase tracking-tight">Nome da Área</label>
                             <input 
                                 autoFocus
                                 required
                                 type="text"
                                 placeholder="Ex: Cardiologia"
-                                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                 value={nome}
                                 onChange={e => setNome(e.target.value)}
                             />
                         </div>
 
                         <div className="flex justify-end gap-3">
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl font-bold transition-colors">Cancelar</button>
-                            <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/20 flex items-center gap-2">
-                                {saving ? 'Salvando...' : <><Save size={18}/> Salvar</>}
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">Cancelar</button>
+                            <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-50">
+                                {saving ? <Loader2 className="animate-spin" size={18}/> : <><Save size={18}/> Salvar</>}
                             </button>
                         </div>
                     </form>

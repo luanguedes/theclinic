@@ -1,24 +1,42 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Loader2 } from 'lucide-react';
 
+/**
+ * Componente de Proteção de Rota
+ * Verifica autenticação e regras de segurança (como troca de senha)
+ */
 export default function PrivateRoute({ children }) {
     const { user, loading } = useAuth();
     const location = useLocation();
 
+    // 1. Estado de Carregamento Profissional
     if (loading) {
-        return <div className="flex justify-center items-center h-screen">Carregando...</div>;
+        return (
+            <div className="flex flex-col justify-center items-center h-screen bg-slate-50 dark:bg-slate-950 text-slate-400">
+                <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+                <span className="font-black uppercase tracking-widest text-[10px]">Autenticando...</span>
+            </div>
+        );
     }
 
+    // 2. Redirecionamento para Login (Salvando a rota de origem)
     if (!user) {
-        return <Navigate to="/" />;
+        return <Navigate to="/" state={{ from: location }} replace />;
     }
 
-    // Normaliza removendo barra no final (ex: /trocasenha/ vira /trocasenha)
-    const path = location.pathname.replace(/\/+$/, "");
+    // 3. Normalização de Path para verificação de segurança
+    const path = location.pathname.replace(/\/+$/, "").toLowerCase();
 
-    // Se a flag estiver TRUE e não estivermos já na página certa, redireciona
+    // 4. Bloqueio de Segurança: Troca de Senha Obrigatória
+    // Se a flag estiver ativa, o usuário só pode acessar a página de troca de senha
     if (user.force_password_change && path !== '/trocasenhaobrigatoria') {
-        return <Navigate to="/trocasenhaobrigatoria" />;
+        return <Navigate to="/trocasenhaobrigatoria" replace />;
+    }
+
+    // 5. Prevenção de acesso à troca de senha se não for mais necessário
+    if (!user.force_password_change && path === '/trocasenhaobrigatoria') {
+        return <Navigate to="/dashboard" replace />;
     }
 
     return children;

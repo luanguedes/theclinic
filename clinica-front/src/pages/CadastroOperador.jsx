@@ -36,11 +36,11 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
     
     return (
         <div className="relative mb-4" ref={containerRef}>
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">{label}</label>
+            <label className="block text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest">{label}</label>
             <div className="relative">
                 <input 
                     type="text"
-                    className="w-full pl-10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400" 
+                    className="w-full pl-10 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400" 
                     value={query} 
                     onFocus={() => setIsOpen(true)}
                     onClick={() => setIsOpen(true)}
@@ -48,19 +48,19 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
                     placeholder={placeholder} autoComplete="off"
                 />
                 <div className="absolute left-3 top-3.5 text-slate-400"><Search size={18}/></div>
-                <div className="absolute right-2 top-3.5 flex items-center gap-1 text-slate-400">
-                    {value && <button type="button" onClick={(e)=>{e.stopPropagation(); onChange(null); setQuery('')}} className="hover:text-red-500"><X size={14}/></button>}
-                    <ChevronDown size={16}/>
+                <div className="absolute right-3 top-3.5 flex items-center gap-1 text-slate-400">
+                    {value && <button type="button" onClick={(e)=>{e.stopPropagation(); onChange(null); setQuery('')}} className="hover:text-red-500 transition-colors"><X size={16}/></button>}
+                    <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
                 </div>
             </div>
             {isOpen && (
-                <ul className="absolute z-[100] w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-auto mt-1 animate-in fade-in zoom-in duration-100">
+                <ul className="absolute top-full mt-1 z-[100] w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl max-h-60 overflow-auto animate-in fade-in zoom-in-95 duration-150">
                     {filtered.length > 0 ? filtered.map(opt => (
-                        <li key={opt.id} onMouseDown={() => { onChange(opt.id); setQuery(opt.label); setIsOpen(false); }} className={`p-2.5 cursor-pointer text-sm border-b last:border-0 border-slate-100 dark:border-slate-700 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200`}>
+                        <li key={opt.id} onMouseDown={() => { onChange(opt.id); setQuery(opt.label); setIsOpen(false); }} className={`p-3 cursor-pointer text-sm border-b last:border-0 border-slate-50 dark:border-slate-700 flex justify-between items-center hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-700 dark:text-slate-200 transition-colors`}>
                             {opt.label}
-                            {String(value) === String(opt.id) && <Check size={14} className="text-blue-500"/>}
+                            {String(value) === String(opt.id) && <Check size={16} className="text-blue-500" strokeWidth={3}/>}
                         </li>
-                    )) : <li className="p-3 text-sm text-slate-400 text-center">Nenhum resultado.</li>}
+                    )) : <li className="p-4 text-sm text-slate-400 text-center italic">Nenhum resultado encontrado</li>}
                 </ul>
             )}
         </div>
@@ -83,7 +83,7 @@ export default function CadastroOperador() {
     acesso_faturamento: false, acesso_cadastros: false,
     is_superuser: false,
     force_password_change: true,
-    profissional: null // <--- NOME CORRETO
+    profissional: null
   });
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function CadastroOperador() {
         api.get('profissionais/').then(res => {
             const lista = res.data.results || res.data;
             setProfissionais(lista.map(p => ({ id: p.id, label: `${p.nome} (CPF: ${p.cpf})` })));
-        }).catch(() => {});
+        }).catch(() => notify.error("Erro ao carregar lista de profissionais para vínculo."));
 
         if (id) {
             api.get(`operadores/${id}/`)
@@ -107,12 +107,12 @@ export default function CadastroOperador() {
                         acesso_cadastros: data.acesso_cadastros || false,
                         is_superuser: data.is_superuser || false,
                         force_password_change: data.force_password_change || false,
-                        profissional: data.profissional || null, // <--- NOME CORRETO
+                        profissional: data.profissional || null,
                         password: ''
                     });
                 })
-                .catch(err => {
-                    console.error(err);
+                .catch(() => {
+                    notify.error("Operador não encontrado.");
                     navigate('/operadores');
                 })
                 .finally(() => setFetching(false));
@@ -121,8 +121,22 @@ export default function CadastroOperador() {
   }, [id, api, navigate]);
 
   const handleChange = (e) => {
-    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    setFormData({ ...formData, [e.target.name]: value });
+    const { name, checked, value, type } = e.target;
+    const finalValue = type === 'checkbox' ? checked : value;
+    
+    // UX Helper: Se marcar como Administrador, habilita todos os acessos
+    if (name === 'is_superuser' && checked) {
+        setFormData(prev => ({
+            ...prev,
+            is_superuser: true,
+            acesso_cadastros: true,
+            acesso_atendimento: true,
+            acesso_agendamento: true,
+            acesso_faturamento: true
+        }));
+    } else {
+        setFormData(prev => ({ ...prev, [name]: finalValue }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -132,165 +146,163 @@ export default function CadastroOperador() {
       const dadosParaEnviar = { ...formData };
       
       if (!dadosParaEnviar.password) delete dadosParaEnviar.password;
-      
-      // Garante envio de null se vazio
-      if (!dadosParaEnviar.profissional) {
-          dadosParaEnviar.profissional = null;
-      }
+      if (!dadosParaEnviar.profissional) dadosParaEnviar.profissional = null;
 
       if (id) {
           await api.put(`operadores/${id}/`, dadosParaEnviar);
-          notify.success('Operador atualizado com sucesso!');
+          notify.success('Dados do operador atualizados!');
       } else {
           await api.post('operadores/', dadosParaEnviar);
-          notify.success('Operador criado com sucesso!');
+          notify.success('Novo operador criado com sucesso!');
       }
       navigate('/operadores');
     } catch (error) {
-      console.error(error);
-      const msg = error.response?.data?.error || 'Erro ao salvar operador.';
+      const msg = error.response?.data?.error || error.response?.data?.username || 'Erro ao salvar operador.';
       notify.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const inputClass = "w-full pl-10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400 dark:placeholder-slate-600";
-  const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
-  const backButtonClass = "mb-4 flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm text-sm font-bold w-fit";
+  const inputClass = "w-full pl-10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400";
+  const labelClass = "block text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
 
-  const PermissionToggle = ({ name, label, icon: Icon, checked, onChange }) => {
-    const activeContainer = "bg-blue-50 border-blue-600 ring-1 ring-blue-600 dark:bg-blue-900/30 dark:border-blue-400 dark:ring-blue-400";
-    const inactiveContainer = "bg-white border-slate-200 hover:border-blue-300 dark:bg-slate-800 dark:border-slate-700";
-
-    return (
-      <label className={`relative flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all duration-200 ${checked ? activeContainer : inactiveContainer}`}>
-        <div className="flex items-center space-x-4">
-          <div className={`p-3 rounded-lg transition-colors ${checked ? 'bg-white shadow-sm dark:bg-slate-800 text-blue-600 dark:text-blue-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>
-            <Icon size={24} />
-          </div>
-          <div>
-            <span className={`block font-bold text-base ${checked ? 'text-blue-900 dark:text-blue-100' : 'text-slate-600 dark:text-slate-300'}`}>
-              {label}
-            </span>
-            <span className={`text-xs font-medium ${checked ? 'text-blue-600 dark:text-blue-300' : 'text-slate-400 dark:text-slate-500'}`}>
-              {checked ? 'Habilitado' : 'Desabilitado'}
-            </span>
-          </div>
+  if (fetching) return (
+    <Layout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
+            <Loader2 className="animate-spin text-blue-600 mb-4" size={40}/>
+            <span className="font-bold uppercase tracking-widest text-xs">Carregando perfil do operador...</span>
         </div>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-200 ${checked ? 'bg-blue-600 border-blue-600 scale-110 shadow-md' : 'bg-transparent border-slate-300 dark:border-slate-600'}`}>
-          {checked && <Check size={18} className="text-white" strokeWidth={3} />}
-        </div>
-        <input type="checkbox" name={name} checked={checked} onChange={onChange} className="sr-only" />
-      </label>
-    );
-  };
-
-  if (fetching) return <Layout><div className="flex justify-center p-10 text-slate-400">Carregando dados do operador...</div></Layout>;
+    </Layout>
+  );
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto pb-20">
-        <button onClick={() => navigate('/operadores')} className={backButtonClass}>
-            <ArrowLeft size={18}/> Voltar
+      <div className="max-w-5xl mx-auto pb-20 tracking-tight">
+        <button 
+            onClick={() => navigate('/operadores')} 
+            className="mb-6 flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm text-xs font-black uppercase tracking-widest"
+        >
+            <ArrowLeft size={16}/> Voltar para lista
         </button>
 
-        <div className="mb-8 flex items-center space-x-4">
-          <div className="bg-blue-600 p-3 rounded-xl shadow-lg text-white">
+        <div className="mb-10 flex items-center space-x-5">
+          <div className="bg-blue-600 p-4 rounded-2xl shadow-xl shadow-blue-500/20 text-white">
             <UserCog size={32} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">{id ? 'Editar Operador' : 'Novo Operador'}</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">Gerencie as credenciais e permissões de acesso.</p>
+            <h1 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">{id ? 'Editar Perfil' : 'Criar Operador'}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Controle de credenciais e níveis de privilégio no sistema.</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                <h2 className="text-lg font-bold text-slate-700 dark:text-white mb-6 flex items-center gap-2">
-                  <Shield size={20} className="text-blue-600 dark:text-blue-400"/> Credenciais
+            <div className="lg:col-span-2 space-y-8">
+              <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
+                <h2 className="text-sm font-black text-slate-400 dark:text-slate-500 mb-8 flex items-center gap-2 uppercase tracking-[0.2em]">
+                  <Shield size={18} className="text-blue-600"/> Identificação e Segurança
                 </h2>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="col-span-2">
-                    <label className={labelClass}>Nome Completo</label>
-                    <input name="first_name" value={formData.first_name} onChange={handleChange} className={inputClass.replace('pl-10', 'px-4')} placeholder="Ex: Dra. Ana Paula" required />
+                    <label className={labelClass}>Nome Completo do Colaborador</label>
+                    <input name="first_name" value={formData.first_name} onChange={handleChange} className={inputClass.replace('pl-10', 'px-4')} placeholder="Ex: Dra. Ana Paula Silveira" required />
                   </div>
 
                   <div className="col-span-2">
-                    <label className={labelClass}>Email</label>
+                    <label className={labelClass}>Endereço de E-mail</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
-                      <input name="email" value={formData.email} type="email" onChange={handleChange} className={inputClass} placeholder="email@clinica.com" />
+                      <input name="email" value={formData.email} type="email" onChange={handleChange} className={inputClass} placeholder="ana.paula@theclinic.com" />
                     </div>
                   </div>
 
-                  {/* SELEÇÃO DE PROFISSIONAL VINCULADO */}
-                  <div className="col-span-2">
-                    <hr className="my-2 border-slate-100 dark:border-slate-700"/>
-                    <p className="text-xs text-blue-500 font-bold mb-2 uppercase tracking-wider flex items-center gap-1"><Stethoscope size={12}/> Vínculo Profissional</p>
-                    <SearchableSelect 
-                        label="Este operador é um Profissional?" 
-                        placeholder="Pesquise o profissional..." 
-                        options={profissionais} 
-                        value={formData.profissional} // <--- NOME CORRETO
-                        onChange={(val) => setFormData({...formData, profissional: val})}
-                    />
-                    <p className="text-xs text-slate-400">Ao vincular, este operador terá acesso ao Prontuário Eletrônico.</p>
+                  <div className="col-span-2 pt-2">
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
+                        <SearchableSelect 
+                            label="Vínculo com Profissional de Saúde" 
+                            placeholder="Pesquisar por nome ou CPF..." 
+                            options={profissionais} 
+                            value={formData.profissional}
+                            onChange={(val) => setFormData({...formData, profissional: val})}
+                        />
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-2 flex items-center gap-1">
+                            <AlertCircle size={12} className="text-blue-500"/> Operadores vinculados têm acesso automático ao módulo de prontuários.
+                        </p>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className={labelClass}>Nome de Usuário</label>
+                  <div className="pt-4">
+                    <label className={labelClass}>Usuário de Acesso</label>
                     <div className="relative">
                       <UserCog className="absolute left-3 top-3.5 text-slate-400" size={18} />
-                      <input name="username" value={formData.username} onChange={handleChange} className={inputClass} placeholder="usuario.sistema" required />
+                      <input name="username" value={formData.username} onChange={handleChange} className={inputClass} placeholder="ana.paula" required />
                     </div>
                   </div>
 
-                  <div>
-                    <label className={labelClass}>Senha</label>
+                  <div className="pt-4">
+                    <label className={labelClass}>Senha {id && <span className="text-amber-500 text-[10px] ml-1">(Deixe vazio para não alterar)</span>}</label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3.5 text-slate-400" size={18} />
-                      <input name="password" type="password" value={formData.password} onChange={handleChange} className={inputClass} placeholder={id ? "•••••• (Vazio p/ manter)" : "••••••"} required={!id} />
+                      <input name="password" type="password" value={formData.password} onChange={handleChange} className={inputClass} placeholder="••••••••" required={!id} />
                     </div>
                   </div>
                   
-                   <div className="col-span-2 mt-2">
-                     <PermissionToggle 
-                       name="force_password_change" 
-                       label="Forçar Troca de Senha" 
-                       icon={KeyRound} 
-                       checked={formData.force_password_change} 
-                       onChange={handleChange} 
-                     />
+                   <div className="col-span-2 mt-4">
+                     <label className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${formData.force_password_change ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' : 'bg-slate-50 border-transparent dark:bg-slate-900/40'}`}>
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${formData.force_password_change ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                <KeyRound size={20}/>
+                            </div>
+                            <div>
+                                <span className="block text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-tighter">Exigir Troca de Senha</span>
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">No primeiro acesso do usuário</span>
+                            </div>
+                        </div>
+                        <input type="checkbox" name="force_password_change" checked={formData.force_password_change} onChange={handleChange} className="w-6 h-6 rounded-lg text-blue-600 border-slate-300 focus:ring-blue-500"/>
+                     </label>
                    </div>
                 </div>
               </div>
             </div>
 
             <div className="lg:col-span-1">
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 h-full flex flex-col">
-                <h2 className="text-lg font-bold text-slate-700 dark:text-white mb-2">Permissões de Acesso</h2>
-                <p className="text-sm text-slate-400 mb-6">Selecione os módulos liberados:</p>
+              <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 h-full flex flex-col">
+                <h2 className="text-sm font-black text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-[0.2em]">Permissões</h2>
+                <p className="text-xs font-bold text-slate-400 mb-8 uppercase tracking-tight">Liberar acesso aos módulos:</p>
 
                 <div className="space-y-4 flex-grow">
-                  <PermissionToggle name="acesso_cadastros" label="Gestão de Cadastros" icon={Users} checked={formData.acesso_cadastros} onChange={handleChange} />
-                  <PermissionToggle name="acesso_atendimento" label="Atendimento" icon={Stethoscope} checked={formData.acesso_atendimento} onChange={handleChange} />
-                  <PermissionToggle name="acesso_agendamento" label="Agendamento/Recepção" icon={CalendarDays} checked={formData.acesso_agendamento} onChange={handleChange} />
-                  <PermissionToggle name="acesso_faturamento" label="Financeiro" icon={DollarSign} checked={formData.acesso_faturamento} onChange={handleChange} />
-                  <hr className="border-slate-100 dark:border-slate-700 my-4"/>
-                  <PermissionToggle name="is_superuser" label="Administrador" icon={Shield} checked={formData.is_superuser} onChange={handleChange} />
+                  {[
+                    { id: 'acesso_cadastros', label: 'Cadastros', icon: Users, color: 'text-blue-500' },
+                    { id: 'acesso_agendamento', label: 'Recepção', icon: CalendarDays, color: 'text-green-500' },
+                    { id: 'acesso_atendimento', label: 'Prontuário', icon: Stethoscope, color: 'text-indigo-500' },
+                    { id: 'acesso_faturamento', label: 'Financeiro', icon: DollarSign, color: 'text-amber-500' }
+                  ].map((perm) => (
+                    <label key={perm.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${formData[perm.id] ? 'bg-slate-50 border-blue-100 dark:bg-slate-700/50' : 'bg-transparent border-transparent opacity-60'}`}>
+                        <div className="flex items-center gap-3">
+                            <perm.icon size={18} className={formData[perm.id] ? perm.color : 'text-slate-400'}/>
+                            <span className={`text-xs font-black uppercase tracking-widest ${formData[perm.id] ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>{perm.label}</span>
+                        </div>
+                        <input type="checkbox" name={perm.id} checked={formData[perm.id]} onChange={handleChange} className="w-5 h-5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all"/>
+                    </label>
+                  ))}
+                  
+                  <hr className="border-slate-100 dark:border-slate-700 my-6"/>
+                  
+                  <label className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${formData.is_superuser ? 'bg-purple-50 border-purple-200 dark:bg-purple-900/20' : 'bg-slate-50 border-transparent opacity-60'}`}>
+                        <div className="flex items-center gap-3">
+                            <Shield size={20} className={formData.is_superuser ? 'text-purple-600' : 'text-slate-400'}/>
+                            <span className={`text-xs font-black uppercase tracking-[0.1em] ${formData.is_superuser ? 'text-purple-900 dark:text-purple-200' : 'text-slate-400'}`}>Admin Total</span>
+                        </div>
+                        <input type="checkbox" name="is_superuser" checked={formData.is_superuser} onChange={handleChange} className="w-6 h-6 rounded-lg text-purple-600 border-slate-300 focus:ring-purple-500 transition-all"/>
+                  </label>
                 </div>
 
-                <div className="mt-8 flex flex-col gap-3">
-                    <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50">
+                <div className="mt-10 space-y-3">
+                    <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-xs tracking-widest py-5 rounded-[20px] shadow-xl shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3">
                       {loading ? <Loader2 className="animate-spin" size={20}/> : <Save size={20} />}
-                      {loading ? 'Salvando...' : 'Salvar Operador'}
-                    </button>
-                     <button type="button" onClick={() => navigate('/operadores')} className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-xl transition-colors hover:bg-slate-200">
-                        Cancelar
+                      {id ? 'Atualizar Perfil' : 'Criar Operador'}
                     </button>
                 </div>
               </div>
