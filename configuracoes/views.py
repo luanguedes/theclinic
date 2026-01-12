@@ -51,12 +51,12 @@ class ConfiguracaoSistemaView(APIView):
         hoje = date.today()
         amanha = hoje + timedelta(days=1)
         
-        # --- ESTATÍSTICAS DE HOJE (O que já foi enviado) ---
+        # --- ESTATÍSTICAS DE HOJE ---
         agendamentos_hoje = Agendamento.objects.filter(data=hoje, status='agendado')
         enviados_hoje = agendamentos_hoje.filter(lembrete_enviado=True).count()
         falhas_hoje = agendamentos_hoje.filter(lembrete_enviado=False).count()
 
-        # --- ESTATÍSTICAS DE AMANHÃ (O que o robô vai processar) ---
+        # --- ESTATÍSTICAS DE AMANHÃ ---
         agendamentos_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
         enviados_amanha = agendamentos_amanha.filter(lembrete_enviado=True).count()
         pendentes_amanha = agendamentos_amanha.filter(lembrete_enviado=False).count()
@@ -65,7 +65,7 @@ class ConfiguracaoSistemaView(APIView):
         data['stats_hoje'] = {
             'total': agendamentos_hoje.count(),
             'enviados': enviados_hoje,
-            'pendentes': falhas_hoje # Estes deveriam ter sido enviados ontem
+            'pendentes': falhas_hoje
         }
         data['stats_amanha'] = {
             'total': agendamentos_amanha.count(),
@@ -73,7 +73,7 @@ class ConfiguracaoSistemaView(APIView):
             'pendentes': pendentes_amanha
         }
         
-    return Response(data)
+        return Response(data)
 
     def put(self, request):
         config = ConfiguracaoSistema.load()
@@ -89,19 +89,25 @@ class ConfiguracaoSistemaView(APIView):
                 call_command('enviar_lembretes')
                 config = ConfiguracaoSistema.load()
                 
-                amanha = date.today() + timedelta(days=1)
-                agendamentos_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
+                hoje = date.today()
+                amanha = hoje + timedelta(days=1)
                 
-                avisados = agendamentos_amanha.filter(lembrete_enviado=True).count()
-                faltam = agendamentos_amanha.count() - avisados
+                # Recalcula estatísticas após execução para atualizar o front
+                ag_hoje = Agendamento.objects.filter(data=hoje, status='agendado')
+                ag_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
 
                 return Response({
                     'status': 'sucesso', 
                     'ultima_execucao': config.data_ultima_execucao_lembrete,
-                    'stats_lembretes': {
-                        'total': agendamentos_amanha.count(),
-                        'avisados': avisados,
-                        'faltam': faltam
+                    'stats_hoje': {
+                        'total': ag_hoje.count(),
+                        'enviados': ag_hoje.filter(lembrete_enviado=True).count(),
+                        'pendentes': ag_hoje.filter(lembrete_enviado=False).count(),
+                    },
+                    'stats_amanha': {
+                        'total': ag_amanha.count(),
+                        'enviados': ag_amanha.filter(lembrete_enviado=True).count(),
+                        'pendentes': ag_amanha.filter(lembrete_enviado=False).count(),
                     }
                 })
             except Exception as e:
