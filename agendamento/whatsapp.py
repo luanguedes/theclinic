@@ -170,6 +170,15 @@ def enviar_lembrete_24h(agendamento):
         data_fmt = agendamento.data.strftime('%d/%m/%Y')
         hora_fmt = agendamento.horario.strftime('%H:%M')
         
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code in [200, 201]:
+            print(f"✅ Lembrete enviado para {agendamento.paciente.nome}")
+            return True # <--- OBRIGATÓRIO PARA O SCRIPT CONTINUAR
+        else:
+            print(f"⚠️ Erro API Evolution: {response.text}")
+            return False # <--- OBRIGATÓRIO
+        
         mensagem = (
             f"Olá, *{paciente.nome}*! 👋\n\n"
             f"Passando para lembrar da sua consulta amanhã:\n\n"
