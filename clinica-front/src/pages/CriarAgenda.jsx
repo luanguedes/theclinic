@@ -4,9 +4,9 @@ import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { useNavigate } from 'react-router-dom';
 import { 
-  CalendarClock, CheckCircle2, Clock, Calculator, ArrowLeft, 
-  ChevronDown, X, Users, Pin, Hourglass, Repeat, ListPlus, Pencil, Ban, 
-  CalendarDays, DollarSign, ShieldCheck, Plus, Trash2, Loader2 
+    CalendarClock, CheckCircle2, Clock, Calculator, ArrowLeft, 
+    ChevronDown, X, Users, Pin, Hourglass, Repeat, ListPlus, Pencil, Ban, 
+    CalendarDays, DollarSign, ShieldCheck, Plus, Trash2, Loader2 
 } from 'lucide-react';
 
 function generateUUID() {
@@ -50,11 +50,11 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
 
   return (
     <div className="relative" ref={wrapperRef}>
-      <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-1 uppercase tracking-tight">{label}</label>
+      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">{label}</label>
       <div className="relative">
         <input
           type="text"
-          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 pr-10 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 transition-all"
+          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 pr-10 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 transition-all text-sm font-bold"
           placeholder={placeholder}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
@@ -68,12 +68,12 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
       {isOpen && !disabled && (
         <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-60 overflow-auto animate-in fade-in zoom-in duration-100">
           {filtered.length === 0 ? (
-            <div className="p-3 text-sm text-slate-400 text-center">Nenhum resultado.</div>
+            <div className="p-3 text-sm text-slate-400 text-center font-bold">Nenhum resultado.</div>
           ) : (
             <ul>
               {filtered.map((opt) => (
                 <li key={opt.id} onClick={() => handleSelect(opt)}
-                  className={`p-3 text-sm cursor-pointer transition-colors flex justify-between items-center ${String(value) === String(opt.id) ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                  className={`p-3 text-sm cursor-pointer transition-colors flex justify-between items-center ${String(value) === String(opt.id) ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-700 font-medium text-slate-600 dark:text-slate-300'}`}
                 >
                   {opt.label}
                   {String(value) === String(opt.id) && <CheckCircle2 size={16}/>}
@@ -354,13 +354,13 @@ export default function CriarAgenda() {
     } finally { setLoading(false); }
   };
 
-  const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-all";
+  const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-all font-bold text-sm";
   const labelClass = "block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider";
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto pb-20">
-        <button onClick={() => navigate('/agenda/configurar')} className="mb-4 flex items-center gap-2 text-slate-500 font-bold hover:text-purple-600 transition-colors">
+      <div className="max-w-5xl mx-auto pb-20 px-4">
+        <button onClick={() => navigate('/agenda/configurar')} className="mb-4 flex items-center gap-2 text-slate-500 font-bold hover:text-purple-600 transition-colors text-sm">
             <ArrowLeft size={18}/> Voltar para Lista
         </button>
 
@@ -368,7 +368,7 @@ export default function CriarAgenda() {
             <div className="bg-purple-600 p-3 rounded-2xl text-white shadow-lg shadow-purple-500/20"><CalendarClock size={28}/></div>
             <div>
                 <h1 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Criar Nova Agenda</h1>
-                <p className="text-slate-500 text-sm font-medium">Geração em massa de horários por vigência.</p>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Geração em massa de horários por vigência</p>
             </div>
         </div>
 
@@ -464,7 +464,7 @@ export default function CriarAgenda() {
                                                 <button type="button" onClick={() => setHorariosFixos(horariosFixos.filter((_, i) => i !== index))} className="text-red-400 hover:text-red-600 p-2 transition-colors"><Trash2 size={20}/></button>
                                             </div>
                                         ))}
-                                        <button type="button" onClick={() => setHorariosFixos([...horariosFixos, { time: '', qtd: 1 }])} className="text-purple-600 font-black text-[10px] uppercase flex items-center gap-2 mt-4 hover:underline"><PlusCircle size={16}/> Adicionar outro horário</button>
+                                        <button type="button" onClick={() => setHorariosFixos([...horariosFixos, { time: '', qtd: 1 }])} className="text-purple-600 font-black text-[10px] uppercase flex items-center gap-2 mt-4 hover:underline"><Plus size={16}/> Adicionar outro horário</button>
                                     </div>
                                 )}
                             </div>
@@ -492,10 +492,10 @@ export default function CriarAgenda() {
                             </div>
                         ) : (
                             regrasAdicionadas.map((regra) => (
-                                <div key={regra.id} className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-2xl p-4 relative animate-in slide-in-from-bottom-2 duration-300">
-                                    <div className="absolute top-4 right-4 flex gap-2">
-                                        <button onClick={() => handleEditRule(regra)} className="text-slate-400 hover:text-purple-600"><Pencil size={14}/></button>
-                                        <button onClick={() => handleRemoveRule(regra.id)} className="text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
+                                <div key={regra.id} className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-2xl p-4 relative animate-in slide-in-from-bottom-2 duration-300 group hover:border-purple-200 transition-colors">
+                                    <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => handleEditRule(regra)} className="text-slate-400 hover:text-purple-600 bg-white shadow-sm p-1.5 rounded-lg border border-slate-100"><Pencil size={14}/></button>
+                                        <button onClick={() => handleRemoveRule(regra.id)} className="text-slate-400 hover:text-red-600 bg-white shadow-sm p-1.5 rounded-lg border border-slate-100"><Trash2 size={14}/></button>
                                     </div>
                                     <div className="flex flex-wrap gap-1 mb-3">
                                         {regra.dias.map(d => <span key={d} className="text-[9px] font-black bg-purple-50 dark:bg-purple-900/30 text-purple-600 px-1.5 py-0.5 rounded uppercase">{diasSemana.find(dia => dia.id === d)?.label}</span>)}

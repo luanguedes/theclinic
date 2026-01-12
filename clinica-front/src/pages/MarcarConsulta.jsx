@@ -6,7 +6,7 @@ import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { 
     Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, 
-    MapPin, ChevronDown, Check, MessageCircle, User, Baby, Heart, Accessibility, Users, Printer
+    MapPin, ChevronDown, Check, MessageCircle, User, Baby, Heart, Accessibility, Users, Printer, Clock
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
 
@@ -14,13 +14,14 @@ import { generateAppointmentReceipt } from '../utils/generateReceipt';
 const calendarStyles = `
   .react-calendar { width: 100%; border: none; font-family: inherit; background: transparent; font-size: 12px; }
   .react-calendar__tile { padding: 6px 0; }
-  .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 1px solid #2563eb !important; border-radius: 8px; }
-  .dia-livre { background-color: #dcfce7 !important; color: #166534 !important; font-weight: bold; border-radius: 8px; }
-  .dia-feriado { background-color: #f3e8ff !important; color: #6b21a8 !important; opacity: 0.8; border-radius: 8px; }
-  .dia-bloqueado { background-color: #ffedd5 !important; color: #c2410c !important; text-decoration: line-through; opacity: 0.6; border-radius: 8px; }
-  .dia-sem-vagas { background-color: #fee2e2 !important; color: #b91c1c !important; opacity: 0.7; border-radius: 8px; }
-  .react-calendar__tile--active { background: #2563eb !important; color: white !important; border-radius: 8px; }
-  .react-calendar__navigation button { min-width: 30px; background: none; font-size: 16px; font-weight: bold; }
+  .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 1px solid #2563eb !important; border-radius: 6px; }
+  .dia-livre { background-color: #dcfce7 !important; color: #166534 !important; font-weight: bold; border-radius: 6px; }
+  .dia-feriado { background-color: #f3e8ff !important; color: #6b21a8 !important; opacity: 0.9; border-radius: 6px; font-weight: bold; }
+  .dia-bloqueado { background-color: #ffedd5 !important; color: #c2410c !important; text-decoration: line-through; opacity: 0.7; border-radius: 6px; }
+  .dia-sem-vagas { background-color: #fee2e2 !important; color: #b91c1c !important; opacity: 0.8; border-radius: 6px; }
+  .react-calendar__tile--active { background: #2563eb !important; color: white !important; border-radius: 6px; }
+  .react-calendar__navigation button { min-width: 30px; background: none; font-size: 14px; font-weight: bold; }
+  .react-calendar__month-view__days__day--weekend { color: #ef4444; }
 `;
 
 const PRIORIDADES = {
@@ -31,7 +32,6 @@ const PRIORIDADES = {
     'pcd': { label: 'PCD', icon: <Accessibility size={12} />, color: 'text-purple-600 bg-purple-50 border-purple-100' },
 };
 
-// Componente Select Compacto
 const SearchableSelect = ({ label, options, value, onChange, placeholder, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -61,18 +61,18 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
         : safeOptions.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
     
     return (
-        <div className="relative" ref={containerRef}>
-            {label && <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{label}</label>}
+        <div className="relative w-full" ref={containerRef}>
+            {label && <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>}
             <div className="relative">
                 <input 
                     type="text" disabled={disabled}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 pr-8 outline-none focus:border-blue-500 text-sm dark:text-white disabled:bg-slate-100 h-9" 
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 pr-8 outline-none focus:border-blue-500 text-sm dark:text-white disabled:bg-slate-100 h-9 font-semibold" 
                     value={query} 
                     onFocus={() => !disabled && setIsOpen(true)}
                     onChange={e => { setQuery(e.target.value); setIsOpen(true); }} 
                     placeholder={placeholder} autoComplete="off"
                 />
-                <div className="absolute right-2 top-2 text-slate-400">
+                <div className="absolute right-2 top-2.5 text-slate-400">
                     {value && !disabled ? 
                         <button onClick={(e) => { e.stopPropagation(); onChange(''); setQuery(''); }}><X size={14}/></button> :
                         <ChevronDown size={14} className={isOpen ? 'rotate-180' : ''}/>
@@ -150,7 +150,6 @@ export default function MarcarConsulta() {
       return date < hoje;
   };
 
-  // --- CARREGAMENTO INICIAL ---
   useEffect(() => {
     if (api) {
         api.get('configuracoes/sistema/').then(res => setConfigSistema(res.data)).catch(() => {});
@@ -170,7 +169,6 @@ export default function MarcarConsulta() {
     }
   }, [api]);
 
-  // --- CARREGA ESPECIALIDADES E REGRAS ---
   useEffect(() => {
     if (profissionalId) {
         api.get(`profissionais/${profissionalId}/`).then(res => {
@@ -334,54 +332,57 @@ export default function MarcarConsulta() {
       finally { setLoadingPaciente(false); }
   };
 
-  const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:border-blue-500 text-sm dark:text-white transition-all font-bold";
+  const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 outline-none focus:border-blue-500 text-xs dark:text-white font-semibold";
 
   return (
     <Layout>
       <style>{calendarStyles}</style>
-      <div className="max-w-6xl mx-auto pb-10 px-4">
+      <div className="max-w-[1920px] h-[calc(100vh-100px)] flex flex-col px-4">
         
-        {/* CABEÇALHO COMPACTO */}
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4 flex flex-col md:flex-row gap-4 items-end">
-            <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-4">
-                <SearchableSelect label="MÉDICO" options={profissionais} value={profissionalId} onChange={setProfissionalId} placeholder="Selecione..." />
-                <SearchableSelect label="ESPECIALIDADE" options={especialidades} value={especialidadeId} onChange={setEspecialidadeId} placeholder="Selecione..." disabled={!profissionalId} />
+        {/* CABEÇALHO SUPER COMPACTO */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-3 shrink-0">
+            <h1 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Marcar Consulta</h1>
+            <div className="flex gap-3 w-full md:w-auto">
+                <div className="w-64"><SearchableSelect options={profissionais} value={profissionalId} onChange={setProfissionalId} placeholder="MÉDICO..." /></div>
+                <div className="w-48"><SearchableSelect options={especialidades} value={especialidadeId} onChange={setEspecialidadeId} placeholder="ESPECIALIDADE..." disabled={!profissionalId} /></div>
             </div>
         </div>
 
         {!profissionalId ? (
-            <div className="bg-slate-100 dark:bg-slate-900/50 rounded-2xl border-2 border-dashed border-slate-300 py-12 text-center">
-                <span className="text-sm font-bold text-slate-400 uppercase">Selecione um profissional para carregar a agenda</span>
+            <div className="flex-1 bg-slate-100 dark:bg-slate-900/50 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center">
+                <span className="text-sm font-bold text-slate-400 uppercase">Selecione um profissional acima</span>
             </div>
         ) : (
-            <div className="flex flex-col md:flex-row gap-4 h-[calc(100vh-200px)]">
-                {/* CALENDÁRIO LATERAL (FIXO E ESTREITO) */}
-                <div className="w-full md:w-64 shrink-0 flex flex-col gap-4 overflow-y-auto">
-                    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex-1 flex flex-col md:flex-row gap-3 overflow-hidden">
+                {/* COLUNA ESQUERDA: CALENDÁRIO */}
+                <div className="w-full md:w-64 flex flex-col gap-3 shrink-0">
+                    <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
                         <Calendar onChange={(d) => { setDateValue(d); setDataApi(getLocalISODate(d)); }} value={dateValue} locale="pt-BR" tileClassName={getTileClassName}/>
                     </div>
-                    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex-1">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Legenda</h4>
-                        <div className="space-y-2 text-[10px] font-bold text-slate-600 dark:text-slate-300">
-                            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-green-200 border border-green-400"></div><span>Livre</span></div>
+                    {/* LEGENDA CORRIGIDA (2x2) */}
+                    <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex-1">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Legenda</h4>
+                        <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-green-200 border border-green-400"></div><span>Disponível</span></div>
                             <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-orange-200 border border-orange-400"></div><span>Bloqueio</span></div>
+                            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-purple-200 border border-purple-400"></div><span>Feriado</span></div>
                             <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-red-200 border border-red-400"></div><span>Cheio</span></div>
                         </div>
                     </div>
                 </div>
 
-                {/* LISTA DE VAGAS (EXPANDIDA E COMPACTA) */}
+                {/* COLUNA DIREITA: LISTA DE VAGAS */}
                 <div className="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
-                        <h3 className="font-bold text-lg dark:text-white uppercase text-slate-700">{dateValue.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</h3>
-                        <button onClick={() => { setTipoModal('encaixe'); setAgendamentoIdEditar(null); setPacienteId(''); setConvenioId(''); setValorSelecionado(''); setModalOpen(true); }} className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 px-4 rounded-lg text-xs uppercase flex items-center gap-1 shadow-sm"><Plus size={14}/> Encaixe</button>
+                    <div className="p-3 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+                        <h3 className="font-black text-base dark:text-white uppercase text-slate-700">{dateValue.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</h3>
+                        <button onClick={() => { setTipoModal('encaixe'); setAgendamentoIdEditar(null); setPacienteId(''); setConvenioId(''); setValorSelecionado(''); setModalOpen(true); }} className="bg-amber-500 hover:bg-amber-600 text-white font-black py-1.5 px-3 rounded-lg text-[10px] uppercase flex items-center gap-1 shadow-sm"><Plus size={14}/> Extra</button>
                     </div>
                     
-                    <div className="flex-1 overflow-y-auto p-4">
+                    <div className="flex-1 overflow-y-auto p-3">
                         {loadingAgenda ? (
                             <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={32}/></div>
                         ) : vagasDoDia.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                                 {vagasDoDia.map((slot, idx) => {
                                     const isPast = isDateInPast(dateValue);
                                     const isExpirado = isPast || (dateValue.toDateString() === new Date().toDateString() && slot.hora < new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}));
@@ -395,32 +396,31 @@ export default function MarcarConsulta() {
                                                 setConvenioId(slot.convenio_regra_id || ''); setPacienteId(''); setTipoModal('normal'); setModalOpen(true); 
                                             }
                                         }} 
-                                        className={`relative group p-2.5 rounded-xl border flex gap-3 items-center transition-all ${
+                                        className={`relative group p-2 rounded-lg border flex gap-2 items-center transition-all ${
                                             slot.ocupado ? 'bg-white border-blue-200 dark:bg-slate-900 dark:border-slate-700' : 
-                                            isLocked || isExpirado ? 'bg-slate-100 opacity-50 cursor-not-allowed border-slate-200' : 
-                                            'bg-white border-green-200 hover:border-green-500 hover:shadow-md cursor-pointer'
+                                            isLocked || isExpirado ? 'bg-slate-50 opacity-40 cursor-not-allowed border-slate-100' : 
+                                            'bg-white border-green-200 hover:border-green-500 cursor-pointer'
                                         }`}>
-                                            <div className={`font-black text-sm w-12 h-9 flex items-center justify-center rounded-lg ${slot.ocupado ? 'bg-slate-100 text-slate-600' : 'bg-green-50 text-green-700'}`}>{slot.hora}</div>
+                                            <div className={`font-black text-xs w-10 h-8 flex items-center justify-center rounded-md ${slot.ocupado ? 'bg-slate-100 text-slate-600' : 'bg-green-50 text-green-700'}`}>{slot.hora}</div>
                                             
-                                            <div className="flex-1 min-w-0">
+                                            <div className="flex-1 min-w-0 overflow-hidden">
                                                 {slot.ocupado ? (
                                                     <div className="flex flex-col">
-                                                        <div className="font-bold text-xs text-slate-800 dark:text-white truncate uppercase" title={slot.paciente}>{slot.paciente}</div>
-                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                            <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 rounded">{slot.convenio_nome || 'PARTICULAR'}</span>
-                                                            {pInfo && <span className={`${pInfo.color} p-0.5 rounded`} title={pInfo.label}>{pInfo.icon}</span>}
+                                                        <div className="font-bold text-xs text-slate-800 dark:text-white truncate uppercase">{slot.paciente}</div>
+                                                        <div className="flex items-center gap-1 mt-0.5">
+                                                            <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[80px]">{slot.convenio_nome || 'PARTICULAR'}</span>
+                                                            {pInfo && <span className={`${pInfo.color} px-1 rounded text-[9px]`} title={pInfo.label}>{pInfo.icon}</span>}
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <span className={`text-[10px] font-bold uppercase ${isLocked ? 'text-slate-400' : 'text-green-600'}`}>
+                                                    <span className={`text-[10px] font-bold uppercase ${isLocked ? 'text-slate-400' : isExpirado ? 'text-slate-300' : 'text-green-600'}`}>
                                                         {isLocked ? 'Trancada' : isExpirado ? 'Expirado' : 'Disponível'}
                                                     </span>
                                                 )}
                                             </div>
 
-                                            {/* AÇÕES AO PASSAR MOUSE (APENAS SE OCUPADO) */}
                                             {slot.ocupado && (
-                                                <div className="absolute right-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded-lg p-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-slate-200 dark:border-slate-700">
+                                                <div className="absolute right-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded p-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity border border-slate-200">
                                                     <button onClick={(e) => { e.stopPropagation(); generateAppointmentReceipt(slot); }} className="p-1 hover:bg-slate-100 rounded text-slate-500"><Printer size={12}/></button>
                                                     <button onClick={(e) => { e.stopPropagation(); setAgendamentoIdEditar(slot.agendamento_id); setHorarioSelecionado(slot.hora); setPacienteId(slot.paciente_id); setConvenioId(slot.convenio_id || ''); setObservacao(slot.observacoes || ''); setValorSelecionado(slot.valor); setModalOpen(true); }} className="p-1 hover:bg-blue-50 rounded text-blue-600"><Pencil size={12}/></button>
                                                     <button onClick={(e) => handleExcluirAgendamento(e, slot.agendamento_id)} className="p-1 hover:bg-red-50 rounded text-red-500"><Trash2 size={12}/></button>
@@ -441,15 +441,15 @@ export default function MarcarConsulta() {
             </div>
         )}
 
-        {/* MODAL DE AGENDAMENTO */}
+        {/* MODAL DE AGENDAMENTO (PRESERVADO WHATSAPP) */}
         {modalOpen && (
             <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in zoom-in-95 duration-200">
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="bg-slate-50 dark:bg-slate-900 p-4 border-b dark:border-slate-700 flex justify-between items-center">
-                        <h3 className="font-bold text-slate-700 dark:text-white uppercase">{agendamentoIdEditar ? 'Editar' : 'Confirmar'} Agendamento</h3>
-                        <button onClick={() => setModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+                    <div className="bg-blue-600 p-4 text-white flex justify-between items-center">
+                        <h3 className="font-bold uppercase text-sm">{agendamentoIdEditar ? 'Editar' : 'Confirmar'} Agendamento</h3>
+                        <button onClick={() => setModalOpen(false)}><X size={20}/></button>
                     </div>
-                    <div className="p-6 space-y-4">
+                    <div className="p-5 space-y-4">
                         <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg flex justify-between items-center text-blue-800 dark:text-blue-300 font-bold text-sm">
                             <span className="flex items-center gap-2"><Clock size={16}/> {horarioSelecionado || encaixeHora}</span>
                             <span>{dateValue.toLocaleDateString()}</span>
@@ -463,7 +463,7 @@ export default function MarcarConsulta() {
                             <SearchableSelect options={pacientes} value={pacienteId} onChange={setPacienteId} placeholder="Nome ou CPF..." />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                             <SearchableSelect label="Convênio" options={convenios} value={convenioId} onChange={setConvenioId} placeholder="Particular" />
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor (R$)</label>
@@ -475,54 +475,62 @@ export default function MarcarConsulta() {
                             <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Hora Encaixe</label><input type="time" className={inputClass} value={encaixeHora} onChange={e => setEncaixeHora(e.target.value)} /></div>
                         )}
 
-                        <textarea placeholder="Observações..." className={`${inputClass} h-20 resize-none`} value={observacao} onChange={e => setObservacao(e.target.value)}></textarea>
+                        <textarea placeholder="Observações..." className={`${inputClass} h-16 resize-none`} value={observacao} onChange={e => setObservacao(e.target.value)}></textarea>
 
-                        {/* CHECKBOX WHATSAPP RESTAURADO */}
-                        <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                            <input 
-                                type="checkbox" 
-                                id="wpp_check" 
-                                checked={enviarWhatsapp} 
-                                onChange={e => setEnviarWhatsapp(e.target.checked)}
-                                disabled={!configSistema?.enviar_whatsapp_global}
-                                className="rounded text-green-600 focus:ring-green-500"
-                            />
-                            <label htmlFor="wpp_check" className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2 cursor-pointer">
-                                <MessageCircle size={14} className={enviarWhatsapp ? 'text-green-500' : 'text-slate-400'}/>
-                                Enviar confirmação automática via WhatsApp
+                        <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-100">
+                            <input type="checkbox" id="wpp_check" checked={enviarWhatsapp} onChange={e => setEnviarWhatsapp(e.target.checked)} className="rounded text-green-600" />
+                            <label htmlFor="wpp_check" className="text-xs font-bold text-slate-600 flex items-center gap-2 cursor-pointer">
+                                <MessageCircle size={14} className={enviarWhatsapp ? 'text-green-500' : 'text-slate-400'}/> Enviar confirmação via WhatsApp
                             </label>
                         </div>
 
                         <button onClick={salvarAgendamento} disabled={loadingSave} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase text-xs shadow-lg flex items-center justify-center gap-2">
-                            {loadingSave ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Confirmar
+                            {loadingSave ? <Loader2 className="animate-spin" size={14}/> : <Save size={14}/>} Confirmar
                         </button>
                     </div>
                 </div>
             </div>
         )}
 
-        {/* MODAL PACIENTE (Mantido funcional, só visualmente adaptado) */}
+        {/* MODAL PACIENTE COMPLETO E DENSO */}
         {modalPacienteOpen && (
-            <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 border border-slate-200">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-lg text-slate-800 dark:text-white uppercase flex items-center gap-2"><UserPlus size={20}/> Cadastro Rápido</h3>
-                        <button onClick={() => setModalPacienteOpen(false)}><X/></button>
+            <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in zoom-in-95 duration-200">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-200 overflow-hidden max-h-[90vh] overflow-y-auto">
+                    <div className="bg-slate-900 p-4 text-white flex justify-between items-center sticky top-0 z-10">
+                        <h3 className="font-bold text-sm uppercase flex items-center gap-2"><UserPlus size={16}/> Cadastro Completo de Paciente</h3>
+                        <button onClick={() => setModalPacienteOpen(false)}><X size={20}/></button>
                     </div>
-                    <form onSubmit={salvarPacienteCompleto} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="md:col-span-2"><label className="text-xs font-bold block mb-1">Nome</label><input name="nome" value={novoPaciente.nome} onChange={handlePacienteChange} className={inputClass} required/></div>
-                        <div><label className="text-xs font-bold block mb-1">CPF</label><input name="cpf" value={novoPaciente.cpf} onChange={handlePacienteChange} className={inputClass} required/></div>
-                        <div><label className="text-xs font-bold block mb-1">Nascimento</label><input type="date" name="data_nascimento" value={novoPaciente.data_nascimento} onChange={handlePacienteChange} className={inputClass} required max={hojeIso}/></div>
-                        <div><label className="text-xs font-bold block mb-1">Celular</label><input name="telefone" value={novoPaciente.telefone} onChange={handlePacienteChange} className={inputClass}/></div>
-                        <div>
-                            <label className="text-xs font-bold block mb-1">Prioridade</label>
+                    <form onSubmit={salvarPacienteCompleto} className="p-6 grid grid-cols-12 gap-3 text-xs">
+                        
+                        {/* DADOS PESSOAIS */}
+                        <div className="col-span-12 font-black text-slate-400 uppercase tracking-widest border-b pb-1 mb-2 mt-1">Identificação</div>
+                        <div className="col-span-6"><label className="font-bold block mb-1">Nome Completo</label><input name="nome" value={novoPaciente.nome} onChange={handlePacienteChange} className={inputClass} required/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1">CPF</label><input name="cpf" value={novoPaciente.cpf} onChange={handlePacienteChange} className={inputClass} required/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1">Prioridade</label>
                             <select name="prioridade" value={novoPaciente.prioridade} onChange={handlePacienteChange} className={inputClass}>
                                 <option value="">Nenhuma</option>{Object.entries(PRIORIDADES).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
                             </select>
                         </div>
-                        <div className="md:col-span-3 pt-4 border-t flex justify-end gap-2">
-                            <button type="button" onClick={() => setModalPacienteOpen(false)} className="px-4 py-2 rounded-lg bg-slate-100 font-bold text-xs text-slate-600">Cancelar</button>
-                            <button type="submit" disabled={loadingPaciente} className="px-6 py-2 rounded-lg bg-blue-600 text-white font-bold text-xs">{loadingPaciente ? 'Salvando...' : 'Cadastrar'}</button>
+                        <div className="col-span-3"><label className="font-bold block mb-1">Nascimento</label><input type="date" name="data_nascimento" value={novoPaciente.data_nascimento} onChange={handlePacienteChange} className={inputClass} required max={hojeIso}/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1">Sexo</label><select name="sexo" value={novoPaciente.sexo} onChange={handlePacienteChange} className={inputClass}><option value="">Selecione...</option><option value="Feminino">Feminino</option><option value="Masculino">Masculino</option></select></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1">Celular/WhatsApp</label><input name="telefone" value={novoPaciente.telefone} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1">Nome da Mãe</label><input name="nome_mae" value={novoPaciente.nome_mae} onChange={handlePacienteChange} className={inputClass}/></div>
+
+                        {/* ENDEREÇO */}
+                        <div className="col-span-12 font-black text-slate-400 uppercase tracking-widest border-b pb-1 mb-2 mt-4">Endereço</div>
+                        <div className="col-span-2"><label className="font-bold block mb-1">CEP</label><input name="cep" value={novoPaciente.cep} onChange={handlePacienteChange} onBlur={buscarCep} className={inputClass}/>{loadingCep && <span className="text-[10px] text-blue-500">Buscando...</span>}</div>
+                        <div className="col-span-5"><label className="font-bold block mb-1">Logradouro</label><input name="logradouro" value={novoPaciente.logradouro} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-2"><label className="font-bold block mb-1">Número</label><input id="numero_paciente_modal" name="numero" value={novoPaciente.numero} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1">Complemento</label><input name="complemento" value={novoPaciente.complemento} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-4"><label className="font-bold block mb-1">Bairro</label><input name="bairro" value={novoPaciente.bairro} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-4"><label className="font-bold block mb-1">Cidade</label><input name="city" value={novoPaciente.city} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-2"><label className="font-bold block mb-1">UF</label><input name="estado" value={novoPaciente.estado} onChange={handlePacienteChange} className={inputClass}/></div>
+
+                        <div className="col-span-12 pt-4 border-t flex justify-end gap-2 mt-2">
+                            <button type="button" onClick={() => setModalPacienteOpen(false)} className="px-6 py-2.5 rounded-lg bg-slate-100 font-bold text-xs text-slate-600 hover:bg-slate-200">Cancelar</button>
+                            <button type="submit" disabled={loadingPaciente} className="px-8 py-2.5 rounded-lg bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 flex items-center gap-2">
+                                {loadingPaciente ? <Loader2 className="animate-spin" size={14}/> : <Check size={14}/>} Salvar Cadastro
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -532,5 +540,3 @@ export default function MarcarConsulta() {
     </Layout>
   );
 }
-
-import { Clock, Plus as PlusIcon } from 'lucide-react'; // Imports extras necessários

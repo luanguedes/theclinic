@@ -11,7 +11,7 @@ import {
 const PRIORIDADES = {
     'idoso': { label: 'Idoso (60+)', icon: <Users size={14} />, color: 'text-amber-600 bg-amber-50 border-amber-200' },
     'gestante': { label: 'Gestante / Lactante', icon: <Baby size={14} />, color: 'text-pink-600 bg-pink-50 border-pink-200' },
-    'cadeirante': { label: 'Cadeirante / Mobilidade Reduzida', icon: <Accessibility size={14} />, color: 'text-blue-600 bg-blue-50 border-blue-200' },
+    'cadeirante': { label: 'Cadeirante / Mobilidade', icon: <Accessibility size={14} />, color: 'text-blue-600 bg-blue-50 border-blue-200' },
     'autista': { label: 'TEA (Autismo)', icon: <Heart size={14} />, color: 'text-teal-600 bg-teal-50 border-teal-200' },
     'pcd': { label: 'PCD / Def. Oculta', icon: <Accessibility size={14} />, color: 'text-purple-600 bg-purple-50 border-purple-200' },
 };
@@ -81,9 +81,15 @@ export default function Recepcao() {
         return Math.max(0, Math.floor(diffMs / 60000));
     };
 
+    // CORREÇÃO 1: Validação apenas de campos CRUCIAIS
     const isCadastroIncompleto = (item) => {
-        // Verifica dados básicos salvos no objeto do agendamento/paciente
-        return !item.paciente_cpf || !item.paciente_telefone || !item.paciente_logradouro;
+        // Se vier do agendamento (detalhes_pdf ou paciente_*)
+        const cpf = item.paciente_cpf || item.detalhes_pdf?.paciente_cpf;
+        const tel = item.paciente_telefone || item.telefone_paciente;
+        const nasc = item.detalhes_pdf?.paciente_nascimento;
+        
+        // Retorna true se faltar qualquer um destes
+        return !cpf || !tel || !nasc;
     };
 
     const handleAbrirEditarPaciente = async (pacienteId) => {
@@ -123,6 +129,28 @@ export default function Recepcao() {
         } catch (e) { notify.error("Erro ao definir prioridade."); }
     };
 
+    const handleMarcarFalta = async (item) => {
+        const confirm = await confirmDialog(`Confirmar falta de ${item.nome_paciente}?`, "Registrar Falta", "Sim, Faltou", "Cancelar", "danger");
+        if (confirm) {
+            try {
+                await api.post(`agendamento/${item.id}/marcar_falta/`);
+                notify.info("Falta registrada.");
+                carregarAgenda();
+            } catch (error) { notify.error("Erro ao registrar falta."); }
+        }
+    };
+
+    const handleReverter = async (item) => {
+        const confirm = await confirmDialog("Reverter status para 'Agendado'?", "Desfazer Ação", "Sim, Reverter", "Cancelar", "warning");
+        if (confirm) {
+            try {
+                await api.post(`agendamento/${item.id}/reverter_chegada/`);
+                notify.info("Status revertido.");
+                carregarAgenda();
+            } catch (error) { notify.error("Erro ao reverter."); }
+        }
+    };
+
     const verificarAtraso = (horario, status) => {
         if (status !== 'agendado') return false;
         const [h, m] = horario.split(':');
@@ -150,6 +178,17 @@ export default function Recepcao() {
             case 'faltou': return 'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700';
             default: return 'bg-slate-100 text-slate-600';
         }
+    };
+
+    // CORREÇÃO 4: Botão Confirmar Chegada agora abre o modal corretamente
+    const abrirCheckin = (item) => {
+        setSelectedItem(item);
+        setFormCheckin({ 
+            valor: item.valor || '', 
+            forma_pagamento: item.fatura_forma_pagamento || 'dinheiro', 
+            pago: item.fatura_pago || false 
+        });
+        setModalOpen(true);
     };
 
     const confirmarCheckin = async () => {
@@ -201,15 +240,17 @@ export default function Recepcao() {
                     ))}
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="overflow-x-auto">
+                {/* CORREÇÃO 2: Min-Height e Overflow Visible para Popups funcionarem */}
+                <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 min-h-[400px]">
+                    <div className="overflow-visible">
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 dark:bg-slate-700/50 border-b dark:border-slate-700 font-black text-[10px] uppercase tracking-widest text-slate-400">
                                 <tr>
                                     <th className="px-8 py-5">🕒 Hora / Espera</th>
                                     <th className="px-8 py-5">📍 Status</th>
                                     <th className="px-8 py-5">👤 Paciente</th>
-                                    <th className="px-8 py-5">🩺 Médico</th>
+                                    {/* CORREÇÃO 3: Trocado 'Médico' por 'Profissional' */}
+                                    <th className="px-8 py-5">🩺 Profissional</th>
                                     <th className="px-8 py-5 text-right">Ações</th>
                                 </tr>
                             </thead>
@@ -220,7 +261,10 @@ export default function Recepcao() {
                                     const atrasado = verificarAtraso(item.horario, item.status);
                                     const esperaMin = item.status === 'aguardando' ? calcularEspera(item.horario_chegada) : 0;
                                     const incompleto = isCadastroIncompleto(item);
-                                    const pInfo = PRIORIDADES[item.paciente_prioridade];
+                                    
+                                    // Pega prioridade do objeto do agendamento (que vem do paciente)
+                                    const prioridadeKey = item.paciente_prioridade; 
+                                    const pInfo = PRIORIDADES[prioridadeKey];
 
                                     return (
                                         <tr key={item.id} className="group hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-all">
@@ -239,27 +283,29 @@ export default function Recepcao() {
                                                     {item.status.replace('_', ' ')}
                                                 </span>
                                             </td>
-                                            <td className="px-8 py-6">
+                                            <td className="px-8 py-6 relative">
                                                 <div className="flex items-center gap-3">
                                                     <button onClick={() => handleAbrirEditarPaciente(item.paciente)} className="font-black text-slate-800 dark:text-white uppercase text-sm hover:text-blue-600 transition-colors text-left">
                                                         {item.nome_paciente}
                                                     </button>
                                                     {incompleto && (
-                                                        <button onClick={() => handleAbrirEditarPaciente(item.paciente)} title="Cadastro Incompleto">
+                                                        <button onClick={() => handleAbrirEditarPaciente(item.paciente)} title="Dados Cruciais Faltando (CPF, Tel, Nasc)">
                                                             <AlertTriangle size={16} className="text-rose-500 animate-bounce" />
                                                         </button>
                                                     )}
-                                                    {item.paciente_prioridade && pInfo && (
+                                                    {pInfo && (
                                                         <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase ${pInfo.color}`}>{pInfo.icon} {pInfo.label}</div>
                                                     )}
+                                                    
+                                                    {/* Menu de Prioridade - CORREÇÃO DE SCROLL E VISIBILIDADE */}
                                                     <div className="relative">
-                                                        <button onClick={() => setActivePriorityMenu(activePriorityMenu === item.id ? null : item.id)} className={`p-1 rounded-full transition-all ${item.paciente_prioridade ? 'text-amber-500' : 'text-slate-200 hover:text-slate-400 opacity-0 group-hover:opacity-100'}`}><Star size={16} fill={item.paciente_prioridade ? "currentColor" : "none"}/></button>
+                                                        <button onClick={() => setActivePriorityMenu(activePriorityMenu === item.id ? null : item.id)} className={`p-1 rounded-full transition-all ${prioridadeKey ? 'text-amber-500' : 'text-slate-200 hover:text-slate-400 opacity-0 group-hover:opacity-100'}`}><Star size={16} fill={prioridadeKey ? "currentColor" : "none"}/></button>
                                                         {activePriorityMenu === item.id && (
-                                                            <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-2xl z-[100] p-3 animate-in fade-in zoom-in-95">
+                                                            <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-2xl z-[150] p-2 animate-in fade-in zoom-in-95">
                                                                 {Object.entries(PRIORIDADES).map(([key, info]) => (
-                                                                    <button key={key} onClick={() => handleSetPriority(item.paciente, key)} className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-200 transition-colors"><span className={`${info.color.split(' ')[0]} p-1.5 rounded-lg bg-current/10`}>{info.icon}</span> {info.label}</button>
+                                                                    <button key={key} onClick={() => handleSetPriority(item.paciente, key)} className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-200 transition-colors"><span className={`${info.color.split(' ')[0]} p-1 rounded-lg bg-current/10`}>{info.icon}</span> {info.label}</button>
                                                                 ))}
-                                                                <button onClick={() => handleSetPriority(item.paciente, null)} className="w-full text-center px-3 py-2 mt-2 border-t dark:border-slate-700 text-red-500 text-[10px] font-black uppercase">Limpar</button>
+                                                                <button onClick={() => handleSetPriority(item.paciente, null)} className="w-full text-center px-3 py-2 mt-2 border-t dark:border-slate-700 text-red-500 text-[10px] font-black uppercase">Limpar Prioridade</button>
                                                             </div>
                                                         )}
                                                     </div>
@@ -270,14 +316,22 @@ export default function Recepcao() {
                                             </td>
                                             <td className="px-8 py-6"><div className="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase">{item.nome_profissional}</div><div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">{item.nome_especialidade}</div></td>
                                             <td className="px-8 py-6 text-right">
-                                                <div className="flex justify-end items-center gap-3">
+                                                <div className="flex justify-end items-center gap-2">
                                                     <div className={item.fatura_pago ? 'text-emerald-500' : 'text-slate-200'}><DollarSign size={20} strokeWidth={3}/></div>
+                                                    
+                                                    {/* BOTÕES DE AÇÃO VISÍVEIS */}
                                                     {item.status === 'agendado' ? (
-                                                        <button onClick={() => abrirCheckin(item)} className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-green-500/20 active:scale-95 transition-all">Confirmar Chegada</button>
+                                                        <>
+                                                            <button onClick={() => handleMarcarFalta(item)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="Faltou"><UserX size={18}/></button>
+                                                            <button onClick={() => abrirCheckin(item)} className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-green-500/20 active:scale-95 transition-all">Confirmar Chegada</button>
+                                                        </>
                                                     ) : (
-                                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => confirmDialog("Reverter?", "Ação", "Sim", "Não").then(r => r && api.post(`agendamento/${item.id}/reverter_chegada/`).then(carregarAgenda))} className="p-2 text-slate-400 hover:text-orange-500 rounded-xl"><RotateCcw size={18}/></button>
-                                                            <button onClick={() => abrirCheckin(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl"><Pencil size={18}/></button>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => handleReverter(item)} className="p-2.5 text-slate-400 hover:text-orange-500 bg-white border border-slate-200 hover:bg-orange-50 rounded-xl shadow-sm transition-all" title="Reverter Status"><RotateCcw size={16}/></button>
+                                                            {/* Edição de Checkin (Financeiro) */}
+                                                            {['aguardando', 'em_atendimento', 'finalizado'].includes(item.status) && (
+                                                                <button onClick={() => abrirCheckin(item)} className="p-2.5 text-blue-600 hover:bg-blue-50 bg-white border border-slate-200 rounded-xl shadow-sm transition-all" title="Editar Financeiro"><Pencil size={16}/></button>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>
@@ -290,7 +344,7 @@ export default function Recepcao() {
                     </div>
                 </div>
 
-                {/* MODAL DE EDIÇÃO DE PACIENTE (Sincronizado) */}
+                {/* MODAL DE EDIÇÃO DE PACIENTE */}
                 {modalPacienteOpen && pacienteParaEditar && (
                     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in duration-300">
                         <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-4xl my-10 overflow-hidden border border-white/10">
@@ -303,6 +357,7 @@ export default function Recepcao() {
                                 <div className="md:col-span-6"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Nome Completo</label><input value={pacienteParaEditar.nome} onChange={e => setPacienteParaEditar({...pacienteParaEditar, nome: e.target.value})} className={inputClass} required /></div>
                                 <div className="md:col-span-3"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">CPF</label><input value={pacienteParaEditar.cpf} onChange={e => setPacienteParaEditar({...pacienteParaEditar, cpf: e.target.value})} className={inputClass} required /></div>
                                 <div className="md:col-span-3"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Telefone</label><input value={pacienteParaEditar.telefone} onChange={e => setPacienteParaEditar({...pacienteParaEditar, telefone: e.target.value})} className={inputClass} required /></div>
+                                <div className="md:col-span-3"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">Data Nascimento</label><input type="date" value={pacienteParaEditar.data_nascimento} onChange={e => setPacienteParaEditar({...pacienteParaEditar, data_nascimento: e.target.value})} className={inputClass} required /></div>
                                 
                                 <div className="md:col-span-12 border-b dark:border-slate-700 pb-2 mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Endereço</div>
                                 <div className="md:col-span-3"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1 block mb-1">CEP</label><input value={pacienteParaEditar.cep} onChange={e => setPacienteParaEditar({...pacienteParaEditar, cep: e.target.value})} className={inputClass} required /></div>
