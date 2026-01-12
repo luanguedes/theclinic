@@ -1,225 +1,333 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-    User, Phone, Mail, MapPin, Save, ArrowLeft, 
-    Stethoscope, FileText, Check, Loader2, Award, Briefcase
+    User, Phone, Mail, Save, ArrowLeft, Plus, Trash2, 
+    BriefcaseMedical, ChevronDown, Check, X, Loader2, Award 
 } from 'lucide-react';
 
-export default function ProfissionalForm() {
-    const { api } = useAuth();
-    const { notify } = useNotification();
-    const navigate = useNavigate();
-    const { id } = useParams();
+// --- COMPONENTE DE SELEÇÃO PESQUISÁVEL OTIMIZADO ---
+const SearchableSelect = ({ options, value, onChange, placeholder, required }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const containerRef = useRef(null);
 
-    const [loading, setLoading] = useState(false);
-    const [saving, setSaving] = useState(false);
-    
-    // Listas Auxiliares
-    const [especialidadesDisponiveis, setEspecialidadesDisponiveis] = useState([]);
-
-    const formInicial = {
-        nome: '',
-        registro_profissional: '', // CRM/CRO
-        cpf: '',
-        email: '',
-        telefone: '',
-        especialidades: [] // Array de IDs
-    };
-    const [form, setForm] = useState(formInicial);
+    useEffect(() => { 
+        const selected = options.find(o => String(o.id) === String(value)); 
+        if (selected) setQuery(selected.label);
+        else if (!value) setQuery('');
+    }, [value, options]);
 
     useEffect(() => {
-        if (api) {
-            carregarEspecialidades();
-            if (id) carregarProfissional();
-        }
-    }, [api, id]);
-
-    const carregarEspecialidades = async () => {
-        try {
-            const { data } = await api.get('configuracoes/especialidades/');
-            setEspecialidadesDisponiveis(Array.isArray(data) ? data : data.results);
-        } catch (error) {
-            notify.error("Erro ao carregar lista de especialidades.");
-        }
-    };
-
-    const carregarProfissional = async () => {
-        setLoading(true);
-        try {
-            const { data } = await api.get(`profissionais/${id}/`);
-            // Ajuste para garantir que especialidades seja um array de IDs para o formulário
-            const specsIds = data.especialidades.map(e => e.id || e.especialidade_id || e);
-            setForm({ ...data, especialidades: specsIds });
-        } catch (error) {
-            notify.error("Erro ao carregar dados do profissional.");
-            navigate('/profissionais');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setForm(prev => ({ ...prev, [name]: value }));
-    };
-
-    const toggleEspecialidade = (specId) => {
-        setForm(prev => {
-            const exists = prev.especialidades.includes(specId);
-            if (exists) {
-                return { ...prev, especialidades: prev.especialidades.filter(id => id !== specId) };
-            } else {
-                return { ...prev, especialidades: [...prev.especialidades, specId] };
+        const handleClickOutside = (event) => {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setIsOpen(false);
+                const selected = options.find(o => String(o.id) === String(value));
+                setQuery(selected ? selected.label : '');
             }
-        });
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [containerRef, value, options]);
+
+    const filtered = (query === '' || (options.find(o => o.label === query))) 
+        ? options 
+        : options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+    
+    const handleSelect = (id, label) => {
+        onChange(id);
+        setQuery(label);
+        setIsOpen(false);
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!form.nome || !form.registro_profissional) {
-            return notify.warning("Nome e Registro Profissional são obrigatórios.");
-        }
-        
-        setSaving(true);
-        try {
-            if (id) {
-                await api.put(`profissionais/${id}/`, form);
-                notify.success("Dados atualizados com sucesso!");
-            } else {
-                await api.post('profissionais/', form);
-                notify.success("Profissional cadastrado com sucesso!");
-            }
-            navigate('/profissionais');
-        } catch (error) {
-            console.error(error);
-            notify.error("Erro ao salvar profissional. Verifique os dados.");
-        } finally {
-            setSaving(false);
-        }
+    const handleClear = (e) => {
+        e.stopPropagation();
+        onChange('');
+        setQuery('');
+        setIsOpen(false);
     };
-
-    const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold dark:text-white transition-all";
-    const labelClass = "block text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
 
     return (
-        <Layout>
-            <div className="max-w-4xl mx-auto pb-20">
-                <button onClick={() => navigate('/profissionais')} className="mb-6 flex items-center gap-2 text-slate-500 font-bold hover:text-blue-600 transition-colors text-sm">
-                    <ArrowLeft size={18}/> Voltar para Lista
-                </button>
+        <div className="relative w-full" ref={containerRef}>
+            <div className="relative">
+                <input 
+                    type="text" 
+                    required={required && !value} 
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 pr-10 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white cursor-pointer font-bold" 
+                    value={query} 
+                    onFocus={() => setIsOpen(true)}
+                    onClick={() => setIsOpen(true)}
+                    onChange={e => { setQuery(e.target.value); setIsOpen(true); if(e.target.value === '') onChange(''); }} 
+                    placeholder={placeholder} 
+                    autoComplete="off"
+                />
+                <div className="absolute right-2 top-2.5 flex items-center gap-1 text-slate-400">
+                    {value && (
+                        <button type="button" onClick={handleClear} className="hover:text-red-500 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"><X size={14}/></button>
+                    )}
+                    <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
+                </div>
+            </div>
+            {isOpen && (
+                <ul className="absolute z-[100] w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-auto mt-1 animate-in fade-in zoom-in duration-100">
+                    {filtered.slice(0, 50).map(opt => (
+                        <li key={opt.id} onMouseDown={() => handleSelect(opt.id, opt.label)} className={`p-2.5 cursor-pointer text-sm border-b last:border-0 border-slate-100 dark:border-slate-700 flex justify-between items-center transition-colors ${String(value) === String(opt.id) ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'}`}>
+                            {opt.label}
+                            {String(value) === String(opt.id) && <Check size={14}/>}
+                        </li>
+                    ))}
+                    {filtered.length === 0 && <li className="p-3 text-sm text-slate-400 text-center">Nenhum resultado.</li>}
+                </ul>
+            )}
+        </div>
+    );
+};
 
-                <div className="flex items-center justify-between mb-8">
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-3">
-                            <Stethoscope className="text-blue-600"/> {id ? 'Editar Profissional' : 'Novo Profissional'}
-                        </h1>
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Dados cadastrais e especialidades</p>
+export default function ProfissionalForm() {
+  const { api } = useAuth();
+  const { notify, confirmDialog } = useNotification();
+  const navigate = useNavigate();
+  const { id } = useParams();
+  
+  const [formData, setFormData] = useState({ 
+      nome: '', cpf: '', data_nascimento: '', email: '', telefone: '' 
+  });
+  const [items, setItems] = useState([]); 
+  const [listaEspecialidades, setListaEspecialidades] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
+
+  const hoje = new Date().toISOString().split('T')[0];
+
+  const mascaraCPF = (value) => {
+    return value
+      .replace(/\D/g, '') 
+      .replace(/(\d{3})(\d)/, '$1.$2') 
+      .replace(/(\d{3})(\d)/, '$1.$2') 
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2') 
+      .slice(0, 14);
+  };
+
+  useEffect(() => {
+    if(api) {
+        setFetching(true);
+        // Traz TODAS as especialidades
+        api.get('configuracoes/especialidades/?nopage=true') // Rota corrigida conforme padrão
+            .then(res => setListaEspecialidades(res.data.results || res.data))
+            .catch(() => notify.error("Erro ao carregar lista de especialidades."));
+        
+        if (id) {
+            api.get(`profissionais/${id}/`).then(res => {
+                setFormData({ 
+                    nome: res.data.nome, 
+                    cpf: res.data.cpf, 
+                    data_nascimento: res.data.data_nascimento,
+                    email: res.data.email,
+                    telefone: res.data.telefone
+                });
+                setItems(res.data.especialidades || []);
+            }).catch(() => notify.error("Erro ao carregar dados do profissional."))
+              .finally(() => setFetching(false));
+        } else {
+            setFetching(false);
+        }
+    }
+  }, [id, api]);
+
+  const handleChange = (e) => {
+    let { name, value } = e.target;
+    if (name === 'data_nascimento') {
+        const partes = value.split('-');
+        if (partes[0] && partes[0].length > 4) return;
+    }
+    if (name === 'cpf') value = mascaraCPF(value);
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const handleAddItem = () => {
+    setItems([...items, { especialidade_id: '', sigla_conselho: '', registro_conselho: '', uf_conselho: 'PR' }]);
+  };
+
+  const handleRemoveItem = async (index) => {
+    const confirm = await confirmDialog("Remover esta especialidade do profissional?", "Remover Especialidade");
+    if(confirm) {
+        setItems(items.filter((_, i) => i !== index));
+    }
+  };
+  
+  const handleItemChange = (index, field, value) => {
+    const newItems = [...items];
+    newItems[index][field] = value;
+    setItems(newItems);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (formData.data_nascimento > hoje) {
+        return notify.warning("A data de nascimento não pode ser futura.");
+    }
+    const anoNasc = parseInt(formData.data_nascimento.split('-')[0]);
+    if (anoNasc < 1920) {
+        return notify.warning("Por favor, insira um ano de nascimento válido.");
+    }
+
+    if (items.length === 0) {
+        return notify.warning("Vincule ao menos uma especialidade ao profissional.");
+    }
+
+    setLoading(true);
+    const cpfLimpo = formData.cpf.replace(/\D/g, ''); 
+    const payload = { ...formData, cpf: cpfLimpo, especialidades: items };
+    
+    try {
+        if(id) await api.put(`profissionais/${id}/`, payload);
+        else await api.post('profissionais/', payload);
+        
+        notify.success("Profissional salvo com sucesso!");
+        navigate('/profissionais');
+    } catch (err) { 
+        if(err.response?.data?.cpf) notify.warning("Este CPF já está cadastrado.");
+        else notify.error('Erro ao salvar profissional.'); 
+    }
+    finally { setLoading(false); }
+  };
+
+  const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-all font-bold";
+  const labelClass = "block text-xs font-black text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-tight";
+  const subLabelClass = "text-[10px] font-black text-slate-400 mb-1 block uppercase tracking-widest";
+
+  if (fetching) {
+      return (
+          <Layout>
+              <div className="flex flex-col items-center justify-center h-[50vh]">
+                  <Loader2 className="animate-spin text-blue-600 mb-2" size={32}/>
+                  <span className="text-slate-500 font-bold uppercase tracking-widest text-xs">Carregando ficha...</span>
+              </div>
+          </Layout>
+      )
+  }
+
+  return (
+    <Layout>
+      <div className="max-w-5xl mx-auto pb-20">
+        <button 
+            onClick={()=>navigate('/profissionais')} 
+            className="mb-4 flex items-center gap-2 text-slate-500 hover:text-blue-600 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-2 rounded-lg transition-colors font-bold text-sm"
+        >
+            <ArrowLeft size={18}/> Voltar para lista
+        </button>
+
+        <h1 className="text-2xl font-black mb-6 text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-tighter">
+            {id ? 'Editar Profissional' : 'Novo Profissional'}
+        </h1>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
+                <h2 className="font-black text-sm uppercase tracking-widest mb-6 text-slate-800 dark:text-white border-b pb-2 dark:border-slate-700 flex items-center gap-2">
+                    <User size={18} className="text-blue-500"/> Dados Cadastrais
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                    <div className="md:col-span-6">
+                        <label className={labelClass}>Nome Completo</label>
+                        <input required value={formData.nome} onChange={e=>setFormData({...formData, nome:e.target.value})} className={inputClass} placeholder="Nome do médico"/>
+                    </div>
+                    <div className="md:col-span-3">
+                        <label className={labelClass}>CPF</label>
+                        <input required placeholder="000.000.000-00" value={formData.cpf} onChange={handleChange} name="cpf" className={inputClass} maxLength={14}/>
+                    </div>
+                    <div className="md:col-span-3">
+                        <label className={labelClass}>Nascimento</label>
+                        <input required type="date" name="data_nascimento" max={hoje} value={formData.data_nascimento} onChange={handleChange} className={inputClass}/>
+                    </div>
+                    <div className="md:col-span-6">
+                        <label className={labelClass}>E-mail</label>
+                        <div className="relative">
+                            <Mail className="absolute left-3 top-3 text-slate-400" size={16}/>
+                            <input type="email" name="email" value={formData.email} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="medico@clinica.com"/>
+                        </div>
+                    </div>
+                    <div className="md:col-span-6">
+                        <label className={labelClass}>Telefone / Celular</label>
+                        <div className="relative">
+                            <Phone className="absolute left-3 top-3 text-slate-400" size={16}/>
+                            <input name="telefone" value={formData.telefone} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="(00) 00000-0000"/>
+                        </div>
                     </div>
                 </div>
+            </div>
 
-                {loading ? (
-                    <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40}/></div>
-                ) : (
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        
-                        {/* BLOCO 1: IDENTIFICAÇÃO */}
-                        <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-2 mb-6 pb-4 border-b dark:border-slate-700">
-                                <User size={20} className="text-blue-500"/>
-                                <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-wide">Dados Pessoais</h3>
-                            </div>
+            <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
+                <div className="flex justify-between items-center mb-6 border-b pb-2 dark:border-slate-700">
+                    <h2 className="font-black text-sm uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2">
+                        <BriefcaseMedical size={18} className="text-pink-600"/> Vínculos e Conselhos
+                    </h2>
+                    
+                    <button 
+                        type="button" 
+                        onClick={handleAddItem} 
+                        className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-4 py-2 rounded-xl transition-colors bg-blue-50 dark:bg-blue-900/10"
+                    >
+                        <Plus size={16}/> Adicionar Especialidade
+                    </button>
+                </div>
+
+                {items.length === 0 && (
+                    <div className="text-center py-12 px-4 text-slate-400 border-2 border-dashed rounded-2xl bg-slate-50/50 dark:bg-slate-900/20">
+                        <Award size={32} className="mx-auto mb-2 opacity-50"/>
+                        <span className="font-bold text-xs uppercase">Nenhuma especialidade vinculada</span>
+                        <p className="text-[10px] mt-1">Clique no botão acima para adicionar CRM/RQE.</p>
+                    </div>
+                )}
+
+                <div className="space-y-4">
+                    {items.map((item, index) => (
+                        <div key={index} className="flex flex-col md:flex-row gap-4 items-end bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in slide-in-from-top-2 duration-300">
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="md:col-span-2">
-                                    <label className={labelClass}>Nome Completo</label>
-                                    <input name="nome" value={form.nome} onChange={handleChange} className={inputClass} required placeholder="Ex: Dr. João Silva"/>
-                                </div>
-                                <div>
-                                    <label className={labelClass}>CPF</label>
-                                    <input name="cpf" value={form.cpf} onChange={handleChange} className={inputClass} placeholder="000.000.000-00"/>
-                                </div>
-                                <div>
-                                    <label className={labelClass}>Registro Profissional (CRM/CRO)</label>
-                                    <div className="relative">
-                                        <Award className="absolute left-3 top-3.5 text-slate-400" size={16}/>
-                                        <input name="registro_profissional" value={form.registro_profissional} onChange={handleChange} className={`${inputClass} pl-10`} required placeholder="Ex: 123456-SP"/>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* BLOCO 2: CONTATO */}
-                        <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-2 mb-6 pb-4 border-b dark:border-slate-700">
-                                <Phone size={20} className="text-green-500"/>
-                                <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-wide">Contato</h3>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label className={labelClass}>Telefone / Celular</label>
-                                    <div className="relative">
-                                        <Phone className="absolute left-3 top-3.5 text-slate-400" size={16}/>
-                                        <input name="telefone" value={form.telefone} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="(00) 00000-0000"/>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className={labelClass}>E-mail Corporativo</label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-3.5 text-slate-400" size={16}/>
-                                        <input type="email" name="email" value={form.email} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="medico@clinica.com"/>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* BLOCO 3: ESPECIALIDADES */}
-                        <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-2 mb-6 pb-4 border-b dark:border-slate-700">
-                                <Briefcase size={20} className="text-purple-500"/>
-                                <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm tracking-wide">Áreas de Atuação</h3>
+                            <div className="flex-[2] w-full min-w-[200px]">
+                                <label className={subLabelClass}>Especialidade</label>
+                                <SearchableSelect
+                                    options={listaEspecialidades.map(e => ({ id: e.id, label: e.nome }))}
+                                    value={item.especialidade_id}
+                                    onChange={(val) => handleItemChange(index, 'especialidade_id', val)}
+                                    placeholder="Selecione..."
+                                    required={true}
+                                />
                             </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                {especialidadesDisponiveis.map(spec => {
-                                    const isSelected = form.especialidades.includes(spec.id);
-                                    return (
-                                        <div 
-                                            key={spec.id} 
-                                            onClick={() => toggleEspecialidade(spec.id)}
-                                            className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center gap-2 ${isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-100 dark:border-slate-700 hover:border-blue-200'}`}
-                                        >
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300'}`}>
-                                                {isSelected && <Check size={12} className="text-white"/>}
-                                            </div>
-                                            <span className={`text-xs font-bold uppercase ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-slate-500'}`}>
-                                                {spec.nome || spec.nome_especialidade}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                                {especialidadesDisponiveis.length === 0 && (
-                                    <div className="col-span-full text-center py-8 text-slate-400 text-xs uppercase font-bold border-2 border-dashed rounded-2xl">
-                                        Nenhuma especialidade cadastrada no sistema.
-                                        <br/>Vá em Configurações > Especialidades para adicionar.
-                                    </div>
-                                )}
+                            <div className="flex-1 w-full min-w-[100px]">
+                                <label className={subLabelClass}>Conselho</label>
+                                <input required value={item.sigla_conselho} onChange={e=>handleItemChange(index, 'sigla_conselho', e.target.value)} className={inputClass} placeholder="CRM/CRO" style={{textTransform: 'uppercase'}}/>
                             </div>
-                        </div>
 
-                        <div className="flex justify-end pt-4">
-                            <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-500/20 flex items-center gap-2 active:scale-95 transition-all disabled:opacity-50">
-                                {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
-                                {id ? 'Salvar Alterações' : 'Cadastrar Profissional'}
+                            <div className="flex-1 w-full min-w-[120px]">
+                                <label className={subLabelClass}>Nº Registro</label>
+                                <input required value={item.registro_conselho} onChange={e=>handleItemChange(index, 'registro_conselho', e.target.value)} className={inputClass} placeholder="000000"/>
+                            </div>
+
+                            <div className="w-full md:w-24">
+                                <label className={subLabelClass}>UF</label>
+                                <input required value={item.uf_conselho} onChange={e=>handleItemChange(index, 'uf_conselho', e.target.value)} className={inputClass} placeholder="UF" maxLength={2} style={{textTransform: 'uppercase'}}/>
+                            </div>
+
+                            <button type="button" onClick={()=>handleRemoveItem(index)} className="p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-colors bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-red-200 shadow-sm" title="Remover">
+                                <Trash2 size={20}/>
                             </button>
                         </div>
-
-                    </form>
-                )}
+                    ))}
+                </div>
             </div>
-        </Layout>
-    );
+
+            <div className="flex justify-end gap-4 pt-6">
+                <button type="button" onClick={() => navigate('/profissionais')} className="px-8 py-4 text-slate-500 dark:text-slate-400 font-black uppercase text-xs tracking-widest hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancelar</button>
+                <button disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50">
+                    {loading ? <Loader2 className="animate-spin" size={20}/> : <><Save size={20}/> Salvar Dados</>}
+                </button>
+            </div>
+        </form>
+      </div>
+    </Layout>
+  );
 }
