@@ -13,18 +13,22 @@ const SearchableSelect = ({ options, value, onChange, placeholder, required }) =
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
 
+    // Atualiza o texto quando o valor externo muda
     useEffect(() => { 
-        // Converte ambos para string para garantir a comparação
+        if (!value) {
+            setQuery('');
+            return;
+        }
+        // Força comparação de strings para evitar erros de tipo (number vs string)
         const selected = options.find(o => String(o.id) === String(value)); 
         if (selected) setQuery(selected.label);
-        else if (!value) setQuery('');
     }, [value, options]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
                 setIsOpen(false);
-                // Reseta o texto se o usuário clicou fora sem selecionar
+                // Se fechou sem selecionar, restaura o texto do valor atual
                 const selected = options.find(o => String(o.id) === String(value));
                 setQuery(selected ? selected.label : '');
             }
@@ -95,7 +99,7 @@ export default function ProfissionalForm() {
   useEffect(() => {
     if(api) {
         setFetching(true);
-        // Carrega lista de especialidades
+        // Carrega especialidades para o Select
         api.get('especialidades/?nopage=true') 
             .then(res => setListaEspecialidades(res.data.results || res.data))
             .catch(() => notify.error("Erro ao carregar lista de especialidades."));
@@ -108,15 +112,25 @@ export default function ProfissionalForm() {
                     data_nascimento: res.data.data_nascimento
                 });
                 
-                // --- CORREÇÃO CRÍTICA DO MAPEAMENTO ---
-                // Verifica como o backend manda e normaliza para o formulário
-                const vinculos = (res.data.especialidades || []).map(v => ({
-                    // Se v.especialidade for um objeto (com id, nome), pega o id. Se for número, pega direto.
-                    especialidade_id: (typeof v.especialidade === 'object' ? v.especialidade.id : v.especialidade) || v.especialidade_id,
-                    sigla_conselho: v.sigla_conselho,
-                    registro_conselho: v.registro_conselho,
-                    uf_conselho: v.uf_conselho
-                }));
+                // --- CORREÇÃO DA EXTRAÇÃO DO ID ---
+                const vinculos = (res.data.especialidades || []).map(v => {
+                    // Tenta pegar o ID de várias formas possíveis (objeto aninhado ou valor direto)
+                    let specId = '';
+                    if (v.especialidade && typeof v.especialidade === 'object') {
+                        specId = v.especialidade.id;
+                    } else if (v.especialidade) {
+                        specId = v.especialidade;
+                    } else if (v.especialidade_id) {
+                        specId = v.especialidade_id;
+                    }
+
+                    return {
+                        especialidade_id: specId,
+                        sigla_conselho: v.sigla_conselho || '',
+                        registro_conselho: v.registro_conselho || '',
+                        uf_conselho: v.uf_conselho || 'PR'
+                    };
+                });
                 
                 setItems(vinculos);
             }).catch((err) => {
@@ -140,7 +154,6 @@ export default function ProfissionalForm() {
   };
 
   const handleRemoveItem = async (index) => {
-    // Não precisa de confirmação assíncrona se for só remoção visual antes de salvar
     setItems(items.filter((_, i) => i !== index));
   };
   
@@ -154,8 +167,6 @@ export default function ProfissionalForm() {
     e.preventDefault();
     if (formData.data_nascimento > hoje) return notify.warning("Data de nascimento inválida.");
     if (items.length === 0) return notify.warning("Vincule ao menos uma especialidade.");
-
-    // Valida se todas as especialidades tem ID selecionado
     if (items.some(i => !i.especialidade_id)) return notify.warning("Selecione a especialidade em todas as linhas.");
 
     setLoading(true);
@@ -163,7 +174,7 @@ export default function ProfissionalForm() {
     const payload = { 
         ...formData, 
         cpf: cpfLimpo, 
-        especialidades: items // Envia o array de objetos completo
+        especialidades: items 
     };
     
     try {
@@ -209,16 +220,7 @@ export default function ProfissionalForm() {
                 <div className="space-y-4">
                     {items.map((item, index) => (
                         <div key={index} className="flex flex-col md:flex-row gap-4 items-end bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in slide-in-from-top-2 duration-300">
-                            <div className="flex-[2] w-full min-w-[200px]">
-                                <label className={subLabelClass}>Especialidade</label>
-                                <SearchableSelect
-                                    options={listaEspecialidades.map(e => ({ id: e.id, label: e.nome }))}
-                                    value={item.especialidade_id}
-                                    onChange={(val) => handleItemChange(index, 'especialidade_id', val)}
-                                    placeholder="Selecione..."
-                                    required={true}
-                                />
-                            </div>
+                            <div className="flex-[2] w-full min-w-[200px]"><label className={subLabelClass}>Especialidade</label><SearchableSelect options={listaEspecialidades.map(e => ({ id: e.id, label: e.nome }))} value={item.especialidade_id} onChange={(val) => handleItemChange(index, 'especialidade_id', val)} placeholder="Selecione..." required={true} /></div>
                             <div className="flex-1 w-full min-w-[100px]"><label className={subLabelClass}>Conselho</label><input required value={item.sigla_conselho} onChange={e=>handleItemChange(index, 'sigla_conselho', e.target.value)} className={inputClass} placeholder="CRM/CRO" style={{textTransform: 'uppercase'}}/></div>
                             <div className="flex-1 w-full min-w-[120px]"><label className={subLabelClass}>Nº Registro</label><input required value={item.registro_conselho} onChange={e=>handleItemChange(index, 'registro_conselho', e.target.value)} className={inputClass} placeholder="000000"/></div>
                             <div className="w-full md:w-24"><label className={subLabelClass}>UF</label><input required value={item.uf_conselho} onChange={e=>handleItemChange(index, 'uf_conselho', e.target.value)} className={inputClass} placeholder="UF" maxLength={2} style={{textTransform: 'uppercase'}}/></div>
