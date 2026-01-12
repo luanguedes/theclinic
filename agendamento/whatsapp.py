@@ -148,33 +148,30 @@ def enviar_lembrete_24h(agendamento):
     try:
         config = ConfiguracaoSistema.load()
         
-        # 1. Trava Mestre
+        # 1. Trava Mestre (Global)
         if not config.enviar_whatsapp_global:
+            logger.info("🚫 Lembrete cancelado: Sistema Global Desativado.")
             return False
 
         # 2. Trava Específica (Lembrete)
         if not config.enviar_wpp_lembrete:
+            logger.info("🚫 Lembrete cancelado: Módulo de Lembrete Desativado.")
             return False
 
+        # --- TRAVA INDIVIDUAL REMOVIDA A PEDIDO ---
+        # Enviamos mesmo que agendamento.enviar_whatsapp seja False
 
         paciente = agendamento.paciente
         profissional = agendamento.profissional
         dados_clinica = get_dados_clinica()
         telefone = formatar_telefone(paciente.telefone)
         
-        if not telefone: return False
+        if not telefone: 
+            logger.warning(f"⚠️ Paciente {paciente.nome} sem telefone válido.")
+            return False
 
         data_fmt = agendamento.data.strftime('%d/%m/%Y')
         hora_fmt = agendamento.horario.strftime('%H:%M')
-        
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
-        
-        if response.status_code in [200, 201]:
-            print(f"✅ Lembrete enviado para {agendamento.paciente.nome}")
-            return True # <--- OBRIGATÓRIO PARA O SCRIPT CONTINUAR
-        else:
-            print(f"⚠️ Erro API Evolution: {response.text}")
-            return False # <--- OBRIGATÓRIO
         
         mensagem = (
             f"Olá, *{paciente.nome}*! 👋\n\n"
@@ -187,10 +184,32 @@ def enviar_lembrete_24h(agendamento):
             f"Até lá!"
         )
 
-        return _disparar_api(telefone, mensagem)
+        # --- DEFINIÇÃO DA URL E PAYLOAD (Onde estava o erro) ---
+        url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
+        
+        payload = {
+            "number": telefone,
+            "textMessage": {"text": mensagem},
+            "options": {"delay": 1200, "linkPreview": False}
+        }
+        
+        headers = {
+            "apikey": settings.EVOLUTION_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        # --- DISPARO ---
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code in [200, 201]:
+            logger.info(f"✅ Lembrete enviado com sucesso para {paciente.nome}")
+            return True
+        else:
+            logger.error(f"❌ Falha na API Evolution: {response.text}")
+            return False
 
     except Exception as e:
-        logger.exception(f"Erro no lembrete: {e}")
+        logger.exception(f"🔥 Erro crítico no envio de lembrete: {e}")
         return False
 
 # --- HELPER INTERNO PARA NÃO REPETIR CÓDIGO ---
