@@ -120,6 +120,7 @@ def enviar_mensagem_cancelamento_bloqueio(agendamento, motivo_personalizado=""):
         paciente = agendamento.paciente
         dados_clinica = get_dados_clinica()
         telefone = formatar_telefone(paciente.telefone)
+        profissional = agendamento.profissional
         nome_especialidade = get_nome_especialidade(agendamento, profissional)
         
         if not telefone: return
@@ -133,7 +134,7 @@ def enviar_mensagem_cancelamento_bloqueio(agendamento, motivo_personalizado=""):
             f"Olá, *{paciente.nome}*.\n\n"
             f"Informamos que sua consulta na *{dados_clinica['nome']}* precisou ser *CANCELADA*.\n\n"
             f"📅 Data original: *{data_fmt}* às *{hora_fmt}*\n"
-            f"👨‍⚕️ Profissional: {agendamento.profissional.nome}\n"
+            f"👨‍⚕️ Profissional: {profissional.nome}\n"
             f"🩺 Especialidade: *{nome_especialidade}*\n\n"
             f"{bloco_motivo}\n"
             f"Por favor, entre em contato conosco para realizarmos um novo agendamento o mais breve possível.\n\n"
