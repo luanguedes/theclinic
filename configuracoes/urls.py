@@ -8,5 +8,10 @@ router.register(r'convenios', ConvenioViewSet)
 urlpatterns = [
     path('', include(router.urls)),
     path('clinica/', DadosClinicaView.as_view()),
+    
+    # Rota base das configurações
     path('sistema/', ConfiguracaoSistemaView.as_view(), name='config-sistema'),
+    
+    # --- NOVA ROTA PARA O DISPARO MANUAL ---
+    path('sistema/executar_lembretes/', ConfiguracaoSistemaView.as_view(), name='executar-lembretes'),
 ]
