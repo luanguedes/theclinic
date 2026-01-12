@@ -156,9 +156,6 @@ def enviar_lembrete_24h(agendamento):
         if not config.enviar_wpp_lembrete:
             return False
 
-        # 3. Trava Individual
-        if not agendamento.enviar_whatsapp:
-            return False
 
         paciente = agendamento.paciente
         profissional = agendamento.profissional
