@@ -44,7 +44,7 @@ export default function Dashboard() {
     const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0, receitaEstimada: 0 });
     const [listaHoje, setListaHoje] = useState([]); 
     const [loading, setLoading] = useState(true);
-    const [showValues, setShowValues] = useState(false); // Olhinho para valores financeiros
+    const [showValues, setShowValues] = useState(false);
 
     useEffect(() => {
         if (api) carregarDados();
@@ -53,12 +53,17 @@ export default function Dashboard() {
     const carregarDados = async () => {
         setLoading(true);
         try {
+            // --- LÓGICA DE FILTRO POR PROFISSIONAL ---
+            let queryExtra = '';
+            if (!isSuperUser && user?.profissional_id) {
+                queryExtra = `&profissional=${user.profissional_id}`;
+            }
+
             // 1. DADOS DO DIA
-            const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true`);
+            const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true${queryExtra}`);
             const dadosDiaBrutos = resDia.data.results || resDia.data;
             const agendaAtivaDia = dadosDiaBrutos.filter(a => a.status !== 'cancelado');
             
-            // Simulação de ocupação baseada em meta de 20 atendimentos
             const perc = Math.min(Math.round((agendaAtivaDia.length / 20) * 100), 100);
 
             setListaHoje(agendaAtivaDia);
@@ -70,10 +75,9 @@ export default function Dashboard() {
 
             // 2. DADOS DO MÊS
             const [ano, mes] = filtroMes.split('-');
-            const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true`);
+            const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true${queryExtra}`);
             const dadosMesBrutos = resMes.data.results || resMes.data;
 
-            // Filtra pacientes válidos (excluindo cancelados)
             const pacientesValidosMes = dadosMesBrutos.filter(a => a.status !== 'cancelado' && a.status !== 'faltou');
 
             let receitaConfirmada = 0;
@@ -108,11 +112,9 @@ export default function Dashboard() {
         }
     };
 
-    // Componente de Card Reutilizável
     const StatCard = ({ title, value, subValue, icon: Icon, colorClass, loading, restricted, restrictedLabel, isCurrency }) => (
         <div className="relative bg-white dark:bg-slate-800 p-6 rounded-[24px] border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:shadow-xl hover:-translate-y-1 overflow-hidden group h-full flex flex-col justify-between">
             {restricted && <RestrictedOverlay label={restrictedLabel} />}
-            
             <div className="flex justify-between items-start">
                 <div className="flex-1">
                     <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{title}</p>
@@ -135,7 +137,6 @@ export default function Dashboard() {
                     <Icon size={24} />
                 </div>
             </div>
-            
             <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700/50">
                 <p className={`text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate ${isCurrency && !showValues && isFinanceiro ? 'blur-[3px] opacity-50' : ''}`}>
                     {subValue}
@@ -165,21 +166,11 @@ export default function Dashboard() {
                     <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner">
                         <div className="flex items-center gap-3 px-4 py-2 border-r border-slate-200 dark:border-slate-600">
                             <Calendar size={18} className="text-blue-600"/>
-                            <input 
-                                type="date" 
-                                value={filtroDia} 
-                                onChange={e => setFiltroDia(e.target.value)} 
-                                className="bg-transparent text-sm font-black text-slate-700 dark:text-white outline-none cursor-pointer uppercase"
-                            />
+                            <input type="date" value={filtroDia} onChange={e => setFiltroDia(e.target.value)} className="bg-transparent text-sm font-black text-slate-700 dark:text-white outline-none cursor-pointer uppercase"/>
                         </div>
                         <div className="flex items-center gap-3 px-4 py-2">
                             <TrendingUp size={18} className="text-purple-600"/>
-                            <input 
-                                type="month" 
-                                value={filtroMes} 
-                                onChange={e => setFiltroMes(e.target.value)} 
-                                className="bg-transparent text-sm font-black text-slate-700 dark:text-white outline-none cursor-pointer uppercase"
-                            />
+                            <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)} className="bg-transparent text-sm font-black text-slate-700 dark:text-white outline-none cursor-pointer uppercase"/>
                         </div>
                     </div>
                 </div>
@@ -194,7 +185,6 @@ export default function Dashboard() {
                         colorClass="bg-blue-600 text-white shadow-lg shadow-blue-200 dark:shadow-none"
                         loading={loading}
                     />
-
                     <StatCard 
                         title="Atendimentos Previstos"
                         value={`${statsMes.totalPacientes} Pacientes`}
@@ -203,7 +193,6 @@ export default function Dashboard() {
                         colorClass="bg-purple-600 text-white shadow-lg shadow-purple-200 dark:shadow-none"
                         loading={loading}
                     />
-
                     <StatCard 
                         title="Liquidez Confirmada"
                         value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(statsMes.receitaConfirmada)}
@@ -220,18 +209,12 @@ export default function Dashboard() {
                 {/* GRID DE CONTEÚDO */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
-                    {/* LISTAGEM DA AGENDA (SEM A COLUNA VALOR) */}
+                    {/* LISTAGEM DA AGENDA */}
                     <div className="relative lg:col-span-2 bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[500px]">
-                        
-                        {(!isProfissional && !isRecepcao) && (
-                            <RestrictedOverlay label="Módulo Clínico/Recepção" />
-                        )}
-
+                        {(!isProfissional && !isRecepcao) && <RestrictedOverlay label="Módulo Clínico/Recepção" />}
                         <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
                             <div>
-                                <h3 className="font-black text-xl text-slate-800 dark:text-white uppercase tracking-tighter">
-                                    Agenda Diária
-                                </h3>
+                                <h3 className="font-black text-xl text-slate-800 dark:text-white uppercase tracking-tighter">Agenda Diária</h3>
                                 <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Sincronizado agora</p>
                             </div>
                             <Link to="/recepcao" className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-xs font-black uppercase tracking-widest px-5 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-all shadow-sm flex items-center gap-2">
@@ -251,9 +234,7 @@ export default function Dashboard() {
                                         <Calendar size={64} className="text-slate-200 dark:text-slate-700"/>
                                     </div>
                                     <h4 className="text-slate-800 dark:text-white font-black text-xl uppercase tracking-tighter">Sem movimentação</h4>
-                                    <p className="text-slate-400 max-w-xs mx-auto mt-2 text-sm font-medium">
-                                        Não existem agendamentos para o dia {filtroDia.split('-').reverse().join('/')}.
-                                    </p>
+                                    <p className="text-slate-400 max-w-xs mx-auto mt-2 text-sm font-medium">Não existem agendamentos para o dia {filtroDia.split('-').reverse().join('/')}.</p>
                                 </div>
                             ) : (
                                 <div className="p-4">
@@ -268,9 +249,7 @@ export default function Dashboard() {
                                         <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                                             {listaHoje.map((item) => (
                                                 <tr key={item.id} className="group hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-all">
-                                                    <td className="px-6 py-5 font-black text-blue-600 dark:text-blue-400 font-mono text-base">
-                                                        {item.horario.slice(0,5)}
-                                                    </td>
+                                                    <td className="px-6 py-5 font-black text-blue-600 dark:text-blue-400 font-mono text-base">{item.horario.slice(0,5)}</td>
                                                     <td className="px-6 py-5">
                                                         <div className="font-bold text-slate-800 dark:text-white uppercase text-xs">{item.nome_paciente}</div>
                                                         <div className="text-[10px] font-bold text-slate-400 group-hover:text-blue-500 transition-colors uppercase tracking-tighter mt-0.5 flex items-center gap-1">
@@ -278,9 +257,7 @@ export default function Dashboard() {
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-5">
-                                                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${getStatusStyle(item.status)}`}>
-                                                            {item.status.replace('_', ' ')}
-                                                        </span>
+                                                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${getStatusStyle(item.status)}`}>{item.status.replace('_', ' ')}</span>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -294,8 +271,8 @@ export default function Dashboard() {
                     {/* COLUNA LATERAL DE PERFORMANCE */}
                     <div className="flex flex-col gap-8">
                         
-                        {/* CARD DE CHAMADA PARA ATENDIMENTO */}
-                        <div className="relative bg-slate-900 dark:bg-blue-600 rounded-[32px] p-8 shadow-2xl overflow-hidden group">
+                        {/* --- CORREÇÃO DO CARD: INVERSÃO DE CORES --- */}
+                        <div className="relative bg-blue-600 dark:bg-slate-900 rounded-[32px] p-8 shadow-2xl overflow-hidden group">
                             {!isProfissional && <RestrictedOverlay label="Módulo Médico" />}
                             <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
                             
@@ -319,7 +296,7 @@ export default function Dashboard() {
                             </div>
                         </div>
                         
-                        {/* GRÁFICO DE OCUPAÇÃO SIMPLIFICADO */}
+                        {/* GRÁFICO DE OCUPAÇÃO */}
                         <div className="bg-white dark:bg-slate-800 rounded-[32px] p-8 shadow-sm border border-slate-200 dark:border-slate-700">
                             <div className="flex items-center justify-between mb-8">
                                 <h4 className="font-black text-slate-800 dark:text-white uppercase text-xs tracking-widest flex items-center gap-2">
@@ -341,7 +318,6 @@ export default function Dashboard() {
                                         ></div>
                                     </div>
                                 </div>
-                                
                                 <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
                                     <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold leading-relaxed uppercase tracking-tight">
                                         Dica: Dias com ocupação acima de <span className="text-blue-600">85%</span> indicam necessidade de abertura de novos horários ou profissionais extras.
@@ -351,7 +327,6 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
-
             </div>
         </Layout>
     );

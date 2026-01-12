@@ -112,25 +112,15 @@ export default function ProfissionalForm() {
                     data_nascimento: res.data.data_nascimento
                 });
                 
-                // --- CORREÇÃO DA EXTRAÇÃO DO ID ---
-                const vinculos = (res.data.especialidades || []).map(v => {
-                    // Tenta pegar o ID de várias formas possíveis (objeto aninhado ou valor direto)
-                    let specId = '';
-                    if (v.especialidade && typeof v.especialidade === 'object') {
-                        specId = v.especialidade.id;
-                    } else if (v.especialidade) {
-                        specId = v.especialidade;
-                    } else if (v.especialidade_id) {
-                        specId = v.especialidade_id;
-                    }
-
-                    return {
-                        especialidade_id: specId,
-                        sigla_conselho: v.sigla_conselho || '',
-                        registro_conselho: v.registro_conselho || '',
-                        uf_conselho: v.uf_conselho || 'PR'
-                    };
-                });
+                // --- CORREÇÃO: MAPEAMENTO EXATO COM SEU SERIALIZER ---
+                const vinculos = (res.data.especialidades || []).map(v => ({
+                    // 'especialidade_leitura' é o campo ReadOnly que criamos no serializer 
+                    // para garantir que o ID venha limpo do backend.
+                    especialidade_id: v.especialidade_leitura, 
+                    sigla_conselho: v.sigla_conselho || '',
+                    registro_conselho: v.registro_conselho || '',
+                    uf_conselho: v.uf_conselho || 'PR'
+                }));
                 
                 setItems(vinculos);
             }).catch((err) => {
@@ -174,7 +164,7 @@ export default function ProfissionalForm() {
     const payload = { 
         ...formData, 
         cpf: cpfLimpo, 
-        especialidades: items 
+        especialidades: items // O Serializer espera 'especialidades' que contém 'especialidade_id'
     };
     
     try {
@@ -184,7 +174,10 @@ export default function ProfissionalForm() {
         navigate('/profissionais');
     } catch (err) { 
         if(err.response?.data?.cpf) notify.warning("CPF já cadastrado.");
-        else notify.error('Erro ao salvar.'); 
+        else {
+            console.error(err);
+            notify.error('Erro ao salvar. Verifique os campos.'); 
+        }
     } finally { setLoading(false); }
   };
 

@@ -4,44 +4,53 @@ import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
     Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, 
-    Lock, MessageCircle, Play, Clock, Bell, Activity
+    Lock, MessageCircle, Play, Clock, Bell, Activity, Check
 } from 'lucide-react';
 
 export default function Configuracoes() {
     const { api, user } = useAuth();
     const { notify, confirmDialog } = useNotification();
     
-    const [activeTab, setActiveTab] = useState('comunicacao');
+    const [activeTab, setActiveTab] = useState('comunicacao'); // Começa na aba principal
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [runningBot, setRunningBot] = useState(false);
 
+    // Estado completo com todos os campos do seu sistema
     const [config, setConfig] = useState({
+        // Segurança
         max_tentativas_login: 5,
         tempo_bloqueio_minutos: 15,
         tempo_sessao_minutos: 60,
+        
+        // Interface
         itens_por_pagina: 10,
         modo_manutencao: false,
+        
+        // Agendamento
         janela_agendamento_meses: 6,
+        
+        // Automação (WhatsApp)
         enviar_whatsapp_global: true,
         enviar_wpp_confirmacao: true,
         enviar_wpp_bloqueio: true,
         enviar_wpp_lembrete: true,
         horario_disparo_lembrete: '08:00',
         data_ultima_execucao_lembrete: null,
+        
+        // Stats do Robô
         stats_hoje: { total: 0, enviados: 0, pendentes: 0 },
         stats_amanha: { total: 0, enviados: 0, pendentes: 0 }
     });
 
-    // --- CORREÇÃO: Definição da variável jaRodouHoje ---
-    // Colocada aqui no topo para garantir que exista antes do return
+    // --- CÁLCULOS AUXILIARES (Correção do erro jaRodouHoje) ---
     const hojeIso = new Date().toISOString().split('T')[0];
     const ultimaExecucaoIso = config.data_ultima_execucao_lembrete 
         ? String(config.data_ultima_execucao_lembrete).split('T')[0] 
         : '';
     const jaRodouHoje = ultimaExecucaoIso === hojeIso;
 
-    // Verificação de segurança
+    // Bloqueio de Acesso para não-admins
     if (user && !user.is_superuser) {
         return (
             <Layout>
@@ -77,15 +86,16 @@ export default function Configuracoes() {
     const handleSave = async (e) => {
         e.preventDefault();
 
+        // Validações
         if (config.tempo_sessao_minutos < 5) return notify.warning("O tempo de sessão mínimo é 5 minutos.");
         if (config.itens_por_pagina < 1) return notify.warning("A paginação mínima é 1 item.");
 
         setSaving(true);
         try {
             await api.put('configuracoes/sistema/', config);
-            notify.success("Alterações aplicadas com sucesso!");
+            notify.success("Configurações aplicadas com sucesso!");
         } catch (error) {
-            notify.error("Falha ao salvar. Tente novamente em instantes.");
+            notify.error("Falha ao salvar. Tente novamente.");
         } finally {
             setSaving(false);
         }
@@ -94,6 +104,7 @@ export default function Configuracoes() {
     const handleChange = async (e) => {
         const { name, value, type, checked } = e.target;
         
+        // Confirmação para Modo Manutenção
         if (name === 'modo_manutencao' && checked) {
             const confirm = await confirmDialog(
                 "Ao ativar o Modo Manutenção, todos os operadores serão desconectados e novos logins serão bloqueados. Deseja continuar?",
@@ -122,6 +133,7 @@ export default function Configuracoes() {
             const res = await api.post('configuracoes/sistema/executar_lembretes/');
             notify.success("Processamento concluído!");
             if(res.data) {
+                // Atualiza stats na tela
                 setConfig(prev => ({
                     ...prev, 
                     data_ultima_execucao_lembrete: res.data.ultima_execucao,
@@ -136,6 +148,7 @@ export default function Configuracoes() {
         }
     };
 
+    // Estilos reutilizáveis
     const tabClass = (tab) => `
         flex items-center gap-2 px-6 py-4 font-black text-xs uppercase tracking-widest border-b-2 transition-all whitespace-nowrap outline-none
         ${activeTab === tab 
@@ -144,7 +157,7 @@ export default function Configuracoes() {
     `;
 
     const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold dark:text-white transition-all";
-    const labelClass = "block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
+    const labelClass = "block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-widest";
 
     return (
         <Layout>
@@ -163,7 +176,7 @@ export default function Configuracoes() {
 
                 <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden min-h-[600px] flex flex-col">
                     
-                    {/* TAB BAR SCROLLÁVEL */}
+                    {/* TAB BAR */}
                     <div className="flex border-b border-slate-100 dark:border-slate-700 overflow-x-auto scrollbar-hide bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
                         <button type="button" onClick={()=>setActiveTab('comunicacao')} className={tabClass('comunicacao')}><MessageCircle size={16}/> Automação</button>
                         <button type="button" onClick={()=>setActiveTab('seguranca')} className={tabClass('seguranca')}><Shield size={16}/> Segurança</button>
@@ -181,12 +194,21 @@ export default function Configuracoes() {
                             <form onSubmit={handleSave} className="space-y-12 h-full flex flex-col">
                                 <div className="flex-1">
                                     
-                                    {/* --- ABA SEGURANÇA --- */}
+                                    {/* === ABA SEGURANÇA === */}
                                     {activeTab === 'seguranca' && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                            <div><label className={labelClass}>Max. Tentativas de Login</label><input type="number" name="max_tentativas_login" value={config.max_tentativas_login} onChange={handleChange} className={inputClass}/></div>
-                                            <div><label className={labelClass}>Tempo de Bloqueio (Minutos)</label><input type="number" name="tempo_bloqueio_minutos" value={config.tempo_bloqueio_minutos} onChange={handleChange} className={inputClass}/></div>
-                                            <div className="md:col-span-2"><label className={labelClass}>Expiração Automática de Sessão (Minutos)</label><input type="number" name="tempo_sessao_minutos" value={config.tempo_sessao_minutos} onChange={handleChange} className={inputClass}/></div>
+                                            <div>
+                                                <label className={labelClass}>Max. Tentativas de Login</label>
+                                                <input type="number" name="max_tentativas_login" value={config.max_tentativas_login} onChange={handleChange} className={inputClass}/>
+                                            </div>
+                                            <div>
+                                                <label className={labelClass}>Tempo de Bloqueio (Minutos)</label>
+                                                <input type="number" name="tempo_bloqueio_minutos" value={config.tempo_bloqueio_minutos} onChange={handleChange} className={inputClass}/>
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className={labelClass}>Expiração Automática de Sessão (Minutos)</label>
+                                                <input type="number" name="tempo_sessao_minutos" value={config.tempo_sessao_minutos} onChange={handleChange} className={inputClass}/>
+                                            </div>
                                             
                                             <div className="md:col-span-2 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800 flex gap-3 items-start">
                                                 <Shield size={20} className="text-blue-600 mt-0.5 shrink-0"/>
@@ -197,7 +219,7 @@ export default function Configuracoes() {
                                         </div>
                                     )}
 
-                                    {/* --- ABA INTERFACE --- */}
+                                    {/* === ABA INTERFACE === */}
                                     {activeTab === 'interface' && (
                                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                             <div>
@@ -222,7 +244,7 @@ export default function Configuracoes() {
                                         </div>
                                     )}
 
-                                    {/* --- ABA AGENDAMENTO --- */}
+                                    {/* === ABA AGENDAMENTO === */}
                                     {activeTab === 'agendamento' && (
                                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                                             <label className={labelClass}>Janela Máxima de Agendamento Futuro</label>
@@ -231,12 +253,12 @@ export default function Configuracoes() {
                                                 <span className="text-slate-500 font-bold text-sm uppercase tracking-wide">Meses à frente</span>
                                             </div>
                                             <p className="mt-4 text-xs text-slate-400 font-medium max-w-md">
-                                                Define até quando a agenda estará aberta para marcação. Datas além deste limite aparecerão bloqueadas.
+                                                Define até quando a agenda estará aberta para marcação. Datas além deste limite aparecerão bloqueadas para os operadores.
                                             </p>
                                         </div>
                                     )}
 
-                                    {/* --- ABA COMUNICAÇÃO (AUTOMACAO) --- */}
+                                    {/* === ABA AUTOMAÇÃO (MANTIDA COMPLETA) === */}
                                     {activeTab === 'comunicacao' && (
                                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                             
@@ -256,7 +278,7 @@ export default function Configuracoes() {
                                                 </div>
                                             </div>
 
-                                            {/* Sub Gatilhos e Monitor (Lado a Lado em telas grandes) */}
+                                            {/* Gatilhos e Monitor */}
                                             <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8 transition-all duration-500 ${!config.enviar_whatsapp_global ? 'opacity-40 grayscale pointer-events-none blur-[1px]' : ''}`}>
                                                 
                                                 {/* Coluna Esquerda: Gatilhos */}
@@ -308,7 +330,7 @@ export default function Configuracoes() {
                                                         </div>
                                                         
                                                         <div className="flex items-center justify-between bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 mb-6">
-                                                            <span className="text-[10px] font-bold text-slate-500 uppercase ml-1">Horário de Disparo Automático:</span>
+                                                            <span className="text-[10px] font-bold text-slate-500 uppercase ml-1">Horário de Disparo:</span>
                                                             <input type="time" name="horario_disparo_lembrete" value={config.horario_disparo_lembrete} onChange={handleChange} className="bg-slate-100 dark:bg-slate-900 border-none rounded-lg px-2 py-1 font-black text-sm text-blue-600 outline-none focus:ring-2 focus:ring-blue-500"/>
                                                         </div>
                                                     </div>

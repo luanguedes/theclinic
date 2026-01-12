@@ -43,14 +43,14 @@ export default function Profissionais() {
 
     const filtered = profissionais.filter(p => p.nome.toLowerCase().includes(search.toLowerCase()));
 
-    // Função auxiliar para formatar o registro
+    // Função para formatar o registro com base na sua MODEL
     const formatarRegistro = (profissional) => {
         if (!profissional.especialidades || profissional.especialidades.length === 0) return 'Registro Pendente';
         
-        // Pega o primeiro vínculo para exibir
+        // Pega o primeiro vínculo
         const principal = profissional.especialidades[0];
         
-        // Tenta montar CONSELHO/UF - REGISTRO
+        // Usa os campos exatos do seu serializer/model
         const sigla = principal.sigla_conselho || 'Conselho';
         const uf = principal.uf_conselho || 'BR';
         const reg = principal.registro_conselho || '---';
@@ -101,7 +101,6 @@ export default function Profissionais() {
 
                                 <h3 className="text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight mb-1 truncate">{p.nome}</h3>
                                 
-                                {/* EXIBIÇÃO CORRETA DO REGISTRO */}
                                 <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg mb-4">
                                     <ShieldCheck size={12} className="text-slate-500"/>
                                     <p className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">
@@ -114,7 +113,7 @@ export default function Profissionais() {
                                         <Briefcase size={14} className="text-blue-500"/>
                                         <span className="truncate">
                                             {p.especialidades && p.especialidades.length > 0 
-                                                ? p.especialidades.map(e => e.nome_especialidade || e.especialidade_nome).join(', ') 
+                                                ? p.especialidades.map(e => e.nome_especialidade).join(', ') 
                                                 : 'Sem Especialidade'}
                                         </span>
                                     </div>

@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
     CalendarClock, CheckCircle2, Clock, Calculator, ArrowLeft, 
     ChevronDown, X, Users, Pin, Hourglass, Repeat, ListPlus, Pencil, Ban, 
-    CalendarDays, DollarSign, ShieldCheck, Plus, Trash2, Loader2 
+    CalendarDays, DollarSign, ShieldCheck, Plus, Trash2, Loader2, Save, PlusCircle
 } from 'lucide-react';
 
 function generateUUID() {
@@ -464,7 +464,7 @@ export default function CriarAgenda() {
                                                 <button type="button" onClick={() => setHorariosFixos(horariosFixos.filter((_, i) => i !== index))} className="text-red-400 hover:text-red-600 p-2 transition-colors"><Trash2 size={20}/></button>
                                             </div>
                                         ))}
-                                        <button type="button" onClick={() => setHorariosFixos([...horariosFixos, { time: '', qtd: 1 }])} className="text-purple-600 font-black text-[10px] uppercase flex items-center gap-2 mt-4 hover:underline"><Plus size={16}/> Adicionar outro horário</button>
+                                        <button type="button" onClick={() => setHorariosFixos([...horariosFixos, { time: '', qtd: 1 }])} className="text-purple-600 font-black text-[10px] uppercase flex items-center gap-2 mt-4 hover:underline"><PlusCircle size={16}/> Adicionar outro horário</button>
                                     </div>
                                 )}
                             </div>

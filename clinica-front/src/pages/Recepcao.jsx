@@ -124,17 +124,17 @@ export default function Recepcao() {
 
     const handleSetPriority = async (pacienteId, tipo) => {
         try {
-            // Atualização Otimista (Atualiza a tela antes do backend responder para parecer instantâneo)
+            // Atualização Otimista
             setAgendamentos(prev => prev.map(ag => 
                 ag.paciente === pacienteId ? { ...ag, paciente_prioridade: tipo } : ag
             ));
-            setActivePriorityMenu(null); // Fecha o menu
+            setActivePriorityMenu(null); 
 
             await api.patch(`pacientes/${pacienteId}/`, { prioridade: tipo });
             notify.success("Prioridade atualizada.");
         } catch (e) { 
             notify.error("Erro ao definir prioridade.");
-            carregarAgenda(); // Reverte se der erro
+            carregarAgenda(); 
         }
     };
 
@@ -179,15 +179,25 @@ export default function Recepcao() {
         }
     };
 
-    // ABERTURA DO MODAL COM DADOS COMPLETOS
+    // --- CORREÇÃO 1: CARREGAR DADOS NO MODAL ---
     const abrirCheckin = (item) => {
         setSelectedItem(item);
+        
+        // Tenta pegar o ID da especialidade de várias formas possíveis
+        // Se vier o nome da especialidade (item.nome_especialidade), procuramos o ID na lista
+        let specId = item.especialidade || item.especialidade_id || '';
+        
+        if (!specId && item.nome_especialidade) {
+            const encontrada = especialidades.find(e => e.nome === item.nome_especialidade);
+            if (encontrada) specId = encontrada.id;
+        }
+
         setFormCheckin({ 
             valor: item.valor || '', 
             forma_pagamento: item.fatura_forma_pagamento || 'dinheiro', 
             pago: item.fatura_pago || false,
             profissional: item.profissional || '', 
-            especialidade: item.especialidade || '', 
+            especialidade: specId, // Aqui usamos o ID encontrado
             convenio: item.convenio || '' 
         });
         setModalOpen(true);
@@ -263,7 +273,7 @@ export default function Recepcao() {
                                     const esperaMin = item.status === 'aguardando' ? calcularEspera(item.horario_chegada) : 0;
                                     const incompleto = isCadastroIncompleto(item);
                                     
-                                    // CORREÇÃO: Tenta pegar prioridade de múltiplos lugares para garantir
+                                    // CORREÇÃO 2: Verificação robusta da prioridade
                                     const prioridadeKey = item.paciente_prioridade || item.prioridade; 
                                     const pInfo = PRIORIDADES[prioridadeKey];
 
@@ -302,9 +312,13 @@ export default function Recepcao() {
                                                         </div>
                                                     )}
                                                     
-                                                    {/* MENU DE PRIORIDADE (ESTRELA) */}
+                                                    {/* ESTRELA DE PRIORIDADE (CORRIGIDA) */}
                                                     <div className="relative">
-                                                        <button onClick={() => setActivePriorityMenu(activePriorityMenu === item.id ? null : item.id)} className={`p-1 rounded-full transition-all ${prioridadeKey ? 'text-amber-500' : 'text-slate-200 hover:text-slate-400 opacity-0 group-hover:opacity-100'}`}><Star size={16} fill={prioridadeKey ? "currentColor" : "none"}/></button>
+                                                        {/* Removido opacity-0 e alterada a cor padrão para slate-300 (visível) */}
+                                                        <button onClick={() => setActivePriorityMenu(activePriorityMenu === item.id ? null : item.id)} className={`p-1 rounded-full transition-all ${prioridadeKey ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}>
+                                                            <Star size={16} fill={prioridadeKey ? "currentColor" : "none"}/>
+                                                        </button>
+                                                        
                                                         {activePriorityMenu === item.id && (
                                                             <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-2xl z-[150] p-2 animate-in fade-in zoom-in-95">
                                                                 {Object.entries(PRIORIDADES).map(([key, info]) => (
@@ -360,7 +374,7 @@ export default function Recepcao() {
                                     <div className="flex items-center gap-3">
                                         <h3 className="text-2xl font-black uppercase tracking-tighter">Confirmação de Recepção</h3>
                                         
-                                        {/* ÍCONE DE PRIORIDADE NO TOPO (CORRIGIDO PARA SER VISÍVEL) */}
+                                        {/* ÍCONE DE PRIORIDADE NO TOPO */}
                                         {(selectedItem.paciente_prioridade || selectedItem.prioridade) && 
                                          PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade] && (
                                             <div className="bg-white text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-lg border-2 border-white/20">

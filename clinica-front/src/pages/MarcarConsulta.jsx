@@ -6,33 +6,75 @@ import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { 
     Calendar as CalendarIcon, X, Plus, Trash2, Pencil, Loader2, Save, UserPlus, 
-    MapPin, ChevronDown, Check, MessageCircle, User, Baby, Heart, Accessibility, Users, Printer, Clock
+    MapPin, ChevronDown, Check, MessageCircle, User, Baby, Heart, Accessibility, 
+    Users, Printer, Clock, Filter, Stethoscope, CalendarDays, CheckCircle2
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
 
-// Estilos compactos para o calendário
+// --- CSS CUSTOMIZADO PARA AUMENTAR O CALENDÁRIO ---
 const calendarStyles = `
-  .react-calendar { width: 100%; border: none; font-family: inherit; background: transparent; font-size: 12px; }
-  .react-calendar__tile { padding: 6px 0; }
-  .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 1px solid #2563eb !important; border-radius: 6px; }
-  .dia-livre { background-color: #dcfce7 !important; color: #166534 !important; font-weight: bold; border-radius: 6px; }
-  .dia-feriado { background-color: #f3e8ff !important; color: #6b21a8 !important; opacity: 0.9; border-radius: 6px; font-weight: bold; }
-  .dia-bloqueado { background-color: #ffedd5 !important; color: #c2410c !important; text-decoration: line-through; opacity: 0.7; border-radius: 6px; }
-  .dia-sem-vagas { background-color: #fee2e2 !important; color: #b91c1c !important; opacity: 0.8; border-radius: 6px; }
-  .react-calendar__tile--active { background: #2563eb !important; color: white !important; border-radius: 6px; }
-  .react-calendar__navigation button { min-width: 30px; background: none; font-size: 14px; font-weight: bold; }
-  .react-calendar__month-view__days__day--weekend { color: #ef4444; }
+  .react-calendar { 
+      width: 100% !important; 
+      border: none !important; 
+      font-family: inherit; 
+      background: transparent !important; 
+      font-size: 16px; /* Fonte maior */
+  }
+  .react-calendar__navigation { height: 50px; margin-bottom: 10px; }
+  .react-calendar__navigation button { 
+      min-width: 40px; 
+      background: none; 
+      font-size: 18px; /* Mês maior */
+      font-weight: 800; 
+      text-transform: uppercase;
+      color: #334155;
+  }
+  .dark .react-calendar__navigation button { color: #f8fafc; }
+  .react-calendar__month-view__weekdays {
+      text-transform: uppercase;
+      font-weight: 800;
+      font-size: 0.8em;
+      color: #94a3b8;
+      text-decoration: none !important;
+  }
+  abbr[title] { text-decoration: none !important; cursor: default !important; }
+  
+  .react-calendar__tile { 
+      padding: 15px 0; /* Células mais altas */
+      font-weight: 600;
+      border-radius: 12px;
+      transition: all 0.2s;
+  }
+  .react-calendar__tile:enabled:hover { background-color: #f1f5f9; }
+  .dark .react-calendar__tile:enabled:hover { background-color: #334155; }
+  
+  .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 2px solid #2563eb !important; }
+  .react-calendar__tile--active { background: #2563eb !important; color: white !important; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+  
+  /* Status dos Dias */
+  .dia-livre { background-color: #dcfce7 !important; color: #166534 !important; font-weight: 800; }
+  .dark .dia-livre { background-color: #14532d !important; color: #4ade80 !important; }
+  
+  .dia-feriado { background-color: #f3e8ff !important; color: #6b21a8 !important; }
+  .dark .dia-feriado { background-color: #581c87 !important; color: #d8b4fe !important; }
+  
+  .dia-bloqueado { background-color: #ffedd5 !important; color: #c2410c !important; text-decoration: line-through; opacity: 0.6; }
+  .dark .dia-bloqueado { background-color: #7c2d12 !important; color: #fdba74 !important; }
+  
+  .dia-sem-vagas { background-color: #fee2e2 !important; color: #b91c1c !important; opacity: 0.8; }
+  .dark .dia-sem-vagas { background-color: #7f1d1d !important; color: #fca5a5 !important; }
 `;
 
 const PRIORIDADES = {
-    'idoso': { label: 'Idoso', icon: <Users size={12} />, color: 'text-amber-600 bg-amber-50 border-amber-100' },
-    'cadeirante': { label: 'Cadeirante', icon: <Accessibility size={12} />, color: 'text-blue-600 bg-blue-50 border-blue-100' },
-    'gestante': { label: 'Gestante', icon: <Baby size={12} />, color: 'text-pink-600 bg-pink-50 border-pink-100' },
-    'autista': { label: 'TEA', icon: <Heart size={12} />, color: 'text-teal-600 bg-teal-50 border-teal-100' },
-    'pcd': { label: 'PCD', icon: <Accessibility size={12} />, color: 'text-purple-600 bg-purple-50 border-purple-100' },
+    'idoso': { label: 'Idoso', icon: <Users size={14} />, color: 'text-amber-600 bg-amber-50 border-amber-100' },
+    'cadeirante': { label: 'Cadeirante', icon: <Accessibility size={14} />, color: 'text-blue-600 bg-blue-50 border-blue-100' },
+    'gestante': { label: 'Gestante', icon: <Baby size={14} />, color: 'text-pink-600 bg-pink-50 border-pink-100' },
+    'autista': { label: 'TEA', icon: <Heart size={14} />, color: 'text-teal-600 bg-teal-50 border-teal-100' },
+    'pcd': { label: 'PCD', icon: <Accessibility size={14} />, color: 'text-purple-600 bg-purple-50 border-purple-100' },
 };
 
-const SearchableSelect = ({ label, options, value, onChange, placeholder, disabled }) => {
+// Componente SearchableSelect Melhorado
+const SearchableSelect = ({ label, options, value, onChange, placeholder, disabled, icon: Icon }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
@@ -62,33 +104,32 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
     
     return (
         <div className="relative w-full" ref={containerRef}>
-            {label && <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">{label}</label>}
-            <div className="relative">
+            {label && <label className="block text-xs font-black text-slate-500 uppercase mb-1.5 tracking-widest">{label}</label>}
+            <div className="relative group">
+                {Icon && <Icon className="absolute left-3 top-3 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />}
                 <input 
                     type="text" disabled={disabled}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 pr-8 outline-none focus:border-blue-500 text-sm dark:text-white disabled:bg-slate-100 h-9 font-semibold" 
+                    className={`w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white disabled:opacity-50 disabled:cursor-not-allowed font-bold transition-all ${Icon ? 'pl-10' : 'pl-3'}`} 
                     value={query} 
                     onFocus={() => !disabled && setIsOpen(true)}
                     onChange={e => { setQuery(e.target.value); setIsOpen(true); }} 
                     placeholder={placeholder} autoComplete="off"
                 />
-                <div className="absolute right-2 top-2.5 text-slate-400">
-                    {value && !disabled ? 
-                        <button onClick={(e) => { e.stopPropagation(); onChange(''); setQuery(''); }}><X size={14}/></button> :
-                        <ChevronDown size={14} className={isOpen ? 'rotate-180' : ''}/>
-                    }
+                <div className="absolute right-3 top-3.5 text-slate-400 pointer-events-none">
+                    <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
                 </div>
             </div>
             {isOpen && !disabled && (
-                <ul className="absolute z-[150] w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg shadow-xl max-h-48 overflow-auto mt-1 text-sm">
+                <ul className="absolute z-[150] w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl shadow-2xl max-h-60 overflow-auto mt-1 text-sm animate-in fade-in zoom-in-95 duration-100">
                     {filtered.length > 0 ? filtered.map(opt => (
-                        <li key={opt.id} onMouseDown={() => { onChange(opt.id); setQuery(opt.label); setIsOpen(false); }} className={`p-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 flex justify-between items-center ${String(value) === String(opt.id) ? 'text-blue-600 font-bold' : ''}`}>
+                        <li key={opt.id} onMouseDown={() => { onChange(opt.id); setQuery(opt.label); setIsOpen(false); }} className={`p-3 cursor-pointer border-b border-slate-50 dark:border-slate-700 last:border-0 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex justify-between items-center transition-colors ${String(value) === String(opt.id) ? 'bg-blue-50 text-blue-700 font-black' : 'text-slate-600 dark:text-slate-300'}`}>
                             <div className="flex items-center gap-2 truncate">
-                                {opt.prioridade && PRIORIDADES[opt.prioridade] && <span className={PRIORIDADES[opt.prioridade].color.split(' ')[1] + " p-0.5 rounded"}>{PRIORIDADES[opt.prioridade].icon}</span>}
+                                {opt.prioridade && PRIORIDADES[opt.prioridade] && <span className={PRIORIDADES[opt.prioridade].color.split(' ')[1] + " p-1 rounded"}>{PRIORIDADES[opt.prioridade].icon}</span>}
                                 {opt.label}
                             </div>
+                            {String(value) === String(opt.id) && <Check size={16}/>}
                         </li>
-                    )) : <li className="p-2 text-slate-400 text-center">Nada encontrado.</li>}
+                    )) : <li className="p-4 text-slate-400 text-center text-xs font-bold uppercase">Nenhum resultado</li>}
                 </ul>
             )}
         </div>
@@ -300,7 +341,6 @@ export default function MarcarConsulta() {
       }
   };
 
-  // --- FUNÇÕES DE CADASTRO DE PACIENTE ---
   const handlePacienteChange = (e) => { 
       let { name, value } = e.target; 
       if (name === 'cpf') value = value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').slice(0, 14);
@@ -337,52 +377,77 @@ export default function MarcarConsulta() {
   return (
     <Layout>
       <style>{calendarStyles}</style>
-      <div className="max-w-[1920px] h-[calc(100vh-100px)] flex flex-col px-4">
+      <div className="max-w-[1920px] pb-20">
         
-        {/* CABEÇALHO SUPER COMPACTO */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-3 shrink-0">
-            <h1 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Marcar Consulta</h1>
-            <div className="flex gap-3 w-full md:w-auto">
-                <div className="w-64"><SearchableSelect options={profissionais} value={profissionalId} onChange={setProfissionalId} placeholder="MÉDICO..." /></div>
-                <div className="w-48"><SearchableSelect options={especialidades} value={especialidadeId} onChange={setEspecialidadeId} placeholder="ESPECIALIDADE..." disabled={!profissionalId} /></div>
+        {/* CABEÇALHO */}
+        <div className="mb-8">
+            <h1 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-3">
+                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20"><CalendarIcon size={28}/></div>
+                Marcar Consulta
+            </h1>
+            <p className="text-slate-500 font-medium text-sm mt-2 ml-1">Selecione o profissional e a data desejada.</p>
+        </div>
+
+        {/* CARD DE FILTROS */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 mb-8">
+            <div className="flex flex-col md:flex-row gap-6 items-center">
+                <div className="flex items-center gap-2 text-slate-400 font-black uppercase text-xs tracking-widest min-w-fit">
+                    <Filter size={16}/> Filtros
+                </div>
+                <div className="flex-1 w-full"><SearchableSelect icon={User} options={profissionais} value={profissionalId} onChange={setProfissionalId} placeholder="SELECIONE O PROFISSIONAL..." /></div>
+                <div className="flex-1 w-full"><SearchableSelect icon={Stethoscope} options={especialidades} value={especialidadeId} onChange={setEspecialidadeId} placeholder="ESPECIALIDADE..." disabled={!profissionalId} /></div>
             </div>
         </div>
 
-        {!profissionalId ? (
-            <div className="flex-1 bg-slate-100 dark:bg-slate-900/50 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center">
-                <span className="text-sm font-bold text-slate-400 uppercase">Selecione um profissional acima</span>
-            </div>
-        ) : (
-            <div className="flex-1 flex flex-col md:flex-row gap-3 overflow-hidden">
-                {/* COLUNA ESQUERDA: CALENDÁRIO */}
-                <div className="w-full md:w-64 flex flex-col gap-3 shrink-0">
-                    <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                        <Calendar onChange={(d) => { setDateValue(d); setDataApi(getLocalISODate(d)); }} value={dateValue} locale="pt-BR" tileClassName={getTileClassName}/>
-                    </div>
-                    {/* LEGENDA CORRIGIDA (2x2) */}
-                    <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex-1">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Legenda</h4>
-                        <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600 dark:text-slate-300">
-                            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-green-200 border border-green-400"></div><span>Disponível</span></div>
-                            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-orange-200 border border-orange-400"></div><span>Bloqueio</span></div>
-                            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-purple-200 border border-purple-400"></div><span>Feriado</span></div>
-                            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded bg-red-200 border border-red-400"></div><span>Cheio</span></div>
-                        </div>
+        {/* GRID PRINCIPAL: 40% Calendar - 60% Slots */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* COLUNA ESQUERDA: CALENDÁRIO (MAIOR) */}
+            <div className="lg:col-span-5 space-y-6">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-lg shadow-blue-500/5 border border-slate-100 dark:border-slate-700 overflow-hidden">
+                    <Calendar onChange={(d) => { setDateValue(d); setDataApi(getLocalISODate(d)); }} value={dateValue} locale="pt-BR" tileClassName={getTileClassName}/>
+                </div>
+                
+                {/* LEGENDA (GRANDE E CLARA) */}
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-[24px] border border-slate-200 dark:border-slate-700">
+                    <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 mb-4">Legenda de Disponibilidade</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-lg bg-green-200 border-2 border-green-500"></div><span className="font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">Livre</span></div>
+                        <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-lg bg-orange-200 border-2 border-orange-500"></div><span className="font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">Bloqueio</span></div>
+                        <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-lg bg-purple-200 border-2 border-purple-500"></div><span className="font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">Feriado</span></div>
+                        <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-lg bg-red-200 border-2 border-red-500"></div><span className="font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">Lotado</span></div>
                     </div>
                 </div>
+            </div>
 
-                {/* COLUNA DIREITA: LISTA DE VAGAS */}
-                <div className="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
-                    <div className="p-3 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
-                        <h3 className="font-black text-base dark:text-white uppercase text-slate-700">{dateValue.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</h3>
-                        <button onClick={() => { setTipoModal('encaixe'); setAgendamentoIdEditar(null); setPacienteId(''); setConvenioId(''); setValorSelecionado(''); setModalOpen(true); }} className="bg-amber-500 hover:bg-amber-600 text-white font-black py-1.5 px-3 rounded-lg text-[10px] uppercase flex items-center gap-1 shadow-sm"><Plus size={14}/> Extra</button>
+            {/* COLUNA DIREITA: VAGAS */}
+            <div className="lg:col-span-7">
+                <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col min-h-[600px]">
+                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-[32px]">
+                        <div>
+                            <h3 className="font-black text-xl text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                <CalendarDays className="text-blue-500"/>
+                                {dateValue.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                            </h3>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                {loadingAgenda ? 'Buscando...' : `${vagasDoDia.length} Horários Listados`}
+                            </p>
+                        </div>
+                        <button onClick={() => { setTipoModal('encaixe'); setAgendamentoIdEditar(null); setPacienteId(''); setConvenioId(''); setValorSelecionado(''); setModalOpen(true); }} className="bg-amber-500 hover:bg-amber-600 text-white font-black py-3 px-6 rounded-xl text-xs uppercase flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-all">
+                            <Plus size={16}/> Encaixe Extra
+                        </button>
                     </div>
                     
-                    <div className="flex-1 overflow-y-auto p-3">
-                        {loadingAgenda ? (
-                            <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={32}/></div>
+                    <div className="flex-1 p-6 bg-slate-50 dark:bg-slate-900/20 rounded-b-[32px]">
+                        {!profissionalId ? (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                <User size={64} className="mb-4 text-slate-300"/>
+                                <span className="font-black uppercase tracking-widest text-sm">Selecione um profissional</span>
+                            </div>
+                        ) : loadingAgenda ? (
+                            <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48}/></div>
                         ) : vagasDoDia.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {vagasDoDia.map((slot, idx) => {
                                     const isPast = isDateInPast(dateValue);
                                     const isExpirado = isPast || (dateValue.toDateString() === new Date().toDateString() && slot.hora < new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}));
@@ -396,34 +461,41 @@ export default function MarcarConsulta() {
                                                 setConvenioId(slot.convenio_regra_id || ''); setPacienteId(''); setTipoModal('normal'); setModalOpen(true); 
                                             }
                                         }} 
-                                        className={`relative group p-2 rounded-lg border flex gap-2 items-center transition-all ${
-                                            slot.ocupado ? 'bg-white border-blue-200 dark:bg-slate-900 dark:border-slate-700' : 
-                                            isLocked || isExpirado ? 'bg-slate-50 opacity-40 cursor-not-allowed border-slate-100' : 
-                                            'bg-white border-green-200 hover:border-green-500 cursor-pointer'
+                                        className={`relative group p-4 rounded-2xl border-2 flex flex-col justify-between h-28 transition-all shadow-sm hover:shadow-md ${
+                                            slot.ocupado ? 'bg-white border-blue-100 dark:bg-slate-800 dark:border-slate-700' : 
+                                            isLocked || isExpirado ? 'bg-slate-100 opacity-50 cursor-not-allowed border-transparent' : 
+                                            'bg-white border-green-100 hover:border-green-500 cursor-pointer hover:-translate-y-1'
                                         }`}>
-                                            <div className={`font-black text-xs w-10 h-8 flex items-center justify-center rounded-md ${slot.ocupado ? 'bg-slate-100 text-slate-600' : 'bg-green-50 text-green-700'}`}>{slot.hora}</div>
+                                            <div className="flex justify-between items-start">
+                                                <div className={`font-black text-2xl ${slot.ocupado ? 'text-slate-700 dark:text-slate-300' : 'text-slate-800 dark:text-white group-hover:text-green-600'}`}>{slot.hora}</div>
+                                                {slot.ocupado ? (
+                                                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                                ) : (
+                                                    <div className={`w-3 h-3 rounded-full ${isLocked ? 'bg-orange-400' : 'bg-green-500'}`}></div>
+                                                )}
+                                            </div>
                                             
-                                            <div className="flex-1 min-w-0 overflow-hidden">
+                                            <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-end">
                                                 {slot.ocupado ? (
                                                     <div className="flex flex-col">
-                                                        <div className="font-bold text-xs text-slate-800 dark:text-white truncate uppercase">{slot.paciente}</div>
-                                                        <div className="flex items-center gap-1 mt-0.5">
-                                                            <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 rounded truncate max-w-[80px]">{slot.convenio_nome || 'PARTICULAR'}</span>
-                                                            {pInfo && <span className={`${pInfo.color} px-1 rounded text-[9px]`} title={pInfo.label}>{pInfo.icon}</span>}
+                                                        <div className="font-bold text-[10px] text-slate-500 uppercase truncate">{slot.paciente}</div>
+                                                        <div className="flex items-center gap-1 mt-1">
+                                                            <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded truncate max-w-[80px]">{slot.convenio_nome || 'PARTICULAR'}</span>
+                                                            {pInfo && <span className={`${pInfo.color} p-0.5 rounded`} title={pInfo.label}>{pInfo.icon}</span>}
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <span className={`text-[10px] font-bold uppercase ${isLocked ? 'text-slate-400' : isExpirado ? 'text-slate-300' : 'text-green-600'}`}>
+                                                    <span className={`text-[10px] font-black uppercase tracking-widest ${isLocked ? 'text-orange-400' : isExpirado ? 'text-slate-400' : 'text-green-600'}`}>
                                                         {isLocked ? 'Trancada' : isExpirado ? 'Expirado' : 'Disponível'}
                                                     </span>
                                                 )}
                                             </div>
 
                                             {slot.ocupado && (
-                                                <div className="absolute right-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded p-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity border border-slate-200">
-                                                    <button onClick={(e) => { e.stopPropagation(); generateAppointmentReceipt(slot); }} className="p-1 hover:bg-slate-100 rounded text-slate-500"><Printer size={12}/></button>
-                                                    <button onClick={(e) => { e.stopPropagation(); setAgendamentoIdEditar(slot.agendamento_id); setHorarioSelecionado(slot.hora); setPacienteId(slot.paciente_id); setConvenioId(slot.convenio_id || ''); setObservacao(slot.observacoes || ''); setValorSelecionado(slot.valor); setModalOpen(true); }} className="p-1 hover:bg-blue-50 rounded text-blue-600"><Pencil size={12}/></button>
-                                                    <button onClick={(e) => handleExcluirAgendamento(e, slot.agendamento_id)} className="p-1 hover:bg-red-50 rounded text-red-500"><Trash2 size={12}/></button>
+                                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={(e) => { e.stopPropagation(); generateAppointmentReceipt(slot); }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 bg-white shadow-sm border"><Printer size={14}/></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setAgendamentoIdEditar(slot.agendamento_id); setHorarioSelecionado(slot.hora); setPacienteId(slot.paciente_id); setConvenioId(slot.convenio_id || ''); setObservacao(slot.observacoes || ''); setValorSelecionado(slot.valor); setModalOpen(true); }} className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 bg-white shadow-sm border"><Pencil size={14}/></button>
+                                                    <button onClick={(e) => handleExcluirAgendamento(e, slot.agendamento_id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500 bg-white shadow-sm border"><Trash2 size={14}/></button>
                                                 </div>
                                             )}
                                         </div>
@@ -432,104 +504,109 @@ export default function MarcarConsulta() {
                             </div>
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60">
-                                <CalendarIcon size={48} className="mb-2"/>
-                                <span className="font-bold uppercase tracking-widest text-xs">Agenda Vazia</span>
+                                <CalendarIcon size={64} className="mb-4"/>
+                                <span className="font-black uppercase tracking-[0.2em] text-sm">Agenda Vazia</span>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
-        )}
+        </div>
 
-        {/* MODAL DE AGENDAMENTO (PRESERVADO WHATSAPP) */}
+        {/* MODAL DE AGENDAMENTO */}
         {modalOpen && (
             <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in zoom-in-95 duration-200">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="bg-blue-600 p-4 text-white flex justify-between items-center">
-                        <h3 className="font-bold uppercase text-sm">{agendamentoIdEditar ? 'Editar' : 'Confirmar'} Agendamento</h3>
-                        <button onClick={() => setModalOpen(false)}><X size={20}/></button>
+                <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
+                        <h3 className="font-black uppercase text-lg tracking-tight flex items-center gap-2">
+                            <CheckCircle2 size={24}/> {agendamentoIdEditar ? 'Editar' : 'Confirmar'} Agendamento
+                        </h3>
+                        <button onClick={() => setModalOpen(false)} className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition-colors"><X size={20}/></button>
                     </div>
-                    <div className="p-5 space-y-4">
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg flex justify-between items-center text-blue-800 dark:text-blue-300 font-bold text-sm">
-                            <span className="flex items-center gap-2"><Clock size={16}/> {horarioSelecionado || encaixeHora}</span>
+                    <div className="p-8 space-y-6">
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl flex justify-between items-center text-blue-800 dark:text-blue-300 font-black text-sm border border-blue-100 dark:border-blue-900/30">
+                            <span className="flex items-center gap-2 uppercase tracking-wide"><Clock size={18}/> {horarioSelecionado || encaixeHora}</span>
                             <span>{dateValue.toLocaleDateString()}</span>
                         </div>
 
                         <div>
-                            <div className="flex justify-between mb-1">
-                                <label className="text-xs font-bold text-slate-500 uppercase">Paciente</label>
-                                <button onClick={() => setModalPacienteOpen(true)} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"><Plus size={12}/> Novo</button>
+                            <div className="flex justify-between mb-2">
+                                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Paciente</label>
+                                <button onClick={() => setModalPacienteOpen(true)} className="text-[10px] font-black text-blue-600 flex items-center gap-1 hover:underline uppercase tracking-widest"><Plus size={12}/> Novo Cadastro</button>
                             </div>
-                            <SearchableSelect options={pacientes} value={pacienteId} onChange={setPacienteId} placeholder="Nome ou CPF..." />
+                            <SearchableSelect options={pacientes} value={pacienteId} onChange={setPacienteId} placeholder="Nome ou CPF..." icon={User}/>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-4">
                             <SearchableSelect label="Convênio" options={convenios} value={convenioId} onChange={setConvenioId} placeholder="Particular" />
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor (R$)</label>
-                                <input type="number" className={inputClass} value={valorSelecionado} onChange={e => setValorSelecionado(e.target.value)} />
+                                <label className="block text-xs font-black text-slate-400 uppercase mb-1.5 tracking-widest">Valor (R$)</label>
+                                <input type="number" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold" value={valorSelecionado} onChange={e => setValorSelecionado(e.target.value)} />
                             </div>
                         </div>
 
                         {tipoModal === 'encaixe' && (
-                            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Hora Encaixe</label><input type="time" className={inputClass} value={encaixeHora} onChange={e => setEncaixeHora(e.target.value)} /></div>
+                            <div><label className="block text-xs font-black text-slate-400 uppercase mb-1.5 tracking-widest">Hora Encaixe</label><input type="time" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold" value={encaixeHora} onChange={e => setEncaixeHora(e.target.value)} /></div>
                         )}
 
-                        <textarea placeholder="Observações..." className={`${inputClass} h-16 resize-none`} value={observacao} onChange={e => setObservacao(e.target.value)}></textarea>
+                        <div>
+                            <label className="block text-xs font-black text-slate-400 uppercase mb-1.5 tracking-widest">Observações</label>
+                            <textarea placeholder="Alguma observação importante?" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium h-24 resize-none" value={observacao} onChange={e => setObservacao(e.target.value)}></textarea>
+                        </div>
 
-                        <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-100">
-                            <input type="checkbox" id="wpp_check" checked={enviarWhatsapp} onChange={e => setEnviarWhatsapp(e.target.checked)} className="rounded text-green-600" />
-                            <label htmlFor="wpp_check" className="text-xs font-bold text-slate-600 flex items-center gap-2 cursor-pointer">
-                                <MessageCircle size={14} className={enviarWhatsapp ? 'text-green-500' : 'text-slate-400'}/> Enviar confirmação via WhatsApp
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                            <input type="checkbox" id="wpp_check" checked={enviarWhatsapp} onChange={e => setEnviarWhatsapp(e.target.checked)} className="w-5 h-5 rounded text-green-600 focus:ring-green-500" />
+                            <label htmlFor="wpp_check" className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2 cursor-pointer uppercase tracking-tight">
+                                <MessageCircle size={16} className={enviarWhatsapp ? 'text-green-500' : 'text-slate-400'}/> Enviar confirmação automática via WhatsApp
                             </label>
                         </div>
 
-                        <button onClick={salvarAgendamento} disabled={loadingSave} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase text-xs shadow-lg flex items-center justify-center gap-2">
-                            {loadingSave ? <Loader2 className="animate-spin" size={14}/> : <Save size={14}/>} Confirmar
+                        <button onClick={salvarAgendamento} disabled={loadingSave} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
+                            {loadingSave ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Confirmar Agendamento
                         </button>
                     </div>
                 </div>
             </div>
         )}
 
-        {/* MODAL PACIENTE COMPLETO E DENSO */}
+        {/* MODAL PACIENTE (MANTIDO ESTRUTURA, MELHORADO ESTILO) */}
         {modalPacienteOpen && (
             <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in zoom-in-95 duration-200">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-200 overflow-hidden max-h-[90vh] overflow-y-auto">
-                    <div className="bg-slate-900 p-4 text-white flex justify-between items-center sticky top-0 z-10">
-                        <h3 className="font-bold text-sm uppercase flex items-center gap-2"><UserPlus size={16}/> Cadastro Completo de Paciente</h3>
-                        <button onClick={() => setModalPacienteOpen(false)}><X size={20}/></button>
+                <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-5xl border border-slate-200 overflow-hidden max-h-[90vh] overflow-y-auto">
+                    <div className="bg-slate-900 p-6 text-white flex justify-between items-center sticky top-0 z-10">
+                        <h3 className="font-black text-sm uppercase flex items-center gap-2 tracking-widest"><UserPlus size={18} className="text-blue-400"/> Cadastro Rápido de Paciente</h3>
+                        <button onClick={() => setModalPacienteOpen(false)} className="hover:bg-white/20 p-2 rounded-full transition-colors"><X size={24}/></button>
                     </div>
-                    <form onSubmit={salvarPacienteCompleto} className="p-6 grid grid-cols-12 gap-3 text-xs">
+                    <form onSubmit={salvarPacienteCompleto} className="p-8 grid grid-cols-12 gap-5 text-xs">
                         
                         {/* DADOS PESSOAIS */}
-                        <div className="col-span-12 font-black text-slate-400 uppercase tracking-widest border-b pb-1 mb-2 mt-1">Identificação</div>
-                        <div className="col-span-6"><label className="font-bold block mb-1">Nome Completo</label><input name="nome" value={novoPaciente.nome} onChange={handlePacienteChange} className={inputClass} required/></div>
-                        <div className="col-span-3"><label className="font-bold block mb-1">CPF</label><input name="cpf" value={novoPaciente.cpf} onChange={handlePacienteChange} className={inputClass} required/></div>
-                        <div className="col-span-3"><label className="font-bold block mb-1">Prioridade</label>
+                        <div className="col-span-12 font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-2 mb-2 mt-1 flex items-center gap-2"><User size={14}/> Identificação</div>
+                        <div className="col-span-6"><label className="font-bold block mb-1 uppercase text-slate-500">Nome Completo</label><input name="nome" value={novoPaciente.nome} onChange={handlePacienteChange} className={inputClass} required/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">CPF</label><input name="cpf" value={novoPaciente.cpf} onChange={handlePacienteChange} className={inputClass} required/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Prioridade</label>
                             <select name="prioridade" value={novoPaciente.prioridade} onChange={handlePacienteChange} className={inputClass}>
                                 <option value="">Nenhuma</option>{Object.entries(PRIORIDADES).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
                             </select>
                         </div>
-                        <div className="col-span-3"><label className="font-bold block mb-1">Nascimento</label><input type="date" name="data_nascimento" value={novoPaciente.data_nascimento} onChange={handlePacienteChange} className={inputClass} required max={hojeIso}/></div>
-                        <div className="col-span-3"><label className="font-bold block mb-1">Sexo</label><select name="sexo" value={novoPaciente.sexo} onChange={handlePacienteChange} className={inputClass}><option value="">Selecione...</option><option value="Feminino">Feminino</option><option value="Masculino">Masculino</option></select></div>
-                        <div className="col-span-3"><label className="font-bold block mb-1">Celular/WhatsApp</label><input name="telefone" value={novoPaciente.telefone} onChange={handlePacienteChange} className={inputClass}/></div>
-                        <div className="col-span-3"><label className="font-bold block mb-1">Nome da Mãe</label><input name="nome_mae" value={novoPaciente.nome_mae} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Nascimento</label><input type="date" name="data_nascimento" value={novoPaciente.data_nascimento} onChange={handlePacienteChange} className={inputClass} required max={hojeIso}/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Sexo</label><select name="sexo" value={novoPaciente.sexo} onChange={handlePacienteChange} className={inputClass}><option value="">Selecione...</option><option value="Feminino">Feminino</option><option value="Masculino">Masculino</option></select></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Celular</label><input name="telefone" value={novoPaciente.telefone} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Nome da Mãe</label><input name="nome_mae" value={novoPaciente.nome_mae} onChange={handlePacienteChange} className={inputClass}/></div>
 
                         {/* ENDEREÇO */}
-                        <div className="col-span-12 font-black text-slate-400 uppercase tracking-widest border-b pb-1 mb-2 mt-4">Endereço</div>
-                        <div className="col-span-2"><label className="font-bold block mb-1">CEP</label><input name="cep" value={novoPaciente.cep} onChange={handlePacienteChange} onBlur={buscarCep} className={inputClass}/>{loadingCep && <span className="text-[10px] text-blue-500">Buscando...</span>}</div>
-                        <div className="col-span-5"><label className="font-bold block mb-1">Logradouro</label><input name="logradouro" value={novoPaciente.logradouro} onChange={handlePacienteChange} className={inputClass}/></div>
-                        <div className="col-span-2"><label className="font-bold block mb-1">Número</label><input id="numero_paciente_modal" name="numero" value={novoPaciente.numero} onChange={handlePacienteChange} className={inputClass}/></div>
-                        <div className="col-span-3"><label className="font-bold block mb-1">Complemento</label><input name="complemento" value={novoPaciente.complemento} onChange={handlePacienteChange} className={inputClass}/></div>
-                        <div className="col-span-4"><label className="font-bold block mb-1">Bairro</label><input name="bairro" value={novoPaciente.bairro} onChange={handlePacienteChange} className={inputClass}/></div>
-                        <div className="col-span-4"><label className="font-bold block mb-1">Cidade</label><input name="city" value={novoPaciente.city} onChange={handlePacienteChange} className={inputClass}/></div>
-                        <div className="col-span-2"><label className="font-bold block mb-1">UF</label><input name="estado" value={novoPaciente.estado} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-12 font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-2 mb-2 mt-6 flex items-center gap-2"><MapPin size={14}/> Endereço</div>
+                        <div className="col-span-2"><label className="font-bold block mb-1 uppercase text-slate-500">CEP</label><input name="cep" value={novoPaciente.cep} onChange={handlePacienteChange} onBlur={buscarCep} className={inputClass}/>{loadingCep && <span className="text-[10px] text-blue-500 font-bold animate-pulse">Buscando...</span>}</div>
+                        <div className="col-span-5"><label className="font-bold block mb-1 uppercase text-slate-500">Logradouro</label><input name="logradouro" value={novoPaciente.logradouro} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-2"><label className="font-bold block mb-1 uppercase text-slate-500">Número</label><input id="numero_paciente_modal" name="numero" value={novoPaciente.numero} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Complemento</label><input name="complemento" value={novoPaciente.complemento} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-4"><label className="font-bold block mb-1 uppercase text-slate-500">Bairro</label><input name="bairro" value={novoPaciente.bairro} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-4"><label className="font-bold block mb-1 uppercase text-slate-500">Cidade</label><input name="city" value={novoPaciente.city} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-2"><label className="font-bold block mb-1 uppercase text-slate-500">UF</label><input name="estado" value={novoPaciente.estado} onChange={handlePacienteChange} className={inputClass}/></div>
 
-                        <div className="col-span-12 pt-4 border-t flex justify-end gap-2 mt-2">
-                            <button type="button" onClick={() => setModalPacienteOpen(false)} className="px-6 py-2.5 rounded-lg bg-slate-100 font-bold text-xs text-slate-600 hover:bg-slate-200">Cancelar</button>
-                            <button type="submit" disabled={loadingPaciente} className="px-8 py-2.5 rounded-lg bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 flex items-center gap-2">
-                                {loadingPaciente ? <Loader2 className="animate-spin" size={14}/> : <Check size={14}/>} Salvar Cadastro
+                        <div className="col-span-12 pt-6 border-t dark:border-slate-700 flex justify-end gap-4 mt-4">
+                            <button type="button" onClick={() => setModalPacienteOpen(false)} className="px-8 py-3 rounded-xl bg-slate-100 font-black uppercase tracking-widest text-xs text-slate-500 hover:bg-slate-200 transition-colors">Cancelar</button>
+                            <button type="submit" disabled={loadingPaciente} className="px-10 py-3 rounded-xl bg-blue-600 text-white font-black uppercase tracking-widest text-xs hover:bg-blue-700 flex items-center gap-2 shadow-xl shadow-blue-500/20 active:scale-95 transition-all">
+                                {loadingPaciente ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Salvar Cadastro
                             </button>
                         </div>
                     </form>
