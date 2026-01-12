@@ -47,7 +47,7 @@ export const generateConflictReport = (pacientes, motivoBloqueio) => {
     doc.text("DATA / HORA", marginLeft + 2, y);
     doc.text("MÉDICO RESPONSÁVEL", marginLeft + 35, y);
     doc.text("PACIENTE / IDENTIFICAÇÃO", marginLeft + 85, y);
-    doc.text("CONTATO PRINCIPAL", marginLeft + 155, y);
+    doc.text("CONTATO", marginLeft + 155, y);
 
     y += 8;
 

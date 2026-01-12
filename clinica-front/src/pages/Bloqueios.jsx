@@ -83,7 +83,6 @@ export default function Bloqueios() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        // Segurança: Bloqueio não pode ser no passado
         if (!editingId && form.data_inicio < hojeIso) {
             return notify.warning("Não é possível criar um bloqueio retroativo.");
         }
@@ -308,7 +307,8 @@ export default function Bloqueios() {
                                                 <div className="text-[10px] text-slate-400 font-medium mt-1 italic line-clamp-1">{b.observacao || "Sem nota pública"}</div>
                                             </td>
                                             <td className="px-6 py-6 text-right">
-                                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {/* CORREÇÃO: Botões sempre visíveis, removido opacity-0 */}
+                                                <div className="flex justify-end gap-2">
                                                     <button onClick={()=>baixarRelatorioAfetados(b)} className="p-2 bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl text-slate-500 hover:text-blue-600 hover:shadow-lg transition-all" title="Gerar PDF de Conflitos">
                                                         <FileText size={18}/>
                                                     </button>
@@ -388,10 +388,10 @@ export default function Bloqueios() {
                                 <div className="space-y-3">
                                     {listaAfetados.map(ag => (
                                         <div key={ag.id} onClick={() => {
-                                                if (selecionados.includes(ag.id)) setSelecionados(selecionados.filter(id => id !== ag.id));
-                                                else setSelecionados([...selecionados, ag.id]);
-                                            }}
-                                            className={`flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${selecionados.includes(ag.id) ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/30' : 'bg-slate-50 dark:bg-slate-900 border-transparent opacity-60'}`}
+                                            if (selecionados.includes(ag.id)) setSelecionados(selecionados.filter(id => id !== ag.id));
+                                            else setSelecionados([...selecionados, ag.id]);
+                                        }}
+                                        className={`flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${selecionados.includes(ag.id) ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/30' : 'bg-slate-50 dark:bg-slate-900 border-transparent opacity-60'}`}
                                         >
                                             <div className={selecionados.includes(ag.id) ? "text-blue-600" : "text-slate-300"}>
                                                 {selecionados.includes(ag.id) ? <CheckSquare size={20}/> : <Square size={20}/>}

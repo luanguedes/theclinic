@@ -53,15 +53,20 @@ export default function Recepcao() {
     const [loadingPaciente, setLoadingPaciente] = useState(false);
     const [activePriorityMenu, setActivePriorityMenu] = useState(null);
 
+    // Atualiza o relógio a cada minuto para recalcular a espera
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 60000);
         return () => clearInterval(timer);
     }, []);
 
+    // --- CARREGAMENTO DE DADOS AUXILIARES (CORRIGIDO) ---
     useEffect(() => {
         if(api) {
             api.get('profissionais/').then(res => setProfissionais(res.data.results || res.data)).catch(() => {});
-            api.get('configuracoes/especialidades/').then(res => setEspecialidades(res.data.results || res.data)).catch(() => {});
+            
+            // CORREÇÃO: Removido 'configuracoes/' do caminho
+            api.get('especialidades/?nopage=true').then(res => setEspecialidades(res.data.results || res.data)).catch(() => {});
+            
             api.get('configuracoes/convenios/').then(res => setConvenios(res.data.results || res.data)).catch(() => {});
         }
     }, [api]);
@@ -86,11 +91,16 @@ export default function Recepcao() {
 
     const calcularEspera = (horaChegada) => {
         if (!horaChegada) return 0;
-        const [h, m] = horaChegada.split(':');
         const chegada = new Date();
-        chegada.setHours(h, m, 0);
+        const [h, m] = horaChegada.split(':');
+        chegada.setHours(h, m, 0, 0); 
+        
+        if (chegada > now) return 0;
+
         const diffMs = now - chegada;
-        return Math.max(0, Math.floor(diffMs / 60000));
+        const minutos = Math.floor(diffMs / 60000);
+        
+        return Math.max(0, minutos);
     };
 
     const isCadastroIncompleto = (item) => {
@@ -124,12 +134,10 @@ export default function Recepcao() {
 
     const handleSetPriority = async (pacienteId, tipo) => {
         try {
-            // Atualização Otimista
             setAgendamentos(prev => prev.map(ag => 
                 ag.paciente === pacienteId ? { ...ag, paciente_prioridade: tipo } : ag
             ));
-            setActivePriorityMenu(null); 
-
+            setActivePriorityMenu(null);
             await api.patch(`pacientes/${pacienteId}/`, { prioridade: tipo });
             notify.success("Prioridade atualizada.");
         } catch (e) { 
@@ -179,12 +187,9 @@ export default function Recepcao() {
         }
     };
 
-    // --- CORREÇÃO 1: CARREGAR DADOS NO MODAL ---
     const abrirCheckin = (item) => {
         setSelectedItem(item);
         
-        // Tenta pegar o ID da especialidade de várias formas possíveis
-        // Se vier o nome da especialidade (item.nome_especialidade), procuramos o ID na lista
         let specId = item.especialidade || item.especialidade_id || '';
         
         if (!specId && item.nome_especialidade) {
@@ -197,7 +202,7 @@ export default function Recepcao() {
             forma_pagamento: item.fatura_forma_pagamento || 'dinheiro', 
             pago: item.fatura_pago || false,
             profissional: item.profissional || '', 
-            especialidade: specId, // Aqui usamos o ID encontrado
+            especialidade: specId, 
             convenio: item.convenio || '' 
         });
         setModalOpen(true);
@@ -273,7 +278,6 @@ export default function Recepcao() {
                                     const esperaMin = item.status === 'aguardando' ? calcularEspera(item.horario_chegada) : 0;
                                     const incompleto = isCadastroIncompleto(item);
                                     
-                                    // CORREÇÃO 2: Verificação robusta da prioridade
                                     const prioridadeKey = item.paciente_prioridade || item.prioridade; 
                                     const pInfo = PRIORIDADES[prioridadeKey];
 
@@ -305,16 +309,13 @@ export default function Recepcao() {
                                                         </button>
                                                     )}
                                                     
-                                                    {/* ÍCONE DE PRIORIDADE VISÍVEL */}
                                                     {pInfo && (
                                                         <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase ${pInfo.color} shadow-sm`}>
                                                             {pInfo.icon} {pInfo.label}
                                                         </div>
                                                     )}
                                                     
-                                                    {/* ESTRELA DE PRIORIDADE (CORRIGIDA) */}
                                                     <div className="relative">
-                                                        {/* Removido opacity-0 e alterada a cor padrão para slate-300 (visível) */}
                                                         <button onClick={() => setActivePriorityMenu(activePriorityMenu === item.id ? null : item.id)} className={`p-1 rounded-full transition-all ${prioridadeKey ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}>
                                                             <Star size={16} fill={prioridadeKey ? "currentColor" : "none"}/>
                                                         </button>
@@ -374,7 +375,6 @@ export default function Recepcao() {
                                     <div className="flex items-center gap-3">
                                         <h3 className="text-2xl font-black uppercase tracking-tighter">Confirmação de Recepção</h3>
                                         
-                                        {/* ÍCONE DE PRIORIDADE NO TOPO */}
                                         {(selectedItem.paciente_prioridade || selectedItem.prioridade) && 
                                          PRIORIDADES[selectedItem.paciente_prioridade || selectedItem.prioridade] && (
                                             <div className="bg-white text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-lg border-2 border-white/20">
@@ -388,7 +388,6 @@ export default function Recepcao() {
                             </div>
                             
                             <div className="p-8 space-y-8">
-                                {/* SEÇÃO 1: DADOS DO ATENDIMENTO (EDITÁVEIS) */}
                                 <div>
                                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-2">
                                         <Stethoscope size={14}/> Dados do Atendimento
@@ -433,7 +432,6 @@ export default function Recepcao() {
                                     </div>
                                 </div>
 
-                                {/* SEÇÃO 2: FINANCEIRO */}
                                 <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
                                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                         <DollarSign size={14}/> Financeiro da Consulta
@@ -454,7 +452,6 @@ export default function Recepcao() {
                                         </div>
                                     </div>
                                     
-                                    {/* STATUS DE PAGAMENTO (SWITCH) */}
                                     <div 
                                         onClick={() => setFormCheckin(prev => ({ ...prev, pago: !prev.pago }))}
                                         className={`cursor-pointer p-4 rounded-xl border flex items-center justify-between transition-all ${formCheckin.pago ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}
@@ -484,7 +481,6 @@ export default function Recepcao() {
                     </div>
                 )}
 
-                {/* MODAL DE EDIÇÃO DE PACIENTE (Mantido do código anterior) */}
                 {modalPacienteOpen && pacienteParaEditar && (
                     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in duration-300">
                         <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-4xl my-10 overflow-hidden border border-white/10">
