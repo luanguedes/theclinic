@@ -5,6 +5,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser 
 from datetime import timedelta, date
 from django.utils import timezone
+from django.conf import settings
+import requests
 
 # Imports dos Models
 from .models import Convenio, DadosClinica, ConfiguracaoSistema
@@ -171,3 +173,86 @@ class ConfiguracaoSistemaView(APIView):
                 {'error': 'Falha interna ao processar lembretes.', 'detalhe': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+def _parse_evolution_state(payload):
+    state = None
+    if isinstance(payload, dict):
+        for key in ['state', 'status', 'connectionStatus', 'connection_state']:
+            if isinstance(payload.get(key), str):
+                state = payload[key]
+                break
+        if not state and isinstance(payload.get('instance'), dict):
+            for key in ['state', 'status', 'connectionStatus', 'connection_state']:
+                if isinstance(payload['instance'].get(key), str):
+                    state = payload['instance'][key]
+                    break
+
+    connected = None
+    if isinstance(payload, dict) and 'connected' in payload:
+        connected = bool(payload['connected'])
+
+    if state:
+        normalized = state.lower()
+        if normalized in ['open', 'connected', 'online', 'ready']:
+            connected = True if connected is None else connected
+        if normalized in ['close', 'closed', 'disconnected', 'offline', 'error']:
+            connected = False if connected is None else connected
+
+    return connected, state or 'desconhecido'
+
+
+class WhatsAppStatusView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        base_url = getattr(settings, 'EVOLUTION_API_URL', None)
+        instance = getattr(settings, 'EVOLUTION_INSTANCE_NAME', None)
+        api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
+
+        if not base_url or not instance:
+            return Response({
+                'connected': None,
+                'state': 'config_incompleta',
+                'error': 'EVOLUTION_API_URL ou EVOLUTION_INSTANCE_NAME não configurados.'
+            })
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["apikey"] = api_key
+
+        endpoints = [
+            f"{base_url}/instance/connectionState/{instance}",
+            f"{base_url}/instance/status/{instance}"
+        ]
+
+        last_error = None
+        for url in endpoints:
+            try:
+                response = requests.get(url, headers=headers, timeout=8)
+            except requests.RequestException as exc:
+                last_error = {'url': url, 'message': str(exc)}
+                continue
+
+            if response.status_code not in [200, 201]:
+                last_error = {'url': url, 'status_code': response.status_code, 'body': response.text}
+                continue
+
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = {'raw': response.text}
+
+            connected, state = _parse_evolution_state(payload)
+            return Response({
+                'connected': connected,
+                'state': state,
+                'source': url,
+                'payload': payload
+            })
+
+        return Response({
+            'connected': None,
+            'state': 'erro',
+            'error': last_error or 'Falha ao consultar o Evolution API.'
+        })

@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ConvenioViewSet, DadosClinicaView, ConfiguracaoSistemaView
+from .views import ConvenioViewSet, DadosClinicaView, ConfiguracaoSistemaView, WhatsAppStatusView
 
 router = DefaultRouter()
 router.register(r'convenios', ConvenioViewSet)
@@ -14,4 +14,5 @@ urlpatterns = [
     
     # --- NOVA ROTA PARA O DISPARO MANUAL ---
     path('sistema/executar_lembretes/', ConfiguracaoSistemaView.as_view(), name='executar-lembretes'),
+    path('sistema/whatsapp_status/', WhatsAppStatusView.as_view(), name='whatsapp-status'),
 ]

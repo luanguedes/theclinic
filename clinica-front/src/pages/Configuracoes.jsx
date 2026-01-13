@@ -15,6 +15,7 @@ export default function Configuracoes() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [runningBot, setRunningBot] = useState(false);
+    const [whatsappStatus, setWhatsappStatus] = useState({ loading: true, connected: null, state: 'carregando', error: null });
 
     // Estado completo com todos os campos do seu sistema
     const [config, setConfig] = useState({
@@ -66,7 +67,10 @@ export default function Configuracoes() {
     }
 
     useEffect(() => {
-        if (api) loadConfig();
+        if (api) {
+            loadConfig();
+            loadWhatsappStatus();
+        }
     }, [api]);
 
     const loadConfig = async () => {
@@ -145,6 +149,27 @@ export default function Configuracoes() {
             notify.error("Erro na execução do robô.");
         } finally {
             setRunningBot(false);
+        }
+    };
+
+    const loadWhatsappStatus = async () => {
+        setWhatsappStatus(prev => ({ ...prev, loading: true }));
+        try {
+            const res = await api.get('configuracoes/sistema/whatsapp_status/');
+            const data = res.data || {};
+            setWhatsappStatus({
+                loading: false,
+                connected: data.connected,
+                state: data.state || 'desconhecido',
+                error: data.error || null
+            });
+        } catch (error) {
+            setWhatsappStatus({
+                loading: false,
+                connected: null,
+                state: 'erro',
+                error: 'Falha ao consultar status do WhatsApp.'
+            });
         }
     };
 
@@ -261,6 +286,34 @@ export default function Configuracoes() {
                                     {/* === ABA AUTOMAÇÃO (MANTIDA COMPLETA) === */}
                                     {activeTab === 'comunicacao' && (
                                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[28px] border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between gap-6">
+                                                <div>
+                                                    <h3 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                                        <Activity size={16}/> Status da Conexão WhatsApp
+                                                    </h3>
+                                                    <div className="mt-3 flex items-center gap-3">
+                                                        <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${whatsappStatus.connected === true ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : whatsappStatus.connected === false ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                                                            {whatsappStatus.loading ? 'Verificando' : whatsappStatus.connected === true ? 'Conectado' : whatsappStatus.connected === false ? 'Desconectado' : 'Indefinido'}
+                                                        </div>
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                            Estado: {whatsappStatus.state || 'desconhecido'}
+                                                        </span>
+                                                    </div>
+                                                    {whatsappStatus.error && (
+                                                        <p className="mt-2 text-[10px] font-bold text-rose-500 uppercase tracking-widest">
+                                                            {whatsappStatus.error}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={loadWhatsappStatus}
+                                                    disabled={whatsappStatus.loading}
+                                                    className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                                >
+                                                    {whatsappStatus.loading ? <Loader2 className="animate-spin" size={14}/> : 'Atualizar'}
+                                                </button>
+                                            </div>
                                             
                                             {/* Master Switch */}
                                             <div className={`p-8 rounded-[32px] border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}>
