@@ -211,9 +211,9 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Agendamento.objects.all()
 
+        # 🔥 QUALQUER ROTA COM PK (detail=True) IGNORA FILTROS DE LISTAGEM
         if self.kwargs.get('pk'):
-        return queryset
-
+            return queryset
 
         queryset = queryset.exclude(status='cancelado')
 
@@ -225,18 +225,21 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
 
         if profissional and profissional not in ['undefined', 'null', '']:
             queryset = queryset.filter(profissional_id=profissional)
+
         if especialidade and especialidade not in ['undefined', 'null', '']:
             queryset = queryset.filter(especialidade_id=especialidade)
-        
+
         if data_filtro and data_filtro not in ['undefined', 'null', '']:
             queryset = queryset.filter(data=data_filtro)
         elif mes_filtro and ano_filtro:
-            queryset = queryset.filter(data__month=mes_filtro, data__year=ano_filtro)
+            queryset = queryset.filter(
+                data__month=mes_filtro,
+                data__year=ano_filtro
+            )
         else:
-            if not self.request.query_params.get('nopage'): 
-                 queryset = queryset.filter(data=date.today())
+            if not self.request.query_params.get('nopage'):
+                queryset = queryset.filter(data=date.today())
 
-        # Ordenação por Status (Prioridade na lista da recepção)
         queryset = queryset.annotate(
             prioridade_status=Case(
                 When(status='agendado', then=Value(1)),
@@ -248,8 +251,9 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                 output_field=IntegerField(),
             )
         ).order_by('prioridade_status', 'horario')
-        
+
         return queryset
+
 
     # --- AÇÃO: REVERTER (AGORA INCLUÍDA) ---
     @action(detail=True, methods=['post'])
