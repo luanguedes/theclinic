@@ -288,6 +288,7 @@ class WhatsAppQRCodeView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
+        debug = request.query_params.get('debug') == '1'
         base_url = getattr(settings, 'EVOLUTION_API_URL', None)
         instance = getattr(settings, 'EVOLUTION_INSTANCE_NAME', None)
         api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
@@ -309,26 +310,32 @@ class WhatsAppQRCodeView(APIView):
         ]
 
         last_error = None
+        attempts = []
         for url in endpoints:
             try:
                 response = requests.get(url, headers=headers, timeout=10)
             except requests.RequestException as exc:
                 last_error = {'url': url, 'message': str(exc)}
+                attempts.append({'url': url, 'error': str(exc)})
                 continue
 
             if response.status_code not in [200, 201]:
                 last_error = {'url': url, 'status_code': response.status_code, 'body': response.text}
+                attempts.append({'url': url, 'status_code': response.status_code, 'body': response.text})
                 continue
 
             content_type = response.headers.get('Content-Type', 'application/json')
             if content_type.startswith('image/'):
                 base64_data = base64.b64encode(response.content).decode('ascii')
                 _, data_uri = _normalize_qr_base64(base64_data, content_type=content_type)
-                return Response({
+                payload = {
                     'base64': base64_data,
                     'data_uri': data_uri,
                     'source': url
-                })
+                }
+                if debug:
+                    payload['attempts'] = attempts
+                return Response(payload)
 
             try:
                 payload = response.json()
@@ -338,16 +345,24 @@ class WhatsAppQRCodeView(APIView):
             qr_value = _extract_qr_payload(payload)
             if not qr_value:
                 last_error = {'url': url, 'message': 'QR code nao encontrado no payload.', 'payload': payload}
+                attempts.append({'url': url, 'message': 'QR code nao encontrado no payload.'})
                 continue
 
             base64_data, data_uri = _normalize_qr_base64(qr_value)
-            return Response({
+            response_payload = {
                 'base64': base64_data,
                 'data_uri': data_uri,
                 'source': url,
                 'payload': payload if isinstance(payload, dict) else None
-            })
+            }
+            if debug:
+                response_payload['attempts'] = attempts
+            return Response(response_payload)
 
-        return Response({
-            'error': last_error or 'Falha ao consultar QR Code no Evolution API.'
-        }, status=status.HTTP_502_BAD_GATEWAY)
+        error_payload = {
+            'error': 'Falha ao consultar QR Code no Evolution API.',
+            'details': last_error
+        }
+        if debug:
+            error_payload['attempts'] = attempts
+        return Response(error_payload, status=status.HTTP_502_BAD_GATEWAY)

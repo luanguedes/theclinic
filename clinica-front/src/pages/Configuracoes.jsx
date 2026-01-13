@@ -191,7 +191,8 @@ export default function Configuracoes() {
             if (!dataUri) throw new Error('QR Code indisponivel.');
             setQrImage(dataUri);
         } catch (error) {
-            const message = error?.response?.data?.error || 'Erro ao carregar QR Code.';
+            const rawMessage = error?.response?.data?.error || 'Erro ao carregar QR Code.';
+            const message = typeof rawMessage === 'string' ? rawMessage : 'Erro ao carregar QR Code.';
             setQrError(message);
             notify.error(message);
         } finally {
