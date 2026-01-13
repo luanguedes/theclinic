@@ -67,7 +67,6 @@ export default function Recepcao() {
     useEffect(() => {
         if(api) {
             api.get('profissionais/').then(res => setProfissionais(res.data.results || res.data)).catch(() => {});
-            api.get('especialidades/?nopage=true').then(res => setEspecialidades(res.data.results || res.data)).catch(() => {});
             api.get('configuracoes/convenios/').then(res => setConvenios(res.data.results || res.data)).catch(() => {});
         }
     }, [api]);
@@ -183,7 +182,7 @@ export default function Recepcao() {
         try {
             // Atualização Otimista
             setAgendamentos(prev => prev.map(ag => 
-                ag.paciente === pacienteId ? { ...ag, paciente_prioridade: tipo } : ag
+                ag.paciente === pacienteId || ag.paciente?.id === pacienteId ? { ...ag, paciente_prioridade: tipo } : ag
             ));
             setActivePriorityMenu(null);
             await api.patch(`pacientes/${pacienteId}/`, { prioridade: tipo });
@@ -209,16 +208,16 @@ export default function Recepcao() {
 
     const abrirCheckin = (item) => {
         setSelectedItem(item);
-        let specId = item.especialidade || item.especialidade_id || '';
-        if (!specId && item.nome_especialidade) {
-            const encontrada = especialidades.find(e => e.nome === item.nome_especialidade);
-            if (encontrada) specId = encontrada.id;
-        }
+
         setFormCheckin({ 
-            valor: item.valor || '', forma_pagamento: item.fatura_forma_pagamento || 'dinheiro', 
-            pago: item.fatura_pago || false, profissional: item.profissional || '', 
-            especialidade: specId, convenio: item.convenio || '' 
+            valor: item.valor || '',
+            forma_pagamento: item.fatura_forma_pagamento || 'dinheiro',
+            pago: item.fatura_pago || false,
+            profissional: item.profissional || '',
+            especialidade: item.especialidade || '',
+            convenio: item.convenio || ''
         });
+
         setModalOpen(true);
     };
 
