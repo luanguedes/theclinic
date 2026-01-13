@@ -58,6 +58,7 @@ class Agendamento(models.Model):
             ('pix', 'Pix'),
             ('cartao_credito', 'Cartão de Crédito'),
             ('cartao_debito', 'Cartão de Débito'),
+            ('convenio', 'Convênio'),
         ],
         null=True,
         blank=True
