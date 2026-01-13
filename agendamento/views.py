@@ -342,7 +342,6 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                     Fatura.objects.update_or_create(
                         agendamento=agendamento,
                         defaults={
-                            'paciente': agendamento.paciente,
                             'valor': valor_cobrado,
                             'forma_pagamento': forma_pagamento,
                             'pago': ja_pagou,
