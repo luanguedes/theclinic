@@ -65,6 +65,7 @@ def _disparar_api(telefone, mensagem):
     """Função única para realizar o POST na Evolution API"""
     try:
         url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
+        logger.info(f"📤 Disparo WhatsApp -> url={url} numero={telefone}")
         
         payload = {
             "number": telefone,
@@ -85,6 +86,7 @@ def _disparar_api(telefone, mensagem):
             return True
         else:
             logger.error(f"⚠️ Erro API Evolution ({response.status_code}): {response.text}")
+            logger.error(f"↩︎ Response headers: {response.headers}")
             return False
             
     except requests.exceptions.RequestException as e:
