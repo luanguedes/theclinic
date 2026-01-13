@@ -329,6 +329,17 @@ export default function MarcarConsulta() {
     finally { setLoadingSave(false); }
   };
 
+  const handlePrintAgendamento = async (e, slot) => {
+    e.stopPropagation();
+    if (!slot?.agendamento_id) return;
+    try {
+        const { data } = await api.get(`agendamento/${slot.agendamento_id}/`);
+        generateAppointmentReceipt(data);
+    } catch (error) {
+        notify.error("Erro ao gerar a guia.");
+    }
+  };
+
   const handleExcluirAgendamento = async (e, id) => {
       e.stopPropagation();
       const confirmed = await confirmDialog("Excluir este agendamento?", "Exclusão", "Sim, Excluir", "Cancelar", "danger");
@@ -493,7 +504,7 @@ export default function MarcarConsulta() {
 
                                             {slot.ocupado && (
                                                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={(e) => { e.stopPropagation(); generateAppointmentReceipt(slot); }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 bg-white shadow-sm border"><Printer size={14}/></button>
+                                                    <button onClick={(e) => handlePrintAgendamento(e, slot)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 bg-white shadow-sm border"><Printer size={14}/></button>
                                                     <button onClick={(e) => { e.stopPropagation(); setAgendamentoIdEditar(slot.agendamento_id); setHorarioSelecionado(slot.hora); setPacienteId(slot.paciente_id); setConvenioId(slot.convenio_id || ''); setObservacao(slot.observacoes || ''); setValorSelecionado(slot.valor); setModalOpen(true); }} className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 bg-white shadow-sm border"><Pencil size={14}/></button>
                                                     <button onClick={(e) => handleExcluirAgendamento(e, slot.agendamento_id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500 bg-white shadow-sm border"><Trash2 size={14}/></button>
                                                 </div>
