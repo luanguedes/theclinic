@@ -21,7 +21,7 @@ export const generateAppointmentReceipt = async (agendamento) => {
     const doc = new jsPDF({
         orientation: 'p',
         unit: 'mm',
-        format: [148, 210]
+        format: 'a4'
     });
 
     const pdfData = agendamento.detalhes_pdf || {};
@@ -30,6 +30,7 @@ export const generateAppointmentReceipt = async (agendamento) => {
     const textColor = [30, 41, 59]; // Slate 800
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
+    const maxHeight = pageHeight / 2;
 
     // Carregamento do Logo
     let logoData = null;
@@ -38,9 +39,9 @@ export const generateAppointmentReceipt = async (agendamento) => {
     }
 
     // --- CONFIGURACOES GERAIS ---
-    const marginLeft = 10;
+    const marginLeft = 15;
     const contentWidth = pageWidth - (marginLeft * 2);
-    let y = 12;
+    let y = 10;
 
     // --- CONSTRUCAO DO ENDERECO COMPLETO ---
     const enderecoCompletoClinica = [
@@ -59,13 +60,13 @@ export const generateAppointmentReceipt = async (agendamento) => {
         
         // Nome da Clinica
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(14);
+        doc.setFontSize(13);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text(pdfData.clinica_nome?.toUpperCase() || "THECLINIC", marginLeft + 22, y + 6);
         
         // Endereco no Cabecalho
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
+        doc.setFontSize(6.5);
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
         
         const enderecoLines = doc.splitTextToSize(enderecoCompletoClinica, contentWidth - 24);
@@ -76,142 +77,142 @@ export const generateAppointmentReceipt = async (agendamento) => {
         }
 
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(7);
+        doc.setFontSize(6.5);
         doc.text("COMPROVANTE DE AGENDAMENTO", marginLeft + 22, y + 18);
     } else {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(16);
+        doc.setFontSize(14);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text(pdfData.clinica_nome?.toUpperCase() || "THECLINIC", marginLeft, y);
-        y += 6;
+        y += 5;
 
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
+        doc.setFontSize(6.5);
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
         
         const enderecoLines = doc.splitTextToSize(enderecoCompletoClinica, contentWidth);
         doc.text(enderecoLines, marginLeft, y);
-        y += (enderecoLines.length * 3);
+        y += (enderecoLines.length * 2.5);
         
         if (telefoneClinica) {
             doc.text(`Tel: ${telefoneClinica}`, marginLeft, y);
-            y += 4;
+            y += 3;
         }
         
-        y += 2;
+        y += 1.5;
     }
 
-    y = logoData ? 34 : y + 6;
+    y = logoData ? 30 : y + 4;
 
     // ================= 2. CARD DE DATA E HORA =================
     doc.setFillColor(248, 250, 252); // bg-slate-50
-    doc.roundedRect(marginLeft, y, contentWidth, 18, 2, 2, 'F');
+    doc.roundedRect(marginLeft, y, contentWidth, 16, 2, 2, 'F');
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-    doc.text("DETALHES DA CONSULTA", marginLeft + 4, y + 6);
+    doc.text("DETALHES DA CONSULTA", marginLeft + 4, y + 5);
 
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     const dataFormatada = new Date(agendamento.data).toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    doc.text(`${dataFormatada.toUpperCase()}`, marginLeft + 4, y + 13);
+    doc.text(`${dataFormatada.toUpperCase()}`, marginLeft + 4, y + 11);
     
-    doc.setFontSize(10);
-    doc.text(`HORARIO: ${agendamento.horario.substring(0, 5)}`, marginLeft + contentWidth - 4, y + 13, { align: 'right' });
+    doc.setFontSize(9);
+    doc.text(`HORARIO: ${agendamento.horario.substring(0, 5)}`, marginLeft + contentWidth - 4, y + 11, { align: 'right' });
 
-    y += 26;
+    y += 22;
 
     // ================= 3. INFORMACOES DO PACIENTE =================
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
     doc.text("INFORMACOES DO PACIENTE", marginLeft, y);
     
     doc.setDrawColor(226, 232, 240); // Slate 200
     doc.line(marginLeft, y + 2, marginLeft + contentWidth, y + 2);
-    y += 7;
+    y += 6;
 
     const drawField = (label, value, xPos, yPos) => {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(6);
+        doc.setFontSize(5.8);
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
         doc.text(label.toUpperCase(), xPos, yPos);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
+        doc.setFontSize(7.5);
         doc.setTextColor(textColor[0], textColor[1], textColor[2]);
         doc.text(value || "-", xPos, yPos + 4);
     };
 
     drawField("Nome Completo", agendamento.nome_paciente, marginLeft, y);
-    y += 9;
+    y += 7;
     drawField("CPF / Documento", pdfData.paciente_cpf, marginLeft, y);
     drawField("Data de Nascimento", pdfData.paciente_nascimento ? new Date(pdfData.paciente_nascimento).toLocaleDateString('pt-BR') : "-", marginLeft + 70, y);
-    y += 9;
+    y += 7;
     drawField("Telefone de Contato", agendamento.telefone_paciente, marginLeft, y);
     drawField("Sexo", pdfData.paciente_sexo, marginLeft + 70, y);
-    y += 9;
+    y += 7;
     drawField("Endereco", `${pdfData.paciente_endereco || ''}, ${pdfData.paciente_cidade || ''}`, marginLeft, y);
 
-    y += 14;
+    y += 10;
 
     // ================= 4. INFORMACOES MEDICAS =================
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
     doc.text("CORPO CLINICO E LOCAL", marginLeft, y);
     doc.line(marginLeft, y + 2, marginLeft + contentWidth, y + 2);
-    y += 7;
+    y += 6;
 
     drawField("Profissional", agendamento.nome_profissional, marginLeft, y);
-    y += 9;
+    y += 7;
     drawField("Especialidade", agendamento.nome_especialidade, marginLeft, y);
     drawField("Registro Profissional", pdfData.profissional_registro, marginLeft + 70, y);
-    y += 9;
+    y += 7;
     drawField("Convenio / Plano", agendamento.nome_convenio || "PARTICULAR", marginLeft, y);
     drawField("Unidade de Atendimento", pdfData.clinica_nome || "CONSULTORIO CENTRAL", marginLeft + 70, y);
-    y += 9;
+    y += 7;
     
     const enderecoLinesBody = doc.splitTextToSize(enderecoCompletoClinica, contentWidth);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6);
+    doc.setFontSize(5.8);
     doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
     doc.text("ENDERECO DA UNIDADE", marginLeft, y);
     
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
     doc.text(enderecoLinesBody, marginLeft, y + 4);
 
     // ================= 5. OBSERVACOES E ORIENTACOES =================
-    y += 16;
+    y += 9;
     const orientacoesLines = doc.splitTextToSize([
         "- Chegue com 15 minutos de antecedencia para triagem e recepcao.",
         "- Apresente documento original com foto e carteirinha do convenio (se aplicavel).",
         "- Em caso de desistencia, avise com no minimo 24 horas de antecedencia.",
         `- Observacoes: ${agendamento.observacoes || "Nenhuma observacao especifica para este atendimento."}`
     ].join("\n"), contentWidth - 8);
-    const orientacoesHeight = Math.max(20, (orientacoesLines.length * 3) + 8);
+    const orientacoesHeight = Math.max(16, (orientacoesLines.length * 2.6) + 6);
 
     doc.setFillColor(241, 245, 249); // bg-slate-100
     doc.roundedRect(marginLeft, y, contentWidth, orientacoesHeight, 2, 2, 'F');
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6);
+    doc.setFontSize(5.8);
     doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-    doc.text("ORIENTACOES IMPORTANTES", marginLeft + 4, y + 6);
+    doc.text("ORIENTACOES IMPORTANTES", marginLeft + 4, y + 5);
     
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
+    doc.setFontSize(6.2);
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-    doc.text(orientacoesLines, marginLeft + 4, y + 11);
+    doc.text(orientacoesLines, marginLeft + 4, y + 9.5);
 
     // ================= 6. RODAPE =================
-    const footerY = pageHeight - 10;
+    const footerY = maxHeight - 6;
     doc.setDrawColor(226, 232, 240);
     doc.line(marginLeft, footerY - 5, marginLeft + contentWidth, footerY - 5);
     
-    doc.setFontSize(6);
+    doc.setFontSize(5.8);
     doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
     doc.text(`Este documento e um comprovante oficial de agendamento gerado pelo sistema TheClinic.`, marginLeft, footerY);
     doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, marginLeft, footerY + 3);
