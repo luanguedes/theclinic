@@ -211,8 +211,9 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Agendamento.objects.all()
 
-        if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
-            return queryset
+        if self.kwargs.get('pk'):
+        return queryset
+
 
         queryset = queryset.exclude(status='cancelado')
 
