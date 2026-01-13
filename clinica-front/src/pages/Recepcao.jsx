@@ -4,7 +4,7 @@ import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
     Search, User, CheckCircle2, Clock, DollarSign, X, Save, Loader2, 
-    Pencil, UserX, RotateCcw, Star, Accessibility, Baby, Users, Heart, 
+    Pencil, UserX, RotateCcw, Flag, Accessibility, Baby, Users, Heart, 
     AlertTriangle, UserCog, MapPin, Stethoscope, ShieldCheck, Check
 } from 'lucide-react';
 
@@ -303,13 +303,14 @@ export default function Recepcao() {
                                     <th className="px-8 py-5">🕒 Hora / Espera</th>
                                     <th className="px-8 py-5">📍 Status</th>
                                     <th className="px-8 py-5">👤 Paciente</th>
+                                    <th className="px-8 py-5">⭐ Prioridade</th>
                                     <th className="px-8 py-5">🩺 Profissional</th>
                                     <th className="px-8 py-5 text-right">Ações</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                                 {loading ? (
-                                    <tr><td colSpan="5" className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40}/></td></tr>
+                                    <tr><td colSpan="6" className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40}/></td></tr>
                                 ) : itensFiltrados.map((item) => {
                                     const atrasado = verificarAtraso(item.horario, item.status);
                                     const esperaMin = item.status === 'aguardando' ? calcularEspera(item.horario_chegada) : 0;
@@ -346,18 +347,22 @@ export default function Recepcao() {
                                                             <AlertTriangle size={16} className="text-rose-500 animate-bounce" />
                                                         </button>
                                                     )}
-                                                    
+                                                </div>
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">
+                                                    {calcularIdade(item.detalhes_pdf?.paciente_nascimento)} ANOS • {item.nome_convenio || 'PARTICULAR'}
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <div className="flex items-center gap-3">
                                                     {pInfo && (
-                                                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase ${pInfo.color} shadow-sm`}>
+                                                        <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase ${pInfo.color} shadow-sm`}>
                                                             {pInfo.icon} {pInfo.label}
                                                         </div>
                                                     )}
-                                                    
                                                     <div className="relative">
-                                                        <button onClick={() => setActivePriorityMenu(activePriorityMenu === item.id ? null : item.id)} className={`p-1 rounded-full transition-all ${prioridadeKey ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}>
-                                                            <Star size={16} fill={prioridadeKey ? "currentColor" : "none"}/>
+                                                        <button onClick={() => setActivePriorityMenu(activePriorityMenu === item.id ? null : item.id)} className={`p-1.5 rounded-full transition-all ${prioridadeKey ? 'text-amber-600' : 'text-slate-300 hover:text-amber-500'}`}>
+                                                            <Flag size={14} fill={prioridadeKey ? "currentColor" : "none"}/>
                                                         </button>
-                                                        
                                                         {activePriorityMenu === item.id && (
                                                             <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-2xl z-[150] p-2 animate-in fade-in zoom-in-95">
                                                                 {Object.entries(PRIORIDADES).map(([key, info]) => (
@@ -367,9 +372,6 @@ export default function Recepcao() {
                                                             </div>
                                                         )}
                                                     </div>
-                                                </div>
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">
-                                                    {calcularIdade(item.detalhes_pdf?.paciente_nascimento)} ANOS • {item.nome_convenio || 'PARTICULAR'}
                                                 </div>
                                             </td>
                                             <td className="px-8 py-6"><div className="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase">{item.nome_profissional}</div><div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">{item.nome_especialidade}</div></td>
@@ -403,8 +405,8 @@ export default function Recepcao() {
                 {/* MODAL CHECKIN (Cabeçalho com Prioridade Corrigido) */}
                 {modalOpen && selectedItem && (
                     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden border border-white/10">
-                             <div className="bg-green-600 p-8 text-white relative overflow-hidden">
+                        <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-xl overflow-hidden border border-white/10">
+                             <div className="bg-green-600 p-6 text-white relative overflow-hidden">
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="bg-white/20 p-3 rounded-2xl shadow-inner"><CheckCircle2 size={32}/></div>
@@ -425,7 +427,7 @@ export default function Recepcao() {
                                     <p className="text-green-100 text-sm font-bold uppercase tracking-widest mt-1 opacity-80">{selectedItem.nome_paciente}</p>
                                 </div>
                             </div>
-                            <div className="p-8 space-y-8">
+                            <div className="p-6 space-y-8">
                                 <div>
                                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-2"><Stethoscope size={14}/> Dados do Atendimento</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
