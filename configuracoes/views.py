@@ -305,6 +305,7 @@ class WhatsAppQRCodeView(APIView):
         endpoints = [
             f"{base_url}/instance/qrcode/{instance}",
             f"{base_url}/instance/qr/{instance}",
+            f"{base_url}/instance/connect/{instance}",
             f"{base_url}/instance/qrcode/{instance}/image",
             f"{base_url}/instance/qr/{instance}/image"
         ]
