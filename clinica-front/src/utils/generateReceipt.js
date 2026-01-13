@@ -66,7 +66,7 @@ export const generateAppointmentReceipt = async (agendamento) => {
         
         // Endereco no Cabecalho
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
+        doc.setFontSize(10);
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
         
         const enderecoLines = doc.splitTextToSize(enderecoCompletoClinica, contentWidth - 10);
@@ -87,12 +87,12 @@ export const generateAppointmentReceipt = async (agendamento) => {
         y += 5;
 
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
+        doc.setFontSize(10);
         doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
         
         const enderecoLines = doc.splitTextToSize(enderecoCompletoClinica, contentWidth);
         doc.text(enderecoLines, marginLeft, y);
-        y += (enderecoLines.length * 3.5);
+        y += (enderecoLines.length * 4.5);
         
         if (telefoneClinica) {
             doc.text(`Tel: ${telefoneClinica}`, marginLeft, y);
@@ -119,7 +119,7 @@ export const generateAppointmentReceipt = async (agendamento) => {
     doc.text(`${dataFormatada.toUpperCase()}`, marginLeft + 4, y + 13);
     
     doc.setFontSize(11);
-    doc.text(`HORARIO: ${agendamento.horario.substring(0, 5)}`, marginLeft + contentWidth - 4, y + 13, { align: 'right' });
+    doc.text(`HORARIO: ${agendamento.horario.substring(0, 5)}`, marginLeft + contentWidth - 35, y + 13);
 
     y += 24;
 
