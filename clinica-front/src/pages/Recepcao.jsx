@@ -76,15 +76,6 @@ export default function Recepcao() {
         if(api) carregarAgenda();
     }, [api, dataFiltro, profissionalFiltro]);
 
-    // Sempre que trocar o profissional no check-in, limpa a especialidade
-    useEffect(() => {
-        setFormCheckin(prev => ({
-            ...prev,
-            especialidade: ''
-        }));
-    }, [formCheckin.profissional]);
-
-
     const carregarAgenda = async () => {
         setLoading(true);
         try {
@@ -213,8 +204,8 @@ export default function Recepcao() {
             valor: item.valor || '',
             forma_pagamento: item.fatura_forma_pagamento || 'dinheiro',
             pago: item.fatura_pago || false,
-            profissional: item.profissional || '',
-            especialidade: item.especialidade || '',
+            profissional: item.profissional?.id || item.profissional || '',
+            especialidade: item.especialidade?.id || item.especialidade || '',
             convenio: item.convenio || ''
         });
 
@@ -438,7 +429,7 @@ export default function Recepcao() {
                                 <div>
                                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-2"><Stethoscope size={14}/> Dados do Atendimento</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <div><label className={labelClass}>Profissional</label><select value={formCheckin.profissional} onChange={e => setFormCheckin({...formCheckin, profissional: e.target.value})} className={inputClass}><option value="">Selecione...</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
+                                        <div><label className={labelClass}>Profissional</label><select value={formCheckin.profissional} onChange={e => setFormCheckin(prev => ({...prev, profissional: e.target.value, especialidade: ''}))} className={inputClass}><option value="">Selecione...</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
                                         <select
                                             value={formCheckin.especialidade}
                                             onChange={e => setFormCheckin({...formCheckin, especialidade: e.target.value})}
