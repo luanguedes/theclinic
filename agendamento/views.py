@@ -7,15 +7,16 @@ from django.db.models import Case, When, Value, IntegerField
 from django.db import transaction 
 from datetime import date
 from django.conf import settings
-from django.utils import timezone  # Importante para horario_chegada
+from django.utils import timezone
 import requests
 import threading
 
-# Imports locais
+# Imports locais (Ajuste se o caminho for diferente)
 from .models import BloqueioAgenda, Agendamento
 from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
 from .whatsapp import enviar_mensagem_agendamento, enviar_mensagem_cancelamento_bloqueio
 
+# --- VIEWSET DE BLOQUEIOS ---
 class BloqueioAgendaViewSet(viewsets.ModelViewSet):
     queryset = BloqueioAgenda.objects.all().order_by('-data_inicio')
     serializer_class = BloqueioAgendaSerializer
@@ -139,6 +140,7 @@ class BloqueioAgendaViewSet(viewsets.ModelViewSet):
         return Response({'status': 'Processado', 'enviados': enviados, 'erros': erros})
 
 
+# --- VIEWSET DE AGENDAMENTOS (AQUI ESTAVAM FALTANDO AS ROTAS) ---
 class AgendamentoViewSet(viewsets.ModelViewSet):
     queryset = Agendamento.objects.all()
     serializer_class = AgendamentoSerializer
@@ -154,6 +156,7 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         instance.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    # Rota de teste do WhatsApp
     @action(detail=False, methods=['get'], permission_classes=[AllowAny]) 
     def testar_conexao(self, request):
         numero_destino = request.query_params.get('numero')
@@ -199,10 +202,12 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
                 "url_tentada": url
             }, status=500)
 
+    # Envia WhatsApp ao criar (em background)
     def perform_create(self, serializer):
         agendamento = serializer.save()
         threading.Thread(target=enviar_mensagem_agendamento, args=(agendamento,)).start()
 
+    # Filtros Avançados
     def get_queryset(self):
         queryset = Agendamento.objects.all()
 
@@ -230,6 +235,7 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
             if not self.request.query_params.get('nopage'): 
                  queryset = queryset.filter(data=date.today())
 
+        # Ordenação por Status (Prioridade na lista da recepção)
         queryset = queryset.annotate(
             prioridade_status=Case(
                 When(status='agendado', then=Value(1)),
@@ -244,24 +250,29 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    # --- AÇÃO: REVERTER (AGORA INCLUÍDA) ---
     @action(detail=True, methods=['post'])
     def reverter_chegada(self, request, pk=None):
         agendamento = self.get_object()
-        if agendamento.status not in ['aguardando', 'faltou']:
-            return Response({"error": "Apenas 'Aguardando' ou 'Faltou' podem ser revertidos."}, status=400)
+        # Permite reverter de 'aguardando', 'faltou' e até 'finalizado' se foi erro
+        if agendamento.status not in ['aguardando', 'faltou', 'finalizado', 'em_atendimento']:
+            return Response({"error": "Status inválido para reversão."}, status=400)
+            
         try:
             with transaction.atomic():
                 agendamento.status = 'agendado'
-                agendamento.horario_chegada = None # Limpa horário de chegada
+                agendamento.horario_chegada = None # Reseta o timer de espera
                 agendamento.save()
                 
-                # Se tinha fatura e não foi paga, remove para evitar lixo
-                if hasattr(agendamento, 'fatura') and not agendamento.fatura.pago:
-                    agendamento.fatura.delete()
+                # Opcional: Se quiser limpar a fatura se não foi paga, descomente:
+                # if hasattr(agendamento, 'fatura') and not agendamento.fatura.pago:
+                #     agendamento.fatura.delete()
+                    
             return Response({'status': 'Revertido para Agendado!'}, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+    # --- AÇÃO: MARCAR FALTA (AGORA INCLUÍDA) ---
     @action(detail=True, methods=['post'])
     def marcar_falta(self, request, pk=None):
         agendamento = self.get_object()
@@ -271,6 +282,7 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         agendamento.save()
         return Response({'status': 'Falta registrada.'}, status=200)
 
+    # --- AÇÃO: CONFIRMAR CHEGADA (CHECK-IN COMPLETO) ---
     @action(detail=True, methods=['post'])
     def confirmar_chegada(self, request, pk=None):
         agendamento = self.get_object()
@@ -278,30 +290,37 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         if agendamento.data > date.today():
              return Response({"error": "Não é possível confirmar data futura."}, status=400)
 
-        # Dados vindos do Frontend (Modal de Check-in)
+        # Dados vindos do Frontend
         data = request.data
         forma_pagamento = data.get('forma_pagamento', 'pendente')
         valor_req = data.get('valor')
-        valor_cobrado = valor_req if (valor_req != '' and valor_req is not None) else agendamento.valor
         ja_pagou = data.get('pago', False)
+        
+        # Garante que valor_cobrado seja um número válido
+        valor_cobrado = agendamento.valor
+        if valor_req is not None and str(valor_req).strip() != '':
+            valor_cobrado = valor_req
 
         from django.apps import apps
         Fatura = apps.get_model('financeiro', 'Fatura')
 
         try:
             with transaction.atomic():
-                # 1. ATUALIZA DADOS DO AGENDAMENTO (Se mudou na recepção)
+                # 1. ATUALIZA DADOS SE MUDOU NA RECEPÇÃO (MÉDICO/ESPECIALIDADE)
                 if 'profissional' in data and data['profissional']:
                     agendamento.profissional_id = data['profissional']
+                
                 if 'especialidade' in data and data['especialidade']:
                     agendamento.especialidade_id = data['especialidade']
+                
                 if 'convenio' in data:
-                    agendamento.convenio_id = data['convenio'] or None
+                    val_conv = data['convenio']
+                    agendamento.convenio_id = val_conv if val_conv not in ['', 'null', None] else None
                 
                 # 2. DEFINE STATUS E HORA
                 if agendamento.status == 'agendado': 
                     agendamento.status = 'aguardando'
-                    agendamento.horario_chegada = timezone.now().time() # Marca a hora que chegou
+                    agendamento.horario_chegada = timezone.now().time()
                 
                 agendamento.valor = valor_cobrado
                 agendamento.save()
