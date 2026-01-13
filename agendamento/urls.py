@@ -1,13 +1,19 @@
-from django.urls import include
+from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import AgendamentoViewSet, BloqueioAgendaViewSet
 
 router = DefaultRouter()
 
-# /api/agendamentos/
-router.register(r'agendamentos', AgendamentoViewSet, basename='agendamento')
+# /api/agendamento/
+router.register(r'agendamento', AgendamentoViewSet, basename='agendamento')
 
-# /api/bloqueios/
-router.register(r'bloqueios', BloqueioAgendaViewSet, basename='bloqueios')
+# /api/agendamento/bloqueios/
+router.register(
+    r'agendamento/bloqueios',
+    BloqueioAgendaViewSet,
+    basename='agendamento-bloqueios'
+)
 
-urlpatterns = router.urls
+urlpatterns = [
+    path('', include(router.urls)),
+]
