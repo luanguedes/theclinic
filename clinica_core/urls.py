@@ -16,11 +16,16 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/me/', MeView.as_view(), name='me'),
 
-    # --- MÓDULOS ESPECÍFICOS (Devem vir PRIMEIRO) ---
+    # --- MÓDULOS ESPECÍFICOS ---
     path('api/pacientes/', include('pacientes.urls')),
     path('api/operadores/', include('usuarios.urls')), 
     path('api/configuracoes/', include('configuracoes.urls')),
-    path('api/agendamento/', include('agendamento.urls')), 
+    
+    # --- CORREÇÃO CRÍTICA AQUI ---
+    # Mudamos de 'api/agendamento/' para 'api/'
+    # Como o router interno já tem r'agendamento', a URL final fica correta: /api/agendamento/
+    path('api/', include('agendamento.urls')), 
+    
     path('api/agendas/', include('agendas.urls')),
 
     # --- MÓDULO DE PROFISSIONAIS E ESPECIALIDADES (POR ÚLTIMO) ---
