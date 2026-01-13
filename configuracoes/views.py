@@ -7,6 +7,7 @@ from datetime import timedelta, date
 from django.utils import timezone
 from django.conf import settings
 import requests
+import base64
 
 # Imports dos Models
 from .models import Convenio, DadosClinica, ConfiguracaoSistema
@@ -202,6 +203,31 @@ def _parse_evolution_state(payload):
     return connected, state or 'desconhecido'
 
 
+def _extract_qr_payload(payload):
+    if isinstance(payload, dict):
+        for key in ['base64', 'qrcode', 'qr', 'qrCode', 'qr_code', 'image', 'data']:
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+            if isinstance(value, dict):
+                for nested_key in ['base64', 'qrcode', 'qr', 'qrCode', 'qr_code', 'image', 'data']:
+                    nested_value = value.get(nested_key)
+                    if isinstance(nested_value, str) and nested_value.strip():
+                        return nested_value
+    if isinstance(payload, str) and payload.strip():
+        return payload
+    return None
+
+
+def _normalize_qr_base64(qr_value, content_type="image/png"):
+    value = qr_value.strip()
+    if value.startswith("data:"):
+        parts = value.split(",", 1)
+        base64_data = parts[1] if len(parts) == 2 else value
+        return base64_data, value
+    return value, f"data:{content_type};base64,{value}"
+
+
 class WhatsAppStatusView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
@@ -256,3 +282,72 @@ class WhatsAppStatusView(APIView):
             'state': 'erro',
             'error': last_error or 'Falha ao consultar o Evolution API.'
         })
+
+
+class WhatsAppQRCodeView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        base_url = getattr(settings, 'EVOLUTION_API_URL', None)
+        instance = getattr(settings, 'EVOLUTION_INSTANCE_NAME', None)
+        api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
+
+        if not base_url or not instance:
+            return Response({
+                'error': 'EVOLUTION_API_URL ou EVOLUTION_INSTANCE_NAME não configurados.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["apikey"] = api_key
+
+        endpoints = [
+            f"{base_url}/instance/qrcode/{instance}",
+            f"{base_url}/instance/qr/{instance}",
+            f"{base_url}/instance/qrcode/{instance}/image",
+            f"{base_url}/instance/qr/{instance}/image"
+        ]
+
+        last_error = None
+        for url in endpoints:
+            try:
+                response = requests.get(url, headers=headers, timeout=10)
+            except requests.RequestException as exc:
+                last_error = {'url': url, 'message': str(exc)}
+                continue
+
+            if response.status_code not in [200, 201]:
+                last_error = {'url': url, 'status_code': response.status_code, 'body': response.text}
+                continue
+
+            content_type = response.headers.get('Content-Type', 'application/json')
+            if content_type.startswith('image/'):
+                base64_data = base64.b64encode(response.content).decode('ascii')
+                _, data_uri = _normalize_qr_base64(base64_data, content_type=content_type)
+                return Response({
+                    'base64': base64_data,
+                    'data_uri': data_uri,
+                    'source': url
+                })
+
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = response.text
+
+            qr_value = _extract_qr_payload(payload)
+            if not qr_value:
+                last_error = {'url': url, 'message': 'QR code nao encontrado no payload.', 'payload': payload}
+                continue
+
+            base64_data, data_uri = _normalize_qr_base64(qr_value)
+            return Response({
+                'base64': base64_data,
+                'data_uri': data_uri,
+                'source': url,
+                'payload': payload if isinstance(payload, dict) else None
+            })
+
+        return Response({
+            'error': last_error or 'Falha ao consultar QR Code no Evolution API.'
+        }, status=status.HTTP_502_BAD_GATEWAY)

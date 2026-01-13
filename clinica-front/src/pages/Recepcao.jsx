@@ -521,6 +521,7 @@ export default function Recepcao() {
                         </div>
                     </div>
                 )}
+
             </div>
         </Layout>
     );

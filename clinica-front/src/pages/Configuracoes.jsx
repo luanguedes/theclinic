@@ -4,7 +4,7 @@ import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
     Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, 
-    Lock, MessageCircle, Play, Clock, Bell, Activity, Check
+    Lock, MessageCircle, Play, Clock, Bell, Activity, Check, QrCode, X
 } from 'lucide-react';
 
 export default function Configuracoes() {
@@ -16,6 +16,10 @@ export default function Configuracoes() {
     const [saving, setSaving] = useState(false);
     const [runningBot, setRunningBot] = useState(false);
     const [whatsappStatus, setWhatsappStatus] = useState({ loading: true, connected: null, state: 'carregando', error: null });
+    const [qrModalOpen, setQrModalOpen] = useState(false);
+    const [qrLoading, setQrLoading] = useState(false);
+    const [qrImage, setQrImage] = useState('');
+    const [qrError, setQrError] = useState('');
 
     // Estado completo com todos os campos do seu sistema
     const [config, setConfig] = useState({
@@ -72,6 +76,10 @@ export default function Configuracoes() {
             loadWhatsappStatus();
         }
     }, [api]);
+
+    useEffect(() => {
+        if (qrModalOpen) carregarQrCode();
+    }, [qrModalOpen]);
 
     const loadConfig = async () => {
         setLoading(true);
@@ -170,6 +178,24 @@ export default function Configuracoes() {
                 state: 'erro',
                 error: 'Falha ao consultar status do WhatsApp.'
             });
+        }
+    };
+
+    const carregarQrCode = async () => {
+        setQrLoading(true);
+        setQrError('');
+        setQrImage('');
+        try {
+            const res = await api.get('configuracoes/sistema/whatsapp_qrcode/');
+            const dataUri = res.data?.data_uri;
+            if (!dataUri) throw new Error('QR Code indisponivel.');
+            setQrImage(dataUri);
+        } catch (error) {
+            const message = error?.response?.data?.error || 'Erro ao carregar QR Code.';
+            setQrError(message);
+            notify.error(message);
+        } finally {
+            setQrLoading(false);
         }
     };
 
@@ -305,14 +331,23 @@ export default function Configuracoes() {
                                                         </p>
                                                     )}
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={loadWhatsappStatus}
-                                                    disabled={whatsappStatus.loading}
-                                                    className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                                >
-                                                    {whatsappStatus.loading ? <Loader2 className="animate-spin" size={14}/> : 'Atualizar'}
-                                                </button>
+                                                <div className="flex items-center gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setQrModalOpen(true)}
+                                                        className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all flex items-center gap-2"
+                                                    >
+                                                        <QrCode size={14}/> Conectar
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={loadWhatsappStatus}
+                                                        disabled={whatsappStatus.loading}
+                                                        className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    >
+                                                        {whatsappStatus.loading ? <Loader2 className="animate-spin" size={14}/> : 'Atualizar'}
+                                                    </button>
+                                                </div>
                                             </div>
                                             
                                             {/* Master Switch */}
@@ -414,6 +449,44 @@ export default function Configuracoes() {
                     </div>
                 </div>
             </div>
+
+            {/* MODAL QR CODE WHATSAPP */}
+            {qrModalOpen && (
+                <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden border border-white/10">
+                        <div className="bg-slate-900 p-6 text-white flex items-center justify-between">
+                            <h3 className="font-black uppercase tracking-widest text-sm flex items-center gap-2">
+                                <QrCode size={18} className="text-green-400"/> Conectar WhatsApp
+                            </h3>
+                            <button onClick={() => setQrModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={24}/></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Escaneie o QR Code no WhatsApp</p>
+                                <button
+                                    onClick={carregarQrCode}
+                                    disabled={qrLoading}
+                                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all"
+                                >
+                                    {qrLoading ? 'Carregando...' : 'Atualizar'}
+                                </button>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700 p-6 flex items-center justify-center min-h-[280px]">
+                                {qrLoading ? (
+                                    <Loader2 className="animate-spin text-blue-600" size={40}/>
+                                ) : qrImage ? (
+                                    <img src={qrImage} alt="QR Code WhatsApp" className="w-64 h-64 object-contain"/>
+                                ) : (
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{qrError || 'QR Code indisponivel.'}</p>
+                                )}
+                            </div>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+                                Abra o WhatsApp no celular, acesse &quot;Dispositivos conectados&quot; e escaneie o QR Code.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </Layout>
     );
 }
