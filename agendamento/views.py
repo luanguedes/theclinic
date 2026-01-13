@@ -291,59 +291,71 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def confirmar_chegada(self, request, pk=None):
         agendamento = self.get_object()
-        
-        if agendamento.data > date.today():
-             return Response({"error": "Não é possível confirmar data futura."}, status=400)
 
-        # Dados vindos do Frontend
+        if agendamento.data > date.today():
+            return Response(
+                {"error": "Não é possível confirmar data futura."},
+                status=400
+            )
+
         data = request.data
         forma_pagamento = data.get('forma_pagamento', 'pendente')
         valor_req = data.get('valor')
         ja_pagou = data.get('pago', False)
-        
-        # Garante que valor_cobrado seja um número válido
+
+        from decimal import Decimal, InvalidOperation
         valor_cobrado = agendamento.valor
-        if valor_req is not None and str(valor_req).strip() != '':
-            valor_cobrado = valor_req
+
+        if valor_req not in [None, '', 'null']:
+            try:
+                valor_cobrado = Decimal(str(valor_req).replace(',', '.'))
+            except InvalidOperation:
+                return Response({"error": "Valor inválido"}, status=400)
 
         from django.apps import apps
-        Fatura = apps.get_model('financeiro', 'Fatura')
+        try:
+            Fatura = apps.get_model('financeiro', 'Fatura')
+        except LookupError:
+            Fatura = None
 
         try:
             with transaction.atomic():
-                # 1. ATUALIZA DADOS SE MUDOU NA RECEPÇÃO (MÉDICO/ESPECIALIDADE)
+
                 if 'profissional' in data and data['profissional']:
                     agendamento.profissional_id = data['profissional']
-                
+
                 if 'especialidade' in data and data['especialidade']:
                     agendamento.especialidade_id = data['especialidade']
-                
+
                 if 'convenio' in data:
                     val_conv = data['convenio']
                     agendamento.convenio_id = val_conv if val_conv not in ['', 'null', None] else None
-                
-                # 2. DEFINE STATUS E HORA
-                if agendamento.status == 'agendado': 
+
+                if agendamento.status == 'agendado':
                     agendamento.status = 'aguardando'
                     agendamento.horario_chegada = timezone.now().time()
-                
+
                 agendamento.valor = valor_cobrado
                 agendamento.save()
 
-                # 3. ATUALIZA/CRIA FATURA
                 if Fatura:
                     Fatura.objects.update_or_create(
                         agendamento=agendamento,
                         defaults={
                             'paciente': agendamento.paciente,
-                            'valor': valor_cobrado, 
+                            'valor': valor_cobrado,
                             'forma_pagamento': forma_pagamento,
-                            'pago': ja_pagou, 
+                            'pago': ja_pagou,
                             'data_pagamento': date.today() if ja_pagou else None,
-                            'data_vencimento': date.today(), 
-                            'desconto': 0.00
+                            'data_vencimento': date.today(),
+                            'desconto': Decimal('0.00')
                         }
                     )
+
             return Response({'status': 'Check-in realizado!'}, status=200)
+
         except Exception as e:
-            return Response({"error": str(e)}, status=500)
+            return Response(
+                {"error": str(e)},
+                status=500
+            )
