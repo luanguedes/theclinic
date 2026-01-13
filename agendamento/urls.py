@@ -4,11 +4,11 @@ from .views import AgendamentoViewSet, BloqueioAgendaViewSet
 
 router = DefaultRouter()
 
-# 1. Registra os Bloqueios
-router.register(r'bloqueios', BloqueioAgendaViewSet, basename='bloqueios') 
+# 1. Registra os Bloqueios (URL final: /api/bloqueios/)
+router.register(r'bloqueios', BloqueioAgendaViewSet, basename='bloqueios')
 
-# 2. Registra o Agendamento COM O PREFIXO CORRETO
-# Antes estava r'' (vazio), agora deve ser r'agendamento'
+# 2. Registra o Agendamento (URL final: /api/agendamento/)
+# O 'r'agendamento' é OBRIGATÓRIO aqui para funcionar com o passo 2 abaixo
 router.register(r'agendamento', AgendamentoViewSet, basename='agendamento')
 
 urlpatterns = [
