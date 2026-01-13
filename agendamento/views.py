@@ -7,9 +7,11 @@ from django.db.models import Case, When, Value, IntegerField
 from django.db import transaction 
 from datetime import date
 from django.conf import settings
+from django.utils import timezone  # Importante para horario_chegada
 import requests
 import threading
 
+# Imports locais
 from .models import BloqueioAgenda, Agendamento
 from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
 from .whatsapp import enviar_mensagem_agendamento, enviar_mensagem_cancelamento_bloqueio
@@ -250,8 +252,12 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 agendamento.status = 'agendado'
+                agendamento.horario_chegada = None # Limpa horário de chegada
                 agendamento.save()
-                if hasattr(agendamento, 'fatura'): agendamento.fatura.delete()
+                
+                # Se tinha fatura e não foi paga, remove para evitar lixo
+                if hasattr(agendamento, 'fatura') and not agendamento.fatura.pago:
+                    agendamento.fatura.delete()
             return Response({'status': 'Revertido para Agendado!'}, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -268,30 +274,50 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def confirmar_chegada(self, request, pk=None):
         agendamento = self.get_object()
+        
         if agendamento.data > date.today():
              return Response({"error": "Não é possível confirmar data futura."}, status=400)
 
-        forma_pagamento = request.data.get('forma_pagamento', 'pendente')
-        valor_req = request.data.get('valor')
+        # Dados vindos do Frontend (Modal de Check-in)
+        data = request.data
+        forma_pagamento = data.get('forma_pagamento', 'pendente')
+        valor_req = data.get('valor')
         valor_cobrado = valor_req if (valor_req != '' and valor_req is not None) else agendamento.valor
-        ja_pagou = request.data.get('pago', False)
+        ja_pagou = data.get('pago', False)
 
         from django.apps import apps
         Fatura = apps.get_model('financeiro', 'Fatura')
 
         try:
             with transaction.atomic():
-                if agendamento.status == 'agendado': agendamento.status = 'aguardando'
+                # 1. ATUALIZA DADOS DO AGENDAMENTO (Se mudou na recepção)
+                if 'profissional' in data and data['profissional']:
+                    agendamento.profissional_id = data['profissional']
+                if 'especialidade' in data and data['especialidade']:
+                    agendamento.especialidade_id = data['especialidade']
+                if 'convenio' in data:
+                    agendamento.convenio_id = data['convenio'] or None
+                
+                # 2. DEFINE STATUS E HORA
+                if agendamento.status == 'agendado': 
+                    agendamento.status = 'aguardando'
+                    agendamento.horario_chegada = timezone.now().time() # Marca a hora que chegou
+                
                 agendamento.valor = valor_cobrado
                 agendamento.save()
 
+                # 3. ATUALIZA/CRIA FATURA
                 if Fatura:
                     Fatura.objects.update_or_create(
                         agendamento=agendamento,
                         defaults={
-                            'valor': valor_cobrado, 'forma_pagamento': forma_pagamento,
-                            'pago': ja_pagou, 'data_pagamento': date.today() if ja_pagou else None,
-                            'data_vencimento': date.today(), 'desconto': 0.00
+                            'paciente': agendamento.paciente,
+                            'valor': valor_cobrado, 
+                            'forma_pagamento': forma_pagamento,
+                            'pago': ja_pagou, 
+                            'data_pagamento': date.today() if ja_pagou else None,
+                            'data_vencimento': date.today(), 
+                            'desconto': 0.00
                         }
                     )
             return Response({'status': 'Check-in realizado!'}, status=200)
