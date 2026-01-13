@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
@@ -76,6 +76,15 @@ export default function Recepcao() {
     useEffect(() => {
         if(api) carregarAgenda();
     }, [api, dataFiltro, profissionalFiltro]);
+
+    // Sempre que trocar o profissional no check-in, limpa a especialidade
+    useEffect(() => {
+        setFormCheckin(prev => ({
+            ...prev,
+            especialidade: ''
+        }));
+    }, [formCheckin.profissional]);
+
 
     const carregarAgenda = async () => {
         setLoading(true);
@@ -252,6 +261,22 @@ export default function Recepcao() {
 
     const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white transition-all font-bold";
     const labelClass = "text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block";
+    // Especialidades vinculadas ao profissional selecionado no check-in
+    const especialidadesFiltradas = useMemo(() => {
+        if (!formCheckin.profissional) return [];
+
+        const profissionalSelecionado = profissionais.find(
+            p => String(p.id) === String(formCheckin.profissional)
+        );
+
+        if (!profissionalSelecionado || !profissionalSelecionado.especialidades_lista) {
+            return [];
+        }
+
+        return profissionalSelecionado.especialidades_lista;
+
+
+}, [formCheckin.profissional, profissionais]);
 
     return (
         <Layout>
@@ -415,7 +440,22 @@ export default function Recepcao() {
                                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-2"><Stethoscope size={14}/> Dados do Atendimento</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         <div><label className={labelClass}>Profissional</label><select value={formCheckin.profissional} onChange={e => setFormCheckin({...formCheckin, profissional: e.target.value})} className={inputClass}><option value="">Selecione...</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
-                                        <div><label className={labelClass}>Especialidade</label><select value={formCheckin.especialidade} onChange={e => setFormCheckin({...formCheckin, especialidade: e.target.value})} className={inputClass}><option value="">Selecione...</option>{especialidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</select></div>
+                                        <select
+                                            value={formCheckin.especialidade}
+                                            onChange={e => setFormCheckin({...formCheckin, especialidade: e.target.value})}
+                                            className={inputClass}
+                                            disabled={!formCheckin.profissional}
+                                        >
+                                            <option value="">
+                                                {formCheckin.profissional ? 'Selecione...' : 'Selecione um profissional primeiro'}
+                                            </option>
+
+                                            {especialidadesFiltradas.map(e => (
+                                                <option key={e.id} value={e.id}>
+                                                    {e.nome}
+                                                </option>
+                                            ))}
+                                        </select>
                                         <div className="md:col-span-2"><label className={labelClass}>Plano / Convênio</label><div className="relative"><ShieldCheck className="absolute left-3 top-3.5 text-slate-400" size={16}/><select value={formCheckin.convenio} onChange={e => setFormCheckin({...formCheckin, convenio: e.target.value})} className={`${inputClass} pl-10`}><option value="">Particular (Sem convênio)</option>{convenios.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div></div>
                                     </div>
                                 </div>

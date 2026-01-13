@@ -9,7 +9,7 @@ router.register(r'bloqueios', BloqueioAgendaViewSet, basename='bloqueios')
 
 # 2. Registra o Agendamento (URL final: /api/agendamento/)
 # O 'r'agendamento' é OBRIGATÓRIO aqui para funcionar com o passo 2 abaixo
-router.register(r'agendamento', AgendamentoViewSet, basename='agendamento')
+router.register(r'', AgendamentoViewSet, basename='agendamento')
 
 urlpatterns = [
     path('', include(router.urls)),
