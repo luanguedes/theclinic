@@ -44,7 +44,7 @@ export default function Bloqueios() {
         setFetching(true);
         try {
             const [resBloq, resProf, resConfig] = await Promise.all([
-                api.get('agendamento/bloqueios/'),
+                api.get('bloqueios/'),
                 api.get('profissionais/'),
                 api.get('configuracoes/sistema/')
             ]);
@@ -90,12 +90,12 @@ export default function Bloqueios() {
         setLoading(true);
         try {
             if (editingId) {
-                await api.put(`agendamento/bloqueios/${editingId}/`, form);
+                await api.put(`bloqueios/${editingId}/`, form);
                 notify.success("Configuração de bloqueio atualizada!");
                 handleCancelEdit();
                 loadData();
             } else {
-                const res = await api.post('agendamento/bloqueios/verificar_conflitos/', form);
+                const res = await api.post('bloqueios/verificar_conflitos/', form);
                 
                 if (res.data.conflito) {
                     setConflictData(res.data);
@@ -103,7 +103,7 @@ export default function Bloqueios() {
                     return; 
                 }
 
-                await api.post('agendamento/bloqueios/', { ...form, acao_conflito: 'manter' });
+                await api.post('bloqueios/', { ...form, acao_conflito: 'manter' });
                 notify.success("Bloqueio aplicado com sucesso!");
                 setForm(formInicial);
                 loadData();
@@ -117,7 +117,7 @@ export default function Bloqueios() {
 
     const resolverConflito = async (acao) => {
         try {
-            const res = await api.post('agendamento/bloqueios/', { ...form, acao_conflito: acao });
+            const res = await api.post('bloqueios/', { ...form, acao_conflito: acao });
             
             if (res.data.afetados && res.data.afetados.length > 0) {
                 setListaAfetados(res.data.afetados);
@@ -136,7 +136,7 @@ export default function Bloqueios() {
 
     const baixarRelatorioAfetados = async (bloqueio) => {
         try {
-            const res = await api.get(`agendamento/bloqueios/${bloqueio.id}/relatorio/`);
+            const res = await api.get(`bloqueios/${bloqueio.id}/relatorio/`);
             const pacientes = res.data;
             if (pacientes.length === 0) {
                 notify.info("Nenhum paciente afetado neste período.");
@@ -157,7 +157,7 @@ export default function Bloqueios() {
 
         if (confirmado) {
             try {
-                await api.delete(`agendamento/bloqueios/${id}/`);
+                await api.delete(`bloqueios/${id}/`);
                 loadData();
                 notify.success("Bloqueio removido.");
             } catch (error) { notify.error("Não foi possível remover o bloqueio."); }
@@ -170,7 +170,7 @@ export default function Bloqueios() {
         if (selecionados.length === 0) return;
         setEnviandoWpp(true);
         try {
-            await api.post('agendamento/bloqueios/notificar_cancelados/', {
+            await api.post('bloqueios/notificar_cancelados/', {
                 agendamentos_ids: selecionados,
                 motivo: motivoSalvo
             });
