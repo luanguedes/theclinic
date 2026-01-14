@@ -18,11 +18,16 @@ export default function TabsBar() {
     }
   };
 
+  const maxSlots = Math.max(1, Math.min(5, tabs.length));
+  const overlap = maxSlots > 4 ? 14 : maxSlots > 3 ? 12 : 8;
+
   return (
-    <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-2">
+    <div className="relative flex items-center w-full max-w-[520px] overflow-hidden">
       {tabs.map((tab, idx) => {
         const Icon = tab.icon;
         const isActive = currentPath === tab.path;
+        const z = 50 + idx;
+        const offset = idx === 0 ? 0 : -overlap * idx;
         return (
           <div
             key={tab.path}
@@ -41,6 +46,7 @@ export default function TabsBar() {
             }`}
             onClick={() => navigate(tab.path)}
             title={tab.title}
+            style={{ marginLeft: offset, zIndex: z }}
           >
             {Icon && <Icon size={14} />}
             <span className="whitespace-nowrap">{tab.title}</span>
@@ -64,7 +70,7 @@ export default function TabsBar() {
         );
       })}
       {tabs.length === 0 && (
-        <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+        <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">
           Nenhuma aba aberta
         </div>
       )}

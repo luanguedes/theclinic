@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
+import { useNotification } from './NotificationContext';
 import { getFlatMenuItems } from '../config/navigation';
 
 const TabsContext = createContext();
@@ -12,11 +13,12 @@ const TAB_DEFS = getFlatMenuItems().map((item) => ({
 }));
 
 const IGNORE_PATHS = ['/', '/trocasenhaobrigatoria', '/dashboard'];
-const MAX_TABS = 6;
+const MAX_TABS = 5;
 
 export function TabsProvider({ children }) {
   const location = useLocation();
   const { user } = useAuth();
+  const { notify } = useNotification();
   const storageKey = user?.username ? `theclinic.tabs.${user.username}` : null;
   const [tabs, setTabs] = useState([]);
 
@@ -34,6 +36,11 @@ export function TabsProvider({ children }) {
       const exists = prev.find((t) => t.path === currentPath);
       if (exists) return prev;
 
+      if (prev.length >= MAX_TABS) {
+        notify?.warning?.("Limite de abas atingido. Feche uma aba para abrir outra.");
+        return prev;
+      }
+
       const next = [...prev, {
         path: currentPath,
         title: currentDef.title,
@@ -41,11 +48,6 @@ export function TabsProvider({ children }) {
         pinned: false
       }];
 
-      if (next.length <= MAX_TABS) return next;
-
-      const idxToRemove = next.findIndex((t) => !t.pinned);
-      if (idxToRemove === -1) return prev;
-      next.splice(idxToRemove, 1);
       return next;
     });
   }, [currentPath, currentDef]);
