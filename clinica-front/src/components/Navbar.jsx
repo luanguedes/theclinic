@@ -1,20 +1,28 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 import { 
   Stethoscope, CalendarDays, Settings, LogOut, 
   ChevronDown, Moon, Sun, Building2, ShieldCheck, 
   Menu, X, User as UserIcon, Bell, LayoutDashboard,
-  Users, Plus, History, ClipboardList, Briefcase, Heart
+  Users, Plus, History, ClipboardList, Briefcase, Heart,
+  MessageCircle, QrCode, Loader2
 } from 'lucide-react';
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, api } = useAuth();
+  const { notify } = useNotification();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
+  const [whatsappStatus, setWhatsappStatus] = useState({ loading: true, connected: null, state: 'carregando', error: null });
+  const [waModalOpen, setWaModalOpen] = useState(false);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrImage, setQrImage] = useState('');
+  const [qrError, setQrError] = useState('');
 
   // --- CORREÇÃO DO TREMOR (MANTIDA) ---
   useEffect(() => {
@@ -27,7 +35,66 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [scrolled]);
 
+  useEffect(() => {
+    if (user?.is_superuser && api) {
+      loadWhatsappStatus();
+    }
+  }, [user?.is_superuser, api]);
+
+  useEffect(() => {
+    if (waModalOpen) {
+      loadWhatsappStatus();
+    }
+  }, [waModalOpen]);
+
   const handleLogout = () => { logout(); navigate('/'); };
+
+  const loadWhatsappStatus = async () => {
+    setWhatsappStatus(prev => ({ ...prev, loading: true }));
+    try {
+      const res = await api.get('configuracoes/sistema/whatsapp_status/');
+      const data = res.data || {};
+      setWhatsappStatus({
+        loading: false,
+        connected: data.connected,
+        state: data.state || 'desconhecido',
+        error: data.error || null
+      });
+    } catch (error) {
+      setWhatsappStatus({
+        loading: false,
+        connected: null,
+        state: 'erro',
+        error: 'Falha ao consultar status do WhatsApp.'
+      });
+    }
+  };
+
+  const carregarQrCode = async () => {
+    setQrLoading(true);
+    setQrError('');
+    setQrImage('');
+    try {
+      const res = await api.get('configuracoes/sistema/whatsapp_qrcode/');
+      const dataUri = res.data?.data_uri;
+      if (!dataUri) throw new Error('QR Code indisponivel.');
+      setQrImage(dataUri);
+    } catch (error) {
+      const rawMessage = error?.response?.data?.error || 'Erro ao carregar QR Code.';
+      const message = typeof rawMessage === 'string' ? rawMessage : 'Erro ao carregar QR Code.';
+      setQrError(message);
+      notify?.error?.(message);
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
+  const getWhatsappBadge = () => {
+    if (whatsappStatus.loading) return { label: 'Verificando', className: 'bg-slate-200 text-slate-500' };
+    if (whatsappStatus.connected === true) return { label: 'Conectado', className: 'bg-emerald-500 text-white' };
+    if (whatsappStatus.connected === false) return { label: 'Desconectado', className: 'bg-rose-500 text-white' };
+    return { label: 'Indefinido', className: 'bg-slate-400 text-white' };
+  };
 
   const NavItem = ({ icon: Icon, title, children, activePaths = [] }) => {
     const isCurrent = activePaths.some(path => location.pathname.startsWith(path));
@@ -131,9 +198,25 @@ export default function Navbar() {
           </button>
 
           {user?.is_superuser && (
-             <Link to="/configuracoes" className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-900 hover:text-white transition-all" title="Configurações Globais">
-               <Settings size={16} />
-             </Link>
+            <>
+              <button
+                onClick={() => setWaModalOpen(true)}
+                className="group flex items-center gap-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-emerald-600 hover:text-white transition-all overflow-hidden"
+                title="Conexão WhatsApp"
+              >
+                <div className="relative">
+                  <MessageCircle size={16} />
+                  <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-white ${getWhatsappBadge().className}`}></span>
+                </div>
+                <span className="max-w-0 group-hover:max-w-[140px] transition-all duration-300 overflow-hidden text-[9px] font-black uppercase tracking-widest">
+                  {getWhatsappBadge().label}
+                </span>
+              </button>
+
+              <Link to="/configuracoes" className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-900 hover:text-white transition-all" title="Configurações Globais">
+                <Settings size={16} />
+              </Link>
+            </>
           )}
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"></div>
@@ -159,6 +242,67 @@ export default function Navbar() {
           </div>
         </div>
       </div>
+
+      {waModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-[28px] shadow-2xl w-full max-w-lg overflow-hidden border border-white/10">
+            <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
+              <h3 className="font-black uppercase tracking-widest text-xs flex items-center gap-2">
+                <MessageCircle size={16} className="text-emerald-400"/> Conexão WhatsApp
+              </h3>
+              <button onClick={() => setWaModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={20}/></button>
+            </div>
+            <div className="p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${getWhatsappBadge().className}`}>
+                    {getWhatsappBadge().label}
+                  </span>
+                  {whatsappStatus.error && (
+                    <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">
+                      {whatsappStatus.error}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={loadWhatsappStatus}
+                  disabled={whatsappStatus.loading}
+                  className="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-40"
+                >
+                  {whatsappStatus.loading ? <Loader2 className="animate-spin" size={14}/> : 'Atualizar'}
+                </button>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 flex items-center justify-center min-h-[220px]">
+                {qrLoading ? (
+                  <Loader2 className="animate-spin text-blue-600" size={36}/>
+                ) : qrImage ? (
+                  <img src={qrImage} alt="QR Code WhatsApp" className="w-52 h-52 object-contain"/>
+                ) : (
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{qrError || 'QR Code indisponivel.'}</p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  onClick={carregarQrCode}
+                  disabled={qrLoading}
+                  className="flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                >
+                  <QrCode size={14}/> Conectar
+                </button>
+                <button
+                  onClick={carregarQrCode}
+                  disabled={qrLoading}
+                  className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-40"
+                >
+                  {qrLoading ? 'Carregando...' : 'Atualizar QR'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

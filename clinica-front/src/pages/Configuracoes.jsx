@@ -313,7 +313,7 @@ export default function Configuracoes() {
                                     {/* === ABA AUTOMAÇÃO (MANTIDA COMPLETA) === */}
                                     {activeTab === 'comunicacao' && (
                                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[28px] border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between gap-6">
+                                            <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between gap-6">
                                                 <div>
                                                     <h3 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
                                                         <Activity size={16}/> Status da Conexão WhatsApp
@@ -322,9 +322,6 @@ export default function Configuracoes() {
                                                         <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${whatsappStatus.connected === true ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : whatsappStatus.connected === false ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                                                             {whatsappStatus.loading ? 'Verificando' : whatsappStatus.connected === true ? 'Conectado' : whatsappStatus.connected === false ? 'Desconectado' : 'Indefinido'}
                                                         </div>
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                                            Estado: {whatsappStatus.state || 'desconhecido'}
-                                                        </span>
                                                     </div>
                                                     {whatsappStatus.error && (
                                                         <p className="mt-2 text-[10px] font-bold text-rose-500 uppercase tracking-widest">
@@ -352,17 +349,17 @@ export default function Configuracoes() {
                                             </div>
                                             
                                             {/* Master Switch */}
-                                            <div className={`p-8 rounded-[32px] border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}>
+                                            <div className={`p-6 rounded-[28px] border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}>
                                                 <div className="flex items-center justify-between">
                                                     <div>
-                                                        <h3 className={`font-black text-lg uppercase tracking-tight ${config.enviar_whatsapp_global ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500'}`}>
+                                                        <h3 className={`font-black text-base uppercase tracking-tight ${config.enviar_whatsapp_global ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500'}`}>
                                                             {config.enviar_whatsapp_global ? 'Serviço de WhatsApp Ativo' : 'Serviço de WhatsApp Pausado'}
                                                         </h3>
                                                         <p className="text-xs font-medium opacity-60 mt-1">Status da API de mensageria em tempo real.</p>
                                                     </div>
-                                                    <label className="relative inline-flex items-center cursor-pointer scale-150 mr-4">
+                                                    <label className="relative inline-flex items-center cursor-pointer scale-110 mr-2">
                                                         <input type="checkbox" name="enviar_whatsapp_global" className="sr-only peer" checked={!!config.enviar_whatsapp_global} onChange={handleChange}/>
-                                                        <div className={`w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all ${config.enviar_whatsapp_global ? 'bg-slate-300 peer-checked:bg-emerald-600' : 'bg-slate-300'}`}></div>
+                                                        <div className={`w-9 h-5 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${config.enviar_whatsapp_global ? 'bg-slate-300 peer-checked:bg-emerald-600' : 'bg-slate-300'}`}></div>
                                                     </label>
                                                 </div>
                                             </div>
@@ -371,24 +368,24 @@ export default function Configuracoes() {
                                             <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8 transition-all duration-500 ${!config.enviar_whatsapp_global ? 'opacity-40 grayscale pointer-events-none blur-[1px]' : ''}`}>
                                                 
                                                 {/* Coluna Esquerda: Gatilhos */}
-                                                <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                <div className="bg-white dark:bg-slate-800 p-6 rounded-[28px] border border-slate-200 dark:border-slate-700 shadow-sm">
                                                     <h3 className="font-black text-xs uppercase tracking-[0.2em] mb-6 text-slate-400 flex items-center gap-2">
                                                         <Bell size={16}/> Gatilhos de Disparo
                                                     </h3>
-                                                    <div className="space-y-6">
+                                                    <div className="space-y-5">
                                                         {[
                                                             { id: 'enviar_wpp_confirmacao', label: 'Confirmação', sub: 'No ato da marcação.' },
                                                             { id: 'enviar_wpp_bloqueio', label: 'Agenda', sub: 'Bloqueios/Feriados.' },
                                                             { id: 'enviar_wpp_lembrete', label: 'Lembretes', sub: '24h antes da data.' }
                                                         ].map((item) => (
-                                                            <div key={item.id} className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-xl transition-colors">
+                                                            <div key={item.id} className="flex items-center justify-between p-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-xl transition-colors">
                                                                 <div>
-                                                                    <span className="block text-sm font-black text-slate-700 dark:text-white uppercase tracking-tight">{item.label}</span>
-                                                                    <span className="text-[10px] text-slate-400 font-bold uppercase">{item.sub}</span>
+                                                                    <span className="block text-xs font-black text-slate-700 dark:text-white uppercase tracking-tight">{item.label}</span>
+                                                                    <span className="text-[9px] text-slate-400 font-bold uppercase">{item.sub}</span>
                                                                 </div>
                                                                 <label className="relative inline-flex items-center cursor-pointer">
                                                                     <input type="checkbox" name={item.id} className="sr-only peer" checked={config[item.id]} onChange={handleChange}/>
-                                                                    <div className="w-11 h-6 bg-slate-200 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
+                                                                    <div className="w-9 h-5 bg-slate-200 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
                                                                 </label>
                                                             </div>
                                                         ))}
@@ -396,7 +393,7 @@ export default function Configuracoes() {
                                                 </div>
 
                                                 {/* Coluna Direita: Monitor do Robô */}
-                                                <div className={`p-8 rounded-[32px] border flex flex-col justify-between ${config.enviar_wpp_lembrete ? 'bg-blue-50/30 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30' : 'bg-slate-50 border-slate-200'}`}>
+                                                <div className={`p-6 rounded-[28px] border flex flex-col justify-between ${config.enviar_wpp_lembrete ? 'bg-blue-50/30 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30' : 'bg-slate-50 border-slate-200'}`}>
                                                     <div>
                                                         <div className="flex justify-between items-start mb-6">
                                                             <h3 className="font-black text-xs uppercase tracking-[0.2em] text-blue-600 flex items-center gap-2">
