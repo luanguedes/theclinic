@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pin, PinOff, X } from 'lucide-react';
 import { useTabs } from '../context/TabsContext';
@@ -7,10 +7,6 @@ export default function TabsBar() {
   const { tabs, currentPath, closeTab, togglePin, moveTab } = useTabs();
   const navigate = useNavigate();
   const [dragIndex, setDragIndex] = useState(null);
-  const [shouldOverlap, setShouldOverlap] = useState(false);
-  const containerRef = useRef(null);
-  const tabRefs = useRef([]);
-
   const handleClose = (path) => {
     const idx = tabs.findIndex((t) => t.path === path);
     const isActive = currentPath === path;
@@ -21,37 +17,15 @@ export default function TabsBar() {
     }
   };
 
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const check = () => {
-      const gap = 8;
-      const totalTabsWidth = tabRefs.current
-        .filter(Boolean)
-        .reduce((sum, node) => sum + node.offsetWidth, 0);
-      const totalWidth = totalTabsWidth + gap * Math.max(0, tabs.length - 1);
-      setShouldOverlap(totalWidth > el.clientWidth);
-    };
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [tabs.length]);
-
-  const maxSlots = Math.max(1, Math.min(5, tabs.length));
-  const overlap = shouldOverlap ? (maxSlots > 4 ? 14 : maxSlots > 3 ? 12 : 8) : 0;
-
   return (
-    <div ref={containerRef} className="relative flex items-center justify-center w-full max-w-[680px] overflow-hidden">
+    <div className="relative flex items-center justify-start w-full min-w-0 overflow-hidden gap-2 flex-nowrap">
       {tabs.map((tab, idx) => {
         const Icon = tab.icon;
         const isActive = currentPath === tab.path;
         const z = 50 + idx;
-        const offset = idx === 0 ? 0 : -overlap * idx;
         return (
           <div
             key={tab.path}
-            ref={(node) => { tabRefs.current[idx] = node; }}
             draggable
             onDragStart={() => setDragIndex(idx)}
             onDragOver={(e) => e.preventDefault()}
@@ -60,21 +34,21 @@ export default function TabsBar() {
               setDragIndex(null);
             }}
             onDragEnd={() => setDragIndex(null)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer min-w-0 ${
               isActive
                 ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/30'
                 : 'bg-white/60 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-            } ${shouldOverlap ? '' : 'mr-2'}`}
+            }`}
             onClick={() => navigate(tab.path)}
             title={tab.title}
-            style={{ marginLeft: offset, zIndex: z }}
+            style={{ zIndex: z, flexGrow: 1, flexShrink: idx + 1 }}
           >
-            {Icon && <Icon size={14} />}
-            <span className="whitespace-nowrap">{tab.title}</span>
+            {Icon && <Icon size={14} className="shrink-0" />}
+            <span className="min-w-0 flex-1 truncate text-left">{tab.title}</span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); togglePin(tab.path); }}
-              className={`p-1 rounded-md transition-colors ${isActive ? 'hover:bg-white/20' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+              className={`p-1 rounded-md transition-colors shrink-0 ${isActive ? 'hover:bg-white/20' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}
               title={tab.pinned ? 'Desafixar' : 'Fixar'}
             >
               {tab.pinned ? <PinOff size={12} /> : <Pin size={12} />}
@@ -82,7 +56,7 @@ export default function TabsBar() {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleClose(tab.path); }}
-              className={`p-1 rounded-md transition-colors ${isActive ? 'hover:bg-white/20' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+              className={`p-1 rounded-md transition-colors shrink-0 ${isActive ? 'hover:bg-white/20' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}
               title="Fechar"
             >
               <X size={12} />
