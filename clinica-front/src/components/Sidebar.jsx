@@ -4,12 +4,12 @@ import {
   LayoutDashboard,
   Stethoscope,
   CalendarDays,
+  CalendarClock,
   Settings,
   ClipboardList,
   Bell,
   Users,
   Plus,
-  CalendarClock,
   CalendarX,
   ShieldCheck,
   Briefcase,
@@ -36,9 +36,8 @@ const MENU = [
     access: (u) => u?.is_superuser || u?.acesso_agendamento,
     items: [
       { to: '/recepcao', label: 'Recepção', icon: Users },
-      { to: '/agenda/marcar', label: 'Marcar Consulta', icon: Plus },
-      { to: '/agenda/configurar', label: 'Configurar Agenda', icon: CalendarDays },
-      { to: '/agenda/criar', label: 'Criar Agenda', icon: CalendarClock },
+      { to: '/agenda/marcar', label: 'Agendar Consulta', icon: CalendarDays },
+      { to: '/agenda/configurar', label: 'Criar Agenda', icon: CalendarClock },
       { to: '/agenda/bloqueios', label: 'Bloqueios e Feriados', icon: CalendarX }
     ]
   },
