@@ -6,14 +6,23 @@ import { Loader2 } from 'lucide-react';
 import { hasRouteAccess } from '../config/navigation';
 
 /**
- * Componente de Proteção de Rota
- * Verifica autenticação e regras de segurança (como troca de senha)
+ * Componente de Protecao de Rota
+ * Verifica autenticacao e regras de seguranca (como troca de senha)
  */
 export default function PrivateRoute({ children }) {
     const { user, loading } = useAuth();
     const location = useLocation();
     const { notify } = useNotification();
     const lastDeniedPathRef = useRef(null);
+    const path = location.pathname.replace(/\/+$/, "").toLowerCase();
+    const accessDenied = !loading && !!user && !user.is_superuser && !hasRouteAccess(user, path);
+
+    useEffect(() => {
+        if (!accessDenied) return;
+        if (lastDeniedPathRef.current === path) return;
+        notify?.warning?.("O operador nao tem acesso a esta pagina. Solicite o acesso ao administrador do sistema.");
+        lastDeniedPathRef.current = path;
+    }, [accessDenied, notify, path]);
 
     // 1. Estado de Carregamento Profissional
     if (loading) {
@@ -30,30 +39,17 @@ export default function PrivateRoute({ children }) {
         return <Navigate to="/" state={{ from: location }} replace />;
     }
 
-    // 3. Normalização de Path para verificação de segurança
-    const path = location.pathname.replace(/\/+$/, "").toLowerCase();
-
-    // 4. Bloqueio de Segurança: Troca de Senha Obrigatória
-    // Se a flag estiver ativa, o usuário só pode acessar a página de troca de senha
+    // 3. Bloqueio de Seguranca: Troca de Senha Obrigatoria
     if (user.force_password_change && path !== '/trocasenhaobrigatoria') {
         return <Navigate to="/trocasenhaobrigatoria" replace />;
     }
 
-    // 5. Prevenção de acesso à troca de senha se não for mais necessário
+    // 4. Prevencao de acesso a troca de senha se nao for mais necessario
     if (!user.force_password_change && path === '/trocasenhaobrigatoria') {
         return <Navigate to="/dashboard" replace />;
     }
 
-    const accessDenied = !user.is_superuser && !hasRouteAccess(user, path);
-
-    useEffect(() => {
-        if (accessDenied && lastDeniedPathRef.current !== path) {
-            notify?.warning?.("Você não tem acesso a esta página. Solicite o acesso ao administrador do sistema.");
-            lastDeniedPathRef.current = path;
-        }
-    }, [accessDenied, notify, path]);
-
-    // 6. Controle de acesso por rota
+    // 5. Controle de acesso por rota
     if (accessDenied) {
         return <Navigate to="/dashboard" replace />;
     }
