@@ -1,40 +1,15 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
-import {
-  ClipboardList,
-  Bell,
-  Users,
-  CalendarDays,
-  Plus,
-  CalendarClock,
-  CalendarX,
-  ShieldCheck,
-  Briefcase,
-  Heart,
-  Building2,
-  Settings
-} from 'lucide-react';
+import { getFlatMenuItems } from '../config/navigation';
 
 const TabsContext = createContext();
 
-const TAB_DEFS = [
-  { match: (p) => p.startsWith('/prontuarios'), title: 'Prontuários', icon: ClipboardList },
-  { match: (p) => p.startsWith('/triagem'), title: 'Triagem', icon: Bell },
-  { match: (p) => p.startsWith('/recepcao'), title: 'Recepção', icon: Users },
-  { match: (p) => p.startsWith('/agenda/marcar'), title: 'Marcar Consulta', icon: Plus },
-  { match: (p) => p.startsWith('/agenda/configurar'), title: 'Configurar Agenda', icon: CalendarDays },
-  { match: (p) => p.startsWith('/agenda/criar'), title: 'Criar Agenda', icon: CalendarClock },
-  { match: (p) => p.startsWith('/agenda/bloqueios'), title: 'Bloqueios', icon: CalendarX },
-  { match: (p) => p.startsWith('/pacientes'), title: 'Pacientes', icon: Users },
-  { match: (p) => p.startsWith('/operadores'), title: 'Operadores', icon: ShieldCheck },
-  { match: (p) => p.startsWith('/profissionais'), title: 'Profissionais', icon: Briefcase },
-  { match: (p) => p.startsWith('/especialidades'), title: 'Especialidades', icon: Heart },
-  { match: (p) => p.startsWith('/convenios'), title: 'Convênios', icon: ShieldCheck },
-  { match: (p) => p.startsWith('/clinica'), title: 'Dados da Clínica', icon: Building2 },
-  { match: (p) => p.startsWith('/configuracoes'), title: 'Configurações', icon: Settings },
-  { match: (p) => p.startsWith('/agenda'), title: 'Agenda', icon: CalendarDays }
-];
+const TAB_DEFS = getFlatMenuItems().map((item) => ({
+  match: (p) => p.startsWith(item.to),
+  title: item.label,
+  icon: item.icon
+}));
 
 const IGNORE_PATHS = ['/', '/trocasenhaobrigatoria', '/dashboard'];
 const MAX_TABS = 6;

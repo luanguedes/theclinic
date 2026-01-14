@@ -1,61 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import {
-  LayoutDashboard,
-  Stethoscope,
-  CalendarDays,
-  CalendarClock,
-  Settings,
-  ClipboardList,
-  Bell,
-  Users,
-  Plus,
-  CalendarX,
-  ShieldCheck,
-  Briefcase,
-  Heart,
-  Building2,
-  ChevronRight
-} from 'lucide-react';
-
-const MENU = [
-  {
-    key: 'atendimento',
-    label: 'Atendimento',
-    icon: Stethoscope,
-    access: (u) => u?.is_superuser || u?.acesso_atendimento,
-    items: [
-      { to: '/prontuarios', label: 'Prontuários', icon: ClipboardList },
-      { to: '/triagem', label: 'Triagem', icon: Bell }
-    ]
-  },
-  {
-    key: 'agenda',
-    label: 'Agenda',
-    icon: CalendarDays,
-    access: (u) => u?.is_superuser || u?.acesso_agendamento,
-    items: [
-      { to: '/recepcao', label: 'Recepção', icon: Users },
-      { to: '/agenda/marcar', label: 'Agendar Consulta', icon: CalendarDays },
-      { to: '/agenda/configurar', label: 'Criar Agenda', icon: CalendarClock },
-      { to: '/agenda/bloqueios', label: 'Bloqueios e Feriados', icon: CalendarX }
-    ]
-  },
-  {
-    key: 'sistema',
-    label: 'Sistema',
-    icon: Settings,
-    access: (u) => u?.is_superuser || u?.acesso_cadastros,
-    items: [
-      { to: '/pacientes', label: 'Pacientes', icon: Users },
-      { to: '/operadores', label: 'Operadores', icon: ShieldCheck },
-      { to: '/profissionais', label: 'Profissionais', icon: Briefcase },
-      { to: '/especialidades', label: 'Especialidades', icon: Heart },
-      { to: '/convenios', label: 'Convênios', icon: ShieldCheck },
-      { to: '/clinica', label: 'Dados da Clínica', icon: Building2 }
-    ]
-  }
-];
+import { ChevronRight } from 'lucide-react';
+import { DASHBOARD_ITEM, MENU_ITEMS } from '../config/navigation';
 
 export default function Sidebar() {
   const { user } = useAuth();
@@ -65,17 +11,17 @@ export default function Sidebar() {
     <aside className="flex flex-col w-24 md:w-28 px-2 md:px-3 py-6 border-r border-slate-100 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 backdrop-blur-md sticky top-16 h-[calc(100vh-64px)] z-[80]">
       <div className="flex flex-col gap-3">
         <Link
-          to="/dashboard"
+          to={DASHBOARD_ITEM.to}
           className={`w-full flex flex-col items-center gap-1 py-4 rounded-3xl transition-all ${
-            location.pathname === '/dashboard'
+            location.pathname === DASHBOARD_ITEM.to
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
               : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900'
           }`}
         >
-          <LayoutDashboard size={20} />
-          <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">Dashboard</span>
+          <DASHBOARD_ITEM.icon size={20} />
+          <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">{DASHBOARD_ITEM.label}</span>
         </Link>
-        {MENU.filter((m) => m.access(user)).map((menu) => {
+        {MENU_ITEMS.filter((m) => m.access(user)).map((menu) => {
           const Icon = menu.icon;
           const isActive = menu.items.some((i) => location.pathname.startsWith(i.to));
           return (
