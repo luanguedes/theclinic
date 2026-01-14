@@ -16,11 +16,11 @@ from agendamento.models import Agendamento
 # Imports dos Serializers
 from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer
 
-# IMPORTANTE: Importar a função de disparo do WhatsApp
+# IMPORTANTE: Importar a funcao de disparo do WhatsApp
 try:
     from agendamento.whatsapp import enviar_lembrete_24h
 except ImportError:
-    # Fallback caso o arquivo não exista ainda, para não quebrar o server
+    # Fallback caso o arquivo nao exista ainda, para nao quebrar o server
     def enviar_lembrete_24h(agendamento):
         print(f"Simulando envio para {agendamento.id}")
         return True
@@ -67,12 +67,12 @@ class ConfiguracaoSistemaView(APIView):
         hoje = date.today()
         amanha = hoje + timedelta(days=1)
         
-        # --- ESTATÍSTICAS DE HOJE ---
+        # --- ESTATISTICAS DE HOJE ---
         agendamentos_hoje = Agendamento.objects.filter(data=hoje, status='agendado')
         enviados_hoje = agendamentos_hoje.filter(lembrete_enviado=True).count()
         falhas_hoje = agendamentos_hoje.filter(lembrete_enviado=False).count()
 
-        # --- ESTATÍSTICAS DE AMANHÃ ---
+        # --- ESTATISTICAS DE AMANHA ---
         agendamentos_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
         enviados_amanha = agendamentos_amanha.filter(lembrete_enviado=True).count()
         pendentes_amanha = agendamentos_amanha.filter(lembrete_enviado=False).count()
@@ -101,8 +101,8 @@ class ConfiguracaoSistemaView(APIView):
 
     def post(self, request):
         """
-        Executa o disparo manual de lembretes para agendamentos de AMANHÃ.
-        Substitui o call_command por lógica direta para evitar erro 500.
+        Executa o disparo manual de lembretes para agendamentos de AMANHA.
+        Substitui o call_command por logica direta para evitar erro 500.
         """
         if 'executar_lembretes' not in request.path:
              return Response({'error': 'Endpoint incorreto.'}, status=status.HTTP_404_NOT_FOUND)
@@ -112,7 +112,7 @@ class ConfiguracaoSistemaView(APIView):
             hoje = date.today()
             amanha = hoje + timedelta(days=1)
             
-            # Busca agendamentos de AMANHÃ que são 'agendado' e ainda não enviados
+            # Busca agendamentos de AMANHA que sao 'agendado' e ainda nao enviados
             pendentes = Agendamento.objects.filter(
                 data=amanha,
                 status='agendado',
@@ -125,7 +125,7 @@ class ConfiguracaoSistemaView(APIView):
             # Loop de envio direto
             for ag in pendentes:
                 try:
-                    # Tenta enviar usando sua função utilitária
+                    # Tenta enviar usando sua funcao utilitaria
                     sucesso = enviar_lembrete_24h(ag)
                     
                     if sucesso:
@@ -139,11 +139,11 @@ class ConfiguracaoSistemaView(APIView):
                     print(f"Erro ao enviar lembrete agendamento {ag.id}: {e_interno}")
                     erros_count += 1
 
-            # Atualiza a data da última execução para HOJE
+            # Atualiza a data da ultima execucao para HOJE
             config.data_ultima_execucao_lembrete = hoje
             config.save()
 
-            # --- PREPARA ESTATÍSTICAS ATUALIZADAS PARA O FRONTEND ---
+            # --- PREPARA ESTATISTICAS ATUALIZADAS PARA O FRONTEND ---
             # Recalcula tudo para a tela atualizar instantaneamente sem F5
             ag_hoje = Agendamento.objects.filter(data=hoje, status='agendado')
             ag_amanha = Agendamento.objects.filter(data=amanha, status='agendado')
@@ -169,7 +169,7 @@ class ConfiguracaoSistemaView(APIView):
             })
 
         except Exception as e:
-            # Captura qualquer erro fatal e retorna 500 com mensagem JSON (não quebra a tela)
+            # Captura qualquer erro fatal e retorna 500 com mensagem JSON (nao quebra a tela)
             return Response(
                 {'error': 'Falha interna ao processar lembretes.', 'detalhe': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -246,7 +246,7 @@ class WhatsAppStatusView(APIView):
             return Response({
                 'connected': None,
                 'state': 'config_incompleta',
-                'error': 'EVOLUTION_API_URL ou EVOLUTION_INSTANCE_NAME não configurados.'
+                'error': 'EVOLUTION_API_URL ou EVOLUTION_INSTANCE_NAME nao configurados.'
             })
 
         headers = {"Content-Type": "application/json"}
@@ -303,7 +303,7 @@ class WhatsAppQRCodeView(APIView):
 
         if not base_url or not instance:
             return Response({
-                'error': 'EVOLUTION_API_URL ou EVOLUTION_INSTANCE_NAME não configurados.'
+                'error': 'EVOLUTION_API_URL ou EVOLUTION_INSTANCE_NAME nao configurados.'
             }, status=status.HTTP_400_BAD_REQUEST)
 
         headers = {"Content-Type": "application/json"}

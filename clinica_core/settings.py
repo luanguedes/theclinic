@@ -159,7 +159,7 @@ REST_FRAMEWORK = {
     ),
 }
 
-# --- CONFIGURAÇÃO JWT (Aumentando o tempo de login) ---
+# --- CONFIGURACAO JWT (Aumentando o tempo de login) ---
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=120),  # O login vai durar 2 horas direto
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),      # O sistema pode renovar por 1 dia
@@ -189,7 +189,7 @@ SIMPLE_JWT = {
     'JTI_CLAIM': 'jti',
 }
 
-# Configurações Evolution API (WhatsApp)
+# Configuracoes Evolution API (WhatsApp)
 EVOLUTION_API_URL = "https://theclinic-api.up.railway.app"
 EVOLUTION_API_KEY = "Luan@4957"
 EVOLUTION_INSTANCE_NAME = "zap_turbo"
@@ -202,7 +202,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",          # Para seus testes locais (Vite/React)
     "http://localhost:3000",          # Caso use outra porta local
-    "https://theclinic.up.railway.app", # SEU FRONTEND EM PRODUÇÃO (Sem barra no final)
+    "https://theclinic.up.railway.app", # SEU FRONTEND EM PRODUCAO (Sem barra no final)
     "https://theclinic-production.up.railway.app", # Backend/API em producao
 ]
 

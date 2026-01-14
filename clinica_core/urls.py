@@ -20,10 +20,10 @@ urlpatterns = [
     path('api/configuracoes/', include('configuracoes.urls')),
     path('api/auditoria/', include('auditoria.urls')),
 
-    # 👇 routers "puros" primeiro
+    #  routers "puros" primeiro
     path('api/', include('profissionais.urls')),
 
-    # 👇 depois agendamento
+    #  depois agendamento
     path('api/', include('agendamento.urls')),
 
     path('api/agendas/', include('agendas.urls')),

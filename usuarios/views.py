@@ -36,20 +36,20 @@ class MeView(APIView):
     def get(self, request):
         user = request.user
         
-        # 1. Tenta carregar o ID do profissional com seguran«ıa m«≠xima
+        # 1. Tenta carregar o ID do profissional com segurana moxima
         prof_id = None
         try:
             # Verifica se o atributo existe E se tem valor associado
             if hasattr(user, 'profissional') and user.profissional_id:
                 prof_id = user.profissional_id
         except Exception as e:
-            print(f"Aviso: Erro ao ler profissional do usu«≠rio {user.id}: {e}")
+            print(f"Aviso: Erro ao ler profissional do usuorio {user.id}: {e}")
             prof_id = None
 
-        # 2. Tenta carregar o status de senha com seguran«ıa
+        # 2. Tenta carregar o status de senha com segurana
         force_change = False
         try:
-            # Usa getattr para evitar erro se o campo n«úo for reconhecido pelo Django no momento
+            # Usa getattr para evitar erro se o campo nuo for reconhecido pelo Django no momento
             force_change = getattr(user, 'force_password_change', False)
         except Exception as e:
             print(f"Aviso: Erro ao ler force_password_change: {e}")
@@ -94,7 +94,7 @@ class MeView(APIView):
             "allowed_routes": allowed_routes,
             "theme_preference": getattr(user, 'theme_preference', 'light'),
 
-            # Permiss«Êes (seguras com getattr)
+            # Permisses (seguras com getattr)
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
             "acesso_atendimento": getattr(user, 'acesso_atendimento', False),
             "acesso_faturamento": getattr(user, 'acesso_faturamento', False),
@@ -112,19 +112,19 @@ class TrocarSenhaView(APIView):
         senha_atual = request.data.get('senha_atual')
         confirmacao = request.data.get('confirmacao')
         if not nova_senha or len(nova_senha) < 6:
-            return Response({'error': 'A senha deve ter no m«nimo 6 caracteres.'}, status=400)
+            return Response({'error': 'A senha deve ter no mnimo 6 caracteres.'}, status=400)
 
         user = request.user
         if confirmacao is not None and confirmacao != nova_senha:
-            return Response({'error': 'A confirma«ı«úo de senha n«úo coincide.'}, status=400)
+            return Response({'error': 'A confirmauo de senha nuo coincide.'}, status=400)
 
         if not getattr(user, 'force_password_change', False):
             if not senha_atual or not user.check_password(senha_atual):
-                return Response({'error': 'Senha atual inv«≠lida.'}, status=400)
+                return Response({'error': 'Senha atual involida.'}, status=400)
 
         user.set_password(nova_senha)
         
-        # --- DESLIGA A OBRIGATORIEDADE AP«ìS TROCAR ---
+        # --- DESLIGA A OBRIGATORIEDADE APUS TROCAR ---
         user.force_password_change = False
         user.save()
 
@@ -188,7 +188,7 @@ class PrivilegioSyncView(APIView):
         payload = request.data or {}
         modules = payload.get('modules', [])
         if not isinstance(modules, list):
-            return Response({'error': 'Payload inv«≠lido.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Payload involido.'}, status=status.HTTP_400_BAD_REQUEST)
 
         seen_paths = set()
         with transaction.atomic():
