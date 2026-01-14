@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -34,7 +34,7 @@ export default function Navbar() {
     confirmacao: ''
   });
 
-  // --- CORREÃ‡ÃƒO DO TREMOR (MANTIDA) ---
+  // --- CORREÇÃO DO TREMOR (MANTIDA) ---
   useEffect(() => {
     const handleScroll = () => {
       const currentScroll = window.scrollY;
@@ -46,10 +46,10 @@ export default function Navbar() {
   }, [scrolled]);
 
   useEffect(() => {
-    if (user?.is_superuser && api) {
+    if ((user?.is_superuser || user?.acesso_whatsapp) && api) {
       loadWhatsappStatus();
     }
-  }, [user?.is_superuser, api]);
+  }, [user?.is_superuser, user?.acesso_whatsapp, api]);
 
   useEffect(() => {
     if (waModalOpen) {
@@ -186,9 +186,9 @@ export default function Navbar() {
   return (
     <nav className={`
       sticky top-0 w-full transition-all duration-500 ease-in-out border-b
-      /* AQUI ESTÃ A CORREÃ‡ÃƒO GLOBAL: Z-INDEX 90 (Sidebar usa 80, modais 120+) */
+      /* AQUI ESTÁ A CORREÇÃO GLOBAL: Z-INDEX 90 (Sidebar usa 80, modais 120+) */
       z-[90]
-      /* AQUI ESTÃ A REDUÃ‡ÃƒO DE TAMANHO: h-16 (64px) normal, h-14 (56px) scroll */
+      /* AQUI ESTÁ A REDUÇÃO DE TAMANHO: h-16 (64px) normal, h-14 (56px) scroll */
       ${scrolled 
         ? 'bg-white/95 dark:bg-slate-900/95 backdrop-blur-md h-14 border-slate-200 dark:border-slate-800 shadow-sm' 
         : 'bg-white dark:bg-slate-900 h-16 border-transparent'}
@@ -201,7 +201,7 @@ export default function Navbar() {
             </div>
             <div className="hidden lg:block transition-all duration-300">
               <span className={`font-black tracking-tighter text-slate-800 dark:text-white block leading-none uppercase ${scrolled ? 'text-base' : 'text-lg'}`}>TheClinic</span>
-              <span className={`text-blue-600 font-black tracking-[0.3em] uppercase ${scrolled ? 'text-[7px]' : 'text-[8px]'}`}>GestÃ£o</span>
+              <span className={`text-blue-600 font-black tracking-[0.3em] uppercase ${scrolled ? 'text-[7px]' : 'text-[8px]'}`}>Gestão</span>
             </div>
           </Link>
 
@@ -217,12 +217,12 @@ export default function Navbar() {
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
 
-          {user?.is_superuser && (
+          {(user?.is_superuser || user?.acesso_whatsapp) && (
             <>
               <button
                 onClick={() => setWaModalOpen(true)}
                 className="group flex items-center gap-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-emerald-600 hover:text-white transition-all overflow-hidden"
-                title="ConexÃ£o WhatsApp"
+                title="Conexão WhatsApp"
               >
                 <div className="relative">
                   <MessageCircle size={16} />
@@ -233,9 +233,11 @@ export default function Navbar() {
                 </span>
               </button>
 
-              <Link to="/configuracoes" className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-900 hover:text-white transition-all" title="ConfiguraÃ§Ãµes Globais">
-                <Settings size={16} />
-              </Link>
+              {user?.is_superuser && (
+                <Link to="/configuracoes" className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-900 hover:text-white transition-all" title="Configuracoes Globais">
+                  <Settings size={16} />
+                </Link>
+              )}
             </>
           )}
 
@@ -258,7 +260,7 @@ export default function Navbar() {
                     <UserCircle size={14} /> Conta
                   </button>
                   <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest text-red-500 hover:bg-red-50 transition-colors">
-                    <LogOut size={14} /> Encerrar SessÃ£o
+                    <LogOut size={14} /> Encerrar Sessão
                   </button>
                </div>
             </div>
@@ -271,7 +273,7 @@ export default function Navbar() {
           <div className="bg-white dark:bg-slate-800 rounded-[28px] shadow-2xl w-full max-w-lg overflow-hidden border border-white/10">
             <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
               <h3 className="font-black uppercase tracking-widest text-xs flex items-center gap-2">
-                <MessageCircle size={16} className="text-emerald-400"/> ConexÃ£o WhatsApp
+                <MessageCircle size={16} className="text-emerald-400"/> Conexão WhatsApp
               </h3>
               <button onClick={() => setWaModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={20}/></button>
             </div>
@@ -444,6 +446,7 @@ export default function Navbar() {
     </nav>
   );
 }
+
 
 
 

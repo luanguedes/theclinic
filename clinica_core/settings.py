@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'agendamento',
     'agendas',
     'configuracoes',
+    'auditoria',
     'financeiro',
 ]
 
@@ -61,6 +62,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'auditoria.middleware.AuditMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -209,6 +211,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://theclinic.up.railway.app", # Frontend
     "https://theclinic-production.up.railway.app", # Backend
 ]
+
 
 
 

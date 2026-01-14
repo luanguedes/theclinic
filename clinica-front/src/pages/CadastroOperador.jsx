@@ -4,7 +4,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-  UserCog, Mail, Lock, Shield, Save, Check, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, AlertCircle 
+  UserCog, Mail, Lock, Shield, Save, Check, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, AlertCircle, MessageCircle 
 } from 'lucide-react';
 
 const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
@@ -83,7 +83,7 @@ export default function CadastroOperador() {
   const [formData, setFormData] = useState({
     username: '', password: '', first_name: '', email: '',
     acesso_atendimento: false, acesso_agendamento: false, 
-    acesso_faturamento: false, acesso_cadastros: false,
+    acesso_faturamento: false, acesso_cadastros: false, acesso_whatsapp: false,
     is_superuser: false,
     force_password_change: true,
     profissional: null,
@@ -113,6 +113,7 @@ export default function CadastroOperador() {
                         acesso_agendamento: data.acesso_agendamento || false,
                         acesso_faturamento: data.acesso_faturamento || false,
                         acesso_cadastros: data.acesso_cadastros || false,
+                        acesso_whatsapp: data.acesso_whatsapp || false,
                         is_superuser: data.is_superuser || false,
                         force_password_change: data.force_password_change || false,
                         profissional: data.profissional || null,
@@ -141,7 +142,8 @@ export default function CadastroOperador() {
             acesso_cadastros: true,
             acesso_atendimento: true,
             acesso_agendamento: true,
-            acesso_faturamento: true
+            acesso_faturamento: true,
+            acesso_whatsapp: true
         }));
     } else {
         setFormData(prev => ({ ...prev, [name]: finalValue }));
@@ -333,6 +335,14 @@ export default function CadastroOperador() {
                           <span className={`text-xs font-black uppercase tracking-widest ${formData.acesso_faturamento ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>Financeiro</span>
                       </div>
                       <input type="checkbox" name="acesso_faturamento" checked={formData.acesso_faturamento} onChange={handleChange} className="w-5 h-5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all" disabled={privilegeDisabled}/>
+                  </label>
+
+                  <label className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${formData.acesso_whatsapp ? 'bg-slate-50 border-blue-100 dark:bg-slate-700/50' : 'bg-transparent border-transparent opacity-60'} ${privilegeDisabled ? 'pointer-events-none opacity-60' : ''}`}>
+                      <div className="flex items-center gap-3">
+                          <MessageCircle size={18} className={formData.acesso_whatsapp ? 'text-emerald-500' : 'text-slate-400'}/>
+                          <span className={`text-xs font-black uppercase tracking-widest ${formData.acesso_whatsapp ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>WhatsApp</span>
+                      </div>
+                      <input type="checkbox" name="acesso_whatsapp" checked={formData.acesso_whatsapp} onChange={handleChange} className="w-5 h-5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all" disabled={privilegeDisabled}/>
                   </label>
                 </div>
 

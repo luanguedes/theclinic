@@ -21,6 +21,7 @@ const DadosClinica = lazy(() => import('../pages/DadosClinica'));
 const MarcarConsulta = lazy(() => import('../pages/MarcarConsulta'));
 const Recepcao = lazy(() => import('../pages/Recepcao'));
 const Bloqueios = lazy(() => import('../pages/Bloqueios'));
+const Logs = lazy(() => import('../pages/Logs'));
 
 const PageLoader = () => (
   <div className="flex flex-col items-center justify-center h-screen w-screen bg-slate-50 dark:bg-slate-950">
@@ -52,6 +53,7 @@ const renderRoutes = (locationOverride) => (
     <Route path="/convenios" element={<PrivateRoute><Convenios /></PrivateRoute>} />
     <Route path="/clinica" element={<PrivateRoute><DadosClinica /></PrivateRoute>} />
     <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
+    <Route path="/logs" element={<PrivateRoute><Logs /></PrivateRoute>} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
 );

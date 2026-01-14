@@ -228,10 +228,16 @@ def _normalize_qr_base64(qr_value, content_type="image/png"):
     return value, f"data:{content_type};base64,{value}"
 
 
+def _has_whatsapp_access(user):
+    return bool(user and (getattr(user, 'is_superuser', False) or getattr(user, 'acesso_whatsapp', False)))
+
+
 class WhatsAppStatusView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        if not _has_whatsapp_access(request.user):
+            return Response({'error': 'Acesso restrito.'}, status=status.HTTP_403_FORBIDDEN)
         base_url = getattr(settings, 'EVOLUTION_API_URL', None)
         instance = getattr(settings, 'EVOLUTION_INSTANCE_NAME', None)
         api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
@@ -285,9 +291,11 @@ class WhatsAppStatusView(APIView):
 
 
 class WhatsAppQRCodeView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        if not _has_whatsapp_access(request.user):
+            return Response({'error': 'Acesso restrito.'}, status=status.HTTP_403_FORBIDDEN)
         debug = request.query_params.get('debug') == '1'
         base_url = getattr(settings, 'EVOLUTION_API_URL', None)
         instance = getattr(settings, 'EVOLUTION_INSTANCE_NAME', None)

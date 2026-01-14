@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   Briefcase,
   Heart,
-  Building2
+  Building2,
+  FileText
 } from 'lucide-react';
 
 export const DASHBOARD_ITEM = {
@@ -21,12 +22,12 @@ export const DASHBOARD_ITEM = {
 };
 
 const ATENDIMENTO_ITEMS = [
-  { to: '/prontuarios', label: 'Prontuários', icon: ClipboardList },
+  { to: '/prontuarios', label: 'Prontuarios', icon: ClipboardList },
   { to: '/triagem', label: 'Triagem', icon: Bell }
 ];
 
 const AGENDA_ITEMS = [
-  { to: '/recepcao', label: 'Recepção', icon: Users },
+  { to: '/recepcao', label: 'Recepcao', icon: Users },
   { to: '/agenda/marcar', label: 'Agendar Consulta', icon: CalendarDays },
   { to: '/agenda/configurar', label: 'Criar Agenda', icon: CalendarClock },
   { to: '/agenda/bloqueios', label: 'Bloqueios e Feriados', icon: CalendarX }
@@ -37,13 +38,14 @@ const SISTEMA_ITEMS = [
   { to: '/operadores', label: 'Operadores', icon: ShieldCheck },
   { to: '/profissionais', label: 'Profissionais', icon: Briefcase },
   { to: '/especialidades', label: 'Especialidades', icon: Heart },
-  { to: '/convenios', label: 'Convênios', icon: ShieldCheck },
-  { to: '/clinica', label: 'Dados da Clínica', icon: Building2 }
+  { to: '/convenios', label: 'Convenios', icon: ShieldCheck },
+  { to: '/clinica', label: 'Dados da Clinica', icon: Building2 },
+  { to: '/logs', label: 'Logs de Acesso', icon: FileText }
 ];
 
 const SISTEMA_PRIVILEGE_ITEMS = [
-  ...SISTEMA_ITEMS,
-  { to: '/configuracoes', label: 'Configurações do Sistema' }
+  ...SISTEMA_ITEMS.filter((item) => item.to !== '/logs'),
+  { to: '/configuracoes', label: 'Configuracoes do Sistema' }
 ];
 
 const fallbackModuleAccess = (user, moduleKey) => {

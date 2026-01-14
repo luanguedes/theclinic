@@ -1,4 +1,4 @@
-﻿from rest_framework import viewsets, permissions, filters, status
+from rest_framework import viewsets, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -36,20 +36,20 @@ class MeView(APIView):
     def get(self, request):
         user = request.user
         
-        # 1. Tenta carregar o ID do profissional com seguranÇõa mÇ­xima
+        # 1. Tenta carregar o ID do profissional com seguran��a mǭxima
         prof_id = None
         try:
             # Verifica se o atributo existe E se tem valor associado
             if hasattr(user, 'profissional') and user.profissional_id:
                 prof_id = user.profissional_id
         except Exception as e:
-            print(f"Aviso: Erro ao ler profissional do usuÇ­rio {user.id}: {e}")
+            print(f"Aviso: Erro ao ler profissional do usuǭrio {user.id}: {e}")
             prof_id = None
 
-        # 2. Tenta carregar o status de senha com seguranÇõa
+        # 2. Tenta carregar o status de senha com seguran��a
         force_change = False
         try:
-            # Usa getattr para evitar erro se o campo nÇœo for reconhecido pelo Django no momento
+            # Usa getattr para evitar erro se o campo nǜo for reconhecido pelo Django no momento
             force_change = getattr(user, 'force_password_change', False)
         except Exception as e:
             print(f"Aviso: Erro ao ler force_password_change: {e}")
@@ -94,12 +94,13 @@ class MeView(APIView):
             "allowed_routes": allowed_routes,
             "theme_preference": getattr(user, 'theme_preference', 'light'),
 
-            # PermissÇæes (seguras com getattr)
+            # Permiss��es (seguras com getattr)
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
             "acesso_atendimento": getattr(user, 'acesso_atendimento', False),
             "acesso_faturamento": getattr(user, 'acesso_faturamento', False),
             "acesso_cadastros": getattr(user, 'acesso_cadastros', False),
             "acesso_configuracoes": getattr(user, 'acesso_configuracoes', False),
+            "acesso_whatsapp": getattr(user, 'acesso_whatsapp', False),
         }
         return Response(data)
 
@@ -111,19 +112,19 @@ class TrocarSenhaView(APIView):
         senha_atual = request.data.get('senha_atual')
         confirmacao = request.data.get('confirmacao')
         if not nova_senha or len(nova_senha) < 6:
-            return Response({'error': 'A senha deve ter no mÇðnimo 6 caracteres.'}, status=400)
+            return Response({'error': 'A senha deve ter no m��nimo 6 caracteres.'}, status=400)
 
         user = request.user
         if confirmacao is not None and confirmacao != nova_senha:
-            return Response({'error': 'A confirmaÇõÇœo de senha nÇœo coincide.'}, status=400)
+            return Response({'error': 'A confirma��ǜo de senha nǜo coincide.'}, status=400)
 
         if not getattr(user, 'force_password_change', False):
             if not senha_atual or not user.check_password(senha_atual):
-                return Response({'error': 'Senha atual invÇ­lida.'}, status=400)
+                return Response({'error': 'Senha atual invǭlida.'}, status=400)
 
         user.set_password(nova_senha)
         
-        # --- DESLIGA A OBRIGATORIEDADE APÇ“S TROCAR ---
+        # --- DESLIGA A OBRIGATORIEDADE APǓS TROCAR ---
         user.force_password_change = False
         user.save()
 
@@ -187,7 +188,7 @@ class PrivilegioSyncView(APIView):
         payload = request.data or {}
         modules = payload.get('modules', [])
         if not isinstance(modules, list):
-            return Response({'error': 'Payload invÇ­lido.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Payload invǭlido.'}, status=status.HTTP_400_BAD_REQUEST)
 
         seen_paths = set()
         with transaction.atomic():
@@ -219,4 +220,5 @@ class PrivilegioSyncView(APIView):
                 Privilegio.objects.exclude(path__in=seen_paths).update(active=False)
 
         return Response({'updated': len(seen_paths)})
+
 
