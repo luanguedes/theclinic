@@ -40,7 +40,7 @@ export default function Dashboard() {
     const [filtroMes, setFiltroMes] = useState(mesAtual);
 
     // --- DADOS ---
-    const [statsDia, setStatsDia] = useState({ total: 0, aguardando: 0, ocupacaoPercent: 0 });
+    const [statsDia, setStatsDia] = useState({ total: 0, aguardando: 0, ocupacaoPercent: 0, maxSlots: 0 });
     const [statsMes, setStatsMes] = useState({ totalPacientes: 0, receitaConfirmada: 0, receitaEstimada: 0 });
     const [listaHoje, setListaHoje] = useState([]); 
     const [loading, setLoading] = useState(true);
@@ -50,32 +50,69 @@ export default function Dashboard() {
         if (api) carregarDados();
     }, [api, filtroDia, filtroMes]);
 
+    const calcularCapacidadeDia = (regras) => {
+        return regras.reduce((total, regra) => {
+            if (regra.tipo === 'fixo') {
+                return total + Number(regra.quantidade_atendimentos || 0);
+            }
+
+            const intervalo = Number(regra.intervalo_minutos || 0);
+            if (!regra.hora_inicio || !regra.hora_fim || intervalo <= 0) return total;
+
+            const [hInicio, mInicio] = String(regra.hora_inicio).split(':');
+            const [hFim, mFim] = String(regra.hora_fim).split(':');
+            const inicioMin = Number(hInicio) * 60 + Number(mInicio);
+            const fimMin = Number(hFim) * 60 + Number(mFim);
+
+            if (!Number.isFinite(inicioMin) || !Number.isFinite(fimMin) || fimMin <= inicioMin) return total;
+
+            const slots = Math.floor((fimMin - inicioMin) / intervalo);
+            const qtdPorSlot = regra.tipo === 'periodo' ? Number(regra.quantidade_atendimentos || 1) : 1;
+
+            return total + slots * qtdPorSlot;
+        }, 0);
+    };
+
     const carregarDados = async () => {
         setLoading(true);
         try {
             // --- LÓGICA DE FILTRO POR PROFISSIONAL ---
             let queryExtra = '';
-            if (!isSuperUser && user?.profissional_id) {
+            const usaFiltroProfissional = !isSuperUser && !isRecepcao && user?.profissional_id;
+            if (usaFiltroProfissional) {
                 queryExtra = `&profissional=${user.profissional_id}`;
             }
 
             // 1. DADOS DO DIA
-            const resDia = await api.get(`agendamento/?data=${filtroDia}&nopage=true${queryExtra}`);
+            const [ano, mes] = filtroMes.split('-');
+            const diaSemana = new Date(`${filtroDia}T00:00:00`).getDay();
+            const agendaConfigParams = new URLSearchParams({ data_especifica: filtroDia, dia_filtro: String(diaSemana), nopage: 'true' });
+            if (usaFiltroProfissional) {
+                agendaConfigParams.append('profissional_id', user.profissional_id);
+            }
+
+            const [resDia, resMes, resConfig] = await Promise.all([
+                api.get(`agendamento/?data=${filtroDia}&nopage=true${queryExtra}`),
+                api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true${queryExtra}`),
+                api.get(`agendas/config/?${agendaConfigParams.toString()}`)
+            ]);
+
             const dadosDiaBrutos = resDia.data.results || resDia.data;
             const agendaAtivaDia = dadosDiaBrutos.filter(a => a.status !== 'cancelado');
-            
-            const perc = Math.min(Math.round((agendaAtivaDia.length / 20) * 100), 100);
+
+            const regrasDia = resConfig.data.results || resConfig.data || [];
+            const maxSlotsDia = calcularCapacidadeDia(Array.isArray(regrasDia) ? regrasDia : []);
+            const perc = maxSlotsDia > 0 ? Math.min(Math.round((agendaAtivaDia.length / maxSlotsDia) * 100), 100) : 0;
 
             setListaHoje(agendaAtivaDia);
             setStatsDia({ 
                 total: agendaAtivaDia.length, 
                 aguardando: agendaAtivaDia.filter(a => a.status === 'aguardando').length,
-                ocupacaoPercent: perc
+                ocupacaoPercent: perc,
+                maxSlots: maxSlotsDia
             });
 
             // 2. DADOS DO MÊS
-            const [ano, mes] = filtroMes.split('-');
-            const resMes = await api.get(`agendamento/?mes=${mes}&ano=${ano}&nopage=true${queryExtra}`);
             const dadosMesBrutos = resMes.data.results || resMes.data;
 
             const pacientesValidosMes = dadosMesBrutos.filter(a => a.status !== 'cancelado' && a.status !== 'faltou');
@@ -176,7 +213,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* KPIs PRINCIPAIS */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 font-bold">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10 font-bold">
                     <StatCard 
                         title="Fluxo do Dia"
                         value={`${statsDia.total} Pacientes`}
@@ -207,7 +244,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* GRID DE CONTEÚDO */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     
                     {/* LISTAGEM DA AGENDA */}
                     <div className="relative lg:col-span-2 bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[500px]">
@@ -269,7 +306,7 @@ export default function Dashboard() {
                     </div>
 
                     {/* COLUNA LATERAL DE PERFORMANCE */}
-                    <div className="flex flex-col gap-8">
+                    <div className="flex flex-col gap-6">
                         
                         {/* --- CORREÇÃO DO CARD: INVERSÃO DE CORES --- */}
                         <div className="relative bg-blue-600 dark:bg-slate-900 rounded-[32px] p-8 shadow-2xl overflow-hidden group">
@@ -302,14 +339,21 @@ export default function Dashboard() {
                                 <h4 className="font-black text-slate-800 dark:text-white uppercase text-xs tracking-widest flex items-center gap-2">
                                     <TrendingUp size={16} className="text-emerald-500"/> Taxa de Ocupação
                                 </h4>
-                                <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">{statsDia.ocupacaoPercent}%</span>
+                                <div className="text-right">
+                                    <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">
+                                        {statsDia.total}/{statsDia.maxSlots}
+                                    </span>
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        {statsDia.ocupacaoPercent}% ocupado
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="space-y-6">
                                 <div>
                                     <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-3">
                                         <span className="text-slate-400">Slots Preenchidos</span>
-                                        <span className="text-slate-700 dark:text-slate-200">{statsDia.total} de 20</span>
+                                        <span className="text-slate-700 dark:text-slate-200">{statsDia.total} de {statsDia.maxSlots}</span>
                                     </div>
                                     <div className="w-full bg-slate-100 dark:bg-slate-700/50 rounded-full h-4 p-1 shadow-inner">
                                         <div 

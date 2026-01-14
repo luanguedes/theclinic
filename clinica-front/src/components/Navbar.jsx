@@ -98,8 +98,8 @@ export default function Navbar() {
   return (
     <nav className={`
       sticky top-0 w-full transition-all duration-500 ease-in-out border-b
-      /* AQUI ESTÁ A CORREÇÃO GLOBAL: Z-INDEX 40 (Modais usam 50+) */
-      z-40
+      /* AQUI ESTÁ A CORREÇÃO GLOBAL: Z-INDEX 90 (Sidebar usa 80, modais 120+) */
+      z-[90]
       /* AQUI ESTÁ A REDUÇÃO DE TAMANHO: h-16 (64px) normal, h-14 (56px) scroll */
       ${scrolled 
         ? 'bg-white/95 dark:bg-slate-900/95 backdrop-blur-md h-14 border-slate-200 dark:border-slate-800 shadow-sm' 
