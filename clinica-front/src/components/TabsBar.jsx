@@ -36,7 +36,7 @@ export default function TabsBar() {
   const overlap = shouldOverlap ? (maxSlots > 4 ? 14 : maxSlots > 3 ? 12 : 8) : 0;
 
   return (
-    <div ref={containerRef} className="relative flex items-center w-full overflow-hidden">
+    <div ref={containerRef} className="relative flex items-center justify-center w-full overflow-hidden">
       {tabs.map((tab, idx) => {
         const Icon = tab.icon;
         const isActive = currentPath === tab.path;
@@ -57,7 +57,7 @@ export default function TabsBar() {
               isActive
                 ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/30'
                 : 'bg-white/60 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
+            } ${shouldOverlap ? '' : 'mr-2'}`}
             onClick={() => navigate(tab.path)}
             title={tab.title}
             style={{ marginLeft: offset, zIndex: z }}
