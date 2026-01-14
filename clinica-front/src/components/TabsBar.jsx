@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pin, PinOff, X } from 'lucide-react';
 import { useTabs } from '../context/TabsContext';
@@ -9,6 +9,7 @@ export default function TabsBar() {
   const [dragIndex, setDragIndex] = useState(null);
   const [shouldOverlap, setShouldOverlap] = useState(false);
   const containerRef = useRef(null);
+  const tabRefs = useRef([]);
 
   const handleClose = (path) => {
     const idx = tabs.findIndex((t) => t.path === path);
@@ -20,18 +21,22 @@ export default function TabsBar() {
     }
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const check = () => {
-      const spacing = shouldOverlap ? 0 : 8 * Math.max(0, tabs.length - 1);
-      setShouldOverlap(el.scrollWidth > (el.clientWidth + spacing));
+      const gap = 8;
+      const totalTabsWidth = tabRefs.current
+        .filter(Boolean)
+        .reduce((sum, node) => sum + node.offsetWidth, 0);
+      const totalWidth = totalTabsWidth + gap * Math.max(0, tabs.length - 1);
+      setShouldOverlap(totalWidth > el.clientWidth);
     };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [tabs.length, shouldOverlap]);
+  }, [tabs.length]);
 
   const maxSlots = Math.max(1, Math.min(5, tabs.length));
   const overlap = shouldOverlap ? (maxSlots > 4 ? 14 : maxSlots > 3 ? 12 : 8) : 0;
@@ -46,6 +51,7 @@ export default function TabsBar() {
         return (
           <div
             key={tab.path}
+            ref={(node) => { tabRefs.current[idx] = node; }}
             draggable
             onDragStart={() => setDragIndex(idx)}
             onDragOver={(e) => e.preventDefault()}
