@@ -112,6 +112,11 @@ export default function Operadores() {
                                         {op.acesso_agendamento && <span className="px-2 py-1 bg-green-50 text-green-700 text-[9px] font-black uppercase rounded border border-green-100">Agenda</span>}
                                         {op.acesso_atendimento && <span className="px-2 py-1 bg-purple-50 text-purple-700 text-[9px] font-black uppercase rounded border border-purple-100">Médico</span>}
                                         {op.acesso_faturamento && <span className="px-2 py-1 bg-yellow-50 text-yellow-700 text-[9px] font-black uppercase rounded border border-yellow-100">Financeiro</span>}
+                                        {op.privilegios_detalhes?.length > 0 && (
+                                            <span className="px-2 py-1 bg-slate-50 text-slate-500 text-[9px] font-black uppercase rounded border border-slate-100">
+                                                {new Set(op.privilegios_detalhes.map((p) => p.module_label)).size} módulos
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                             </div>

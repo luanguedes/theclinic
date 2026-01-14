@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { MENU_ITEMS, hasRouteAccess } from '../config/navigation';
 
 /**
  * Componente de Proteção de Rota
@@ -37,6 +38,22 @@ export default function PrivateRoute({ children }) {
     // 5. Prevenção de acesso à troca de senha se não for mais necessário
     if (!user.force_password_change && path === '/trocasenhaobrigatoria') {
         return <Navigate to="/dashboard" replace />;
+    }
+
+    // 6. Controle de acesso por rota
+    if (!user.is_superuser) {
+        const allowedByRoute = hasRouteAccess(user, path);
+        if (!allowedByRoute) {
+            const moduleMatch = MENU_ITEMS.find((m) =>
+                m.items.some((item) => path === item.to || path.startsWith(`${item.to}/`))
+            );
+            if (moduleMatch && !moduleMatch.access(user)) {
+                return <Navigate to="/dashboard" replace />;
+            }
+            if (!moduleMatch && path !== '/dashboard') {
+                return <Navigate to="/dashboard" replace />;
+            }
+        }
     }
 
     return children;

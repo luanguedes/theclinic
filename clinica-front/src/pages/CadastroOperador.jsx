@@ -4,7 +4,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, Users, AlertCircle 
+  UserCog, Mail, Lock, Shield, Save, Check, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, AlertCircle 
 } from 'lucide-react';
 
 const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
@@ -77,6 +77,7 @@ export default function CadastroOperador() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(id ? true : false);
   const [profissionais, setProfissionais] = useState([]);
+  const [privilegeModules, setPrivilegeModules] = useState([]);
   
   const [formData, setFormData] = useState({
     username: '', password: '', first_name: '', email: '',
@@ -84,7 +85,8 @@ export default function CadastroOperador() {
     acesso_faturamento: false, acesso_cadastros: false,
     is_superuser: false,
     force_password_change: true,
-    profissional: null
+    profissional: null,
+    privilegios: []
   });
 
   useEffect(() => {
@@ -93,6 +95,10 @@ export default function CadastroOperador() {
             const lista = res.data.results || res.data;
             setProfissionais(lista.map(p => ({ id: p.id, label: `${p.nome} (CPF: ${p.cpf})` })));
         }).catch(() => notify.error("Erro ao carregar lista de profissionais para vínculo."));
+
+        api.get('operadores/privilegios/').then(res => {
+            setPrivilegeModules(res.data.modules || []);
+        }).catch(() => {});
 
         if (id) {
             api.get(`operadores/${id}/`)
@@ -109,7 +115,8 @@ export default function CadastroOperador() {
                         is_superuser: data.is_superuser || false,
                         force_password_change: data.force_password_change || false,
                         profissional: data.profissional || null,
-                        password: ''
+                        password: '',
+                        privilegios: data.privilegios || []
                     });
                 })
                 .catch(() => {
@@ -140,11 +147,43 @@ export default function CadastroOperador() {
     }
   };
 
+  const togglePrivilege = (id) => {
+    setFormData(prev => {
+      const set = new Set(prev.privilegios);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      return { ...prev, privilegios: Array.from(set) };
+    });
+  };
+
+  const toggleModule = (moduleKey, ids) => {
+    setFormData(prev => {
+      const set = new Set(prev.privilegios);
+      const hasAll = ids.every((id) => set.has(id));
+      ids.forEach((id) => {
+        if (hasAll) set.delete(id);
+        else set.add(id);
+      });
+      return { ...prev, privilegios: Array.from(set) };
+    });
+  };
+
+  const computeModuleAccess = (key) => {
+    const module = privilegeModules.find((m) => m.key === key);
+    if (!module) return false;
+    return module.items.some((item) => formData.privilegios.includes(item.id));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       const dadosParaEnviar = { ...formData };
+      if (privilegeModules.length > 0) {
+        dadosParaEnviar.acesso_agendamento = computeModuleAccess('agenda');
+        dadosParaEnviar.acesso_atendimento = computeModuleAccess('atendimento');
+        dadosParaEnviar.acesso_cadastros = computeModuleAccess('sistema');
+      }
       
       if (!dadosParaEnviar.password) delete dadosParaEnviar.password;
       if (!dadosParaEnviar.profissional) dadosParaEnviar.profissional = null;
@@ -167,6 +206,7 @@ export default function CadastroOperador() {
 
   const inputClass = "w-full pl-10 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400 text-sm font-bold";
   const labelClass = "block text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
+  const privilegeDisabled = formData.is_superuser;
 
   if (fetching) return (
     <Layout>
@@ -271,26 +311,9 @@ export default function CadastroOperador() {
             <div className="lg:col-span-1">
               <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 h-full flex flex-col">
                 <h2 className="text-sm font-black text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-[0.2em]">Permissões</h2>
-                <p className="text-xs font-bold text-slate-400 mb-8 uppercase tracking-tight">Liberar acesso aos módulos:</p>
+                <p className="text-xs font-bold text-slate-400 mb-6 uppercase tracking-tight">Defina acesso por módulo e tela:</p>
 
-                <div className="space-y-4 flex-grow">
-                  {[
-                    { id: 'acesso_cadastros', label: 'Cadastros', icon: Users, color: 'text-blue-500' },
-                    { id: 'acesso_agendamento', label: 'Recepção', icon: CalendarDays, color: 'text-green-500' },
-                    { id: 'acesso_atendimento', label: 'Prontuário', icon: Stethoscope, color: 'text-indigo-500' },
-                    { id: 'acesso_faturamento', label: 'Financeiro', icon: DollarSign, color: 'text-amber-500' }
-                  ].map((perm) => (
-                    <label key={perm.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${formData[perm.id] ? 'bg-slate-50 border-blue-100 dark:bg-slate-700/50' : 'bg-transparent border-transparent opacity-60'} ${formData.is_superuser ? 'pointer-events-none opacity-60' : ''}`}>
-                        <div className="flex items-center gap-3">
-                            <perm.icon size={18} className={formData[perm.id] ? perm.color : 'text-slate-400'}/>
-                            <span className={`text-xs font-black uppercase tracking-widest ${formData[perm.id] ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>{perm.label}</span>
-                        </div>
-                        <input type="checkbox" name={perm.id} checked={formData[perm.id]} onChange={handleChange} className="w-5 h-5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all" disabled={formData.is_superuser}/>
-                    </label>
-                  ))}
-                  
-                  <hr className="border-slate-100 dark:border-slate-700 my-6"/>
-                  
+                <div className="space-y-4">
                   <label className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${formData.is_superuser ? 'bg-purple-50 border-purple-200 dark:bg-purple-900/20' : 'bg-slate-50 border-transparent opacity-60'}`}>
                         <div className="flex items-center gap-3">
                             <Shield size={20} className={formData.is_superuser ? 'text-purple-600' : 'text-slate-400'}/>
@@ -298,6 +321,53 @@ export default function CadastroOperador() {
                         </div>
                         <input type="checkbox" name="is_superuser" checked={formData.is_superuser} onChange={handleChange} className="w-6 h-6 rounded-lg text-purple-600 border-slate-300 focus:ring-purple-500 transition-all"/>
                   </label>
+
+                  <label className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${formData.acesso_faturamento ? 'bg-slate-50 border-blue-100 dark:bg-slate-700/50' : 'bg-transparent border-transparent opacity-60'} ${privilegeDisabled ? 'pointer-events-none opacity-60' : ''}`}>
+                      <div className="flex items-center gap-3">
+                          <DollarSign size={18} className={formData.acesso_faturamento ? 'text-amber-500' : 'text-slate-400'}/>
+                          <span className={`text-xs font-black uppercase tracking-widest ${formData.acesso_faturamento ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>Financeiro</span>
+                      </div>
+                      <input type="checkbox" name="acesso_faturamento" checked={formData.acesso_faturamento} onChange={handleChange} className="w-5 h-5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all" disabled={privilegeDisabled}/>
+                  </label>
+                </div>
+
+                <div className={`mt-6 space-y-4 flex-grow ${privilegeDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
+                  {privilegeModules.map((module) => {
+                    const ids = module.items.map((item) => item.id);
+                    const hasAll = ids.length > 0 && ids.every((idItem) => formData.privilegios.includes(idItem));
+                    return (
+                      <div key={module.key} className="border border-slate-100 dark:border-slate-700 rounded-2xl p-4 bg-slate-50/60 dark:bg-slate-900/40">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{module.label}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleModule(module.key, ids)}
+                            className="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700"
+                          >
+                            {hasAll ? 'Limpar módulo' : 'Selecionar tudo'}
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {module.items.map((item) => {
+                            const checked = formData.privilegios.includes(item.id);
+                            return (
+                              <label key={item.id} className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${checked ? 'bg-white border-blue-100 dark:bg-slate-800' : 'bg-transparent border-transparent'}`}>
+                                <span className={`text-[10px] font-black uppercase tracking-widest ${checked ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>
+                                  {item.label}
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => togglePrivilege(item.id)}
+                                  className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="mt-10 space-y-3">

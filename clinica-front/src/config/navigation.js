@@ -20,45 +20,96 @@ export const DASHBOARD_ITEM = {
   icon: LayoutDashboard
 };
 
+const ATENDIMENTO_ITEMS = [
+  { to: '/prontuarios', label: 'Prontuários', icon: ClipboardList },
+  { to: '/triagem', label: 'Triagem', icon: Bell }
+];
+
+const AGENDA_ITEMS = [
+  { to: '/recepcao', label: 'Recepção', icon: Users },
+  { to: '/agenda/marcar', label: 'Agendar Consulta', icon: CalendarDays },
+  { to: '/agenda/configurar', label: 'Criar Agenda', icon: CalendarClock },
+  { to: '/agenda/bloqueios', label: 'Bloqueios e Feriados', icon: CalendarX }
+];
+
+const AGENDA_PRIVILEGE_ITEMS = [
+  ...AGENDA_ITEMS,
+  { to: '/agenda/criar', label: 'Criar Agenda (Assistente)' }
+];
+
+const SISTEMA_ITEMS = [
+  { to: '/pacientes', label: 'Pacientes', icon: Users },
+  { to: '/operadores', label: 'Operadores', icon: ShieldCheck },
+  { to: '/profissionais', label: 'Profissionais', icon: Briefcase },
+  { to: '/especialidades', label: 'Especialidades', icon: Heart },
+  { to: '/convenios', label: 'Convênios', icon: ShieldCheck },
+  { to: '/clinica', label: 'Dados da Clínica', icon: Building2 }
+];
+
+const SISTEMA_PRIVILEGE_ITEMS = [
+  ...SISTEMA_ITEMS,
+  { to: '/configuracoes', label: 'Configurações do Sistema' }
+];
+
+const fallbackModuleAccess = (user, moduleKey) => {
+  if (!user) return false;
+  if (moduleKey === 'agenda') return !!user.acesso_agendamento;
+  if (moduleKey === 'atendimento') return !!user.acesso_atendimento;
+  if (moduleKey === 'sistema') return !!user.acesso_cadastros;
+  return false;
+};
+
+export const hasRouteAccess = (user, path) => {
+  if (user?.is_superuser) return true;
+  if (path === '/dashboard') return true;
+  const allowed = user?.allowed_routes || [];
+  if (allowed.length > 0) {
+    return allowed.some((p) => path === p || path.startsWith(`${p}/`));
+  }
+  if (path.startsWith('/configuracoes')) return !!user?.acesso_configuracoes;
+  return false;
+};
+
+const hasModuleAccess = (user, moduleKey, items) => {
+  if (user?.is_superuser) return true;
+  const allowed = user?.allowed_routes || [];
+  if (allowed.length > 0) {
+    return items.some((item) => hasRouteAccess(user, item.to));
+  }
+  return fallbackModuleAccess(user, moduleKey);
+};
+
 export const MENU_ITEMS = [
   {
     key: 'atendimento',
     label: 'Atendimento',
     icon: Stethoscope,
-    access: (u) => u?.is_superuser || u?.acesso_atendimento,
-    items: [
-      { to: '/prontuarios', label: 'Prontuários', icon: ClipboardList },
-      { to: '/triagem', label: 'Triagem', icon: Bell }
-    ]
+    access: (u) => hasModuleAccess(u, 'atendimento', ATENDIMENTO_ITEMS),
+    items: ATENDIMENTO_ITEMS
   },
   {
     key: 'agenda',
     label: 'Agenda',
     icon: CalendarDays,
-    access: (u) => u?.is_superuser || u?.acesso_agendamento,
-    items: [
-      { to: '/recepcao', label: 'Recepção', icon: Users },
-      { to: '/agenda/marcar', label: 'Agendar Consulta', icon: CalendarDays },
-      { to: '/agenda/configurar', label: 'Criar Agenda', icon: CalendarClock },
-      { to: '/agenda/bloqueios', label: 'Bloqueios e Feriados', icon: CalendarX }
-    ]
+    access: (u) => hasModuleAccess(u, 'agenda', AGENDA_ITEMS),
+    items: AGENDA_ITEMS
   },
   {
     key: 'sistema',
     label: 'Sistema',
     icon: Settings,
-    access: (u) => u?.is_superuser || u?.acesso_cadastros,
-    items: [
-      { to: '/pacientes', label: 'Pacientes', icon: Users },
-      { to: '/operadores', label: 'Operadores', icon: ShieldCheck },
-      { to: '/profissionais', label: 'Profissionais', icon: Briefcase },
-      { to: '/especialidades', label: 'Especialidades', icon: Heart },
-      { to: '/convenios', label: 'Convênios', icon: ShieldCheck },
-      { to: '/clinica', label: 'Dados da Clínica', icon: Building2 }
-    ]
+    access: (u) => hasModuleAccess(u, 'sistema', SISTEMA_ITEMS),
+    items: SISTEMA_ITEMS
   }
 ];
 
 export const getFlatMenuItems = () => (
   MENU_ITEMS.flatMap((m) => m.items).sort((a, b) => b.to.length - a.to.length)
 );
+
+export const getPrivilegeModules = () => ([
+  { key: 'dashboard', label: 'Dashboard', items: [DASHBOARD_ITEM] },
+  { key: 'atendimento', label: 'Atendimento', items: ATENDIMENTO_ITEMS },
+  { key: 'agenda', label: 'Agenda', items: AGENDA_PRIVILEGE_ITEMS },
+  { key: 'sistema', label: 'Sistema', items: SISTEMA_PRIVILEGE_ITEMS }
+]);

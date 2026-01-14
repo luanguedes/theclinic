@@ -1,6 +1,19 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+
+class Privilegio(models.Model):
+    path = models.CharField(max_length=200, unique=True)
+    label = models.CharField(max_length=100)
+    module_key = models.CharField(max_length=50)
+    module_label = models.CharField(max_length=100)
+    module_order = models.IntegerField(default=0)
+    item_order = models.IntegerField(default=0)
+    active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.module_label}: {self.label}"
+
 class Operador(AbstractUser):
     telefone = models.CharField(max_length=20, blank=True, null=True)
     
@@ -18,6 +31,10 @@ class Operador(AbstractUser):
     acesso_faturamento = models.BooleanField(default=False, verbose_name="Acesso Financeiro")
     acesso_cadastros = models.BooleanField(default=False, verbose_name="Acesso a Cadastros Gerais")
     acesso_configuracoes = models.BooleanField(default=False, verbose_name="Acesso a Configurações do Sistema")
+
+    privilegios = models.ManyToManyField(
+        Privilegio, blank=True, related_name='operadores'
+    )
     
     # --- NOVO CAMPO: FORÇAR TROCA DE SENHA ---
     force_password_change = models.BooleanField(

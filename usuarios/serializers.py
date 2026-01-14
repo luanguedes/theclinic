@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import Operador
+from .models import Operador, Privilegio
 
 # --- ESSA ERA A CLASSE QUE FALTAVA ---
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -35,6 +35,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 class OperadorSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     profissional_nome = serializers.CharField(source='profissional.nome', read_only=True)
+    privilegios = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Privilegio.objects.all(), required=False
+    )
+    privilegios_detalhes = serializers.SerializerMethodField()
 
     class Meta:
         model = Operador
@@ -43,22 +47,47 @@ class OperadorSerializer(serializers.ModelSerializer):
             'is_superuser', 'profissional', 'profissional_nome',
             'acesso_agendamento', 'acesso_atendimento', 
             'acesso_faturamento', 'acesso_cadastros', 'acesso_configuracoes',
-            'force_password_change' 
+            'force_password_change',
+            'privilegios', 'privilegios_detalhes'
         ]
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
+        privilegios = validated_data.pop('privilegios', [])
         user = Operador(**validated_data)
         if password:
             user.set_password(password)
         user.save()
+        if privilegios:
+            user.privilegios.set(privilegios)
         return user
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
+        privilegios = validated_data.pop('privilegios', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
             instance.set_password(password)
         instance.save()
+        if privilegios is not None:
+            instance.privilegios.set(privilegios)
         return instance
+
+    def get_privilegios_detalhes(self, obj):
+        return [
+            {
+                'id': p.id,
+                'path': p.path,
+                'label': p.label,
+                'module_key': p.module_key,
+                'module_label': p.module_label
+            }
+            for p in obj.privilegios.filter(active=True).order_by('module_order', 'item_order')
+        ]
+
+
+class PrivilegioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Privilegio
+        fields = ['id', 'path', 'label', 'module_key', 'module_label', 'module_order', 'item_order', 'active']

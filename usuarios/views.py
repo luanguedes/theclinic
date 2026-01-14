@@ -1,12 +1,13 @@
-from rest_framework import viewsets, permissions, filters
+from rest_framework import viewsets, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .models import Operador
-from .serializers import OperadorSerializer
+from django.db import transaction
+from .models import Operador, Privilegio
+from .serializers import OperadorSerializer, PrivilegioSerializer
 
 class OperadorViewSet(viewsets.ModelViewSet):
-    queryset = Operador.objects.all().select_related('profissional').order_by('first_name')
+    queryset = Operador.objects.all().select_related('profissional').prefetch_related('privilegios').order_by('first_name')
     serializer_class = OperadorSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter]
@@ -55,6 +56,33 @@ class MeView(APIView):
             force_change = False
 
         # 3. Monta a resposta
+        allowed_routes = []
+        if user.is_superuser:
+            allowed_routes = list(Privilegio.objects.filter(active=True).values_list('path', flat=True))
+        else:
+            allowed_routes = list(user.privilegios.filter(active=True).values_list('path', flat=True))
+
+            if not allowed_routes:
+                module_map = {
+                    'agenda': getattr(user, 'acesso_agendamento', False),
+                    'atendimento': getattr(user, 'acesso_atendimento', False),
+                    'sistema': getattr(user, 'acesso_cadastros', False)
+                }
+                fallback_modules = [k for k, v in module_map.items() if v]
+                if fallback_modules:
+                    allowed_routes = list(
+                        Privilegio.objects.filter(active=True, module_key__in=fallback_modules).values_list('path', flat=True)
+                    )
+                if getattr(user, 'acesso_configuracoes', False):
+                    allowed_routes.extend(
+                        list(Privilegio.objects.filter(active=True, path='/configuracoes').values_list('path', flat=True))
+                    )
+
+        if prof_id:
+            allowed_routes.extend(['/prontuarios', '/triagem'])
+
+        allowed_routes = sorted(set(allowed_routes))
+
         data = {
             "id": user.id,
             "username": user.username,
@@ -63,6 +91,7 @@ class MeView(APIView):
             "is_superuser": user.is_superuser,
             "profissional_id": prof_id,
             "force_password_change": force_change,
+            "allowed_routes": allowed_routes,
 
             # Permissões (seguras com getattr)
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
@@ -89,3 +118,79 @@ class TrocarSenhaView(APIView):
         user.save()
 
         return Response({'message': 'Senha alterada com sucesso!'})
+
+
+class PrivilegioListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Acesso restrito.'}, status=status.HTTP_403_FORBIDDEN)
+
+        qs = Privilegio.objects.filter(active=True).order_by('module_order', 'item_order')
+        serializer = PrivilegioSerializer(qs, many=True)
+        modules = {}
+        for item in serializer.data:
+            key = item['module_key']
+            modules.setdefault(key, {
+                'key': key,
+                'label': item['module_label'],
+                'order': item['module_order'],
+                'items': []
+            })
+            modules[key]['items'].append({
+                'id': item['id'],
+                'path': item['path'],
+                'label': item['label'],
+                'order': item['item_order']
+            })
+
+        ordered = sorted(modules.values(), key=lambda m: m['order'])
+        for mod in ordered:
+            mod['items'] = sorted(mod['items'], key=lambda i: i['order'])
+
+        return Response({'modules': ordered})
+
+
+class PrivilegioSyncView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not request.user.is_superuser:
+            return Response({'error': 'Acesso restrito.'}, status=status.HTTP_403_FORBIDDEN)
+
+        payload = request.data or {}
+        modules = payload.get('modules', [])
+        if not isinstance(modules, list):
+            return Response({'error': 'Payload inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        seen_paths = set()
+        with transaction.atomic():
+            for module_index, module in enumerate(modules):
+                module_key = module.get('key')
+                module_label = module.get('label')
+                items = module.get('items', [])
+                if not module_key or not module_label or not isinstance(items, list):
+                    continue
+                for item_index, item in enumerate(items):
+                    path = item.get('path')
+                    label = item.get('label')
+                    if not path or not label:
+                        continue
+                    seen_paths.add(path)
+                    Privilegio.objects.update_or_create(
+                        path=path,
+                        defaults={
+                            'label': label,
+                            'module_key': module_key,
+                            'module_label': module_label,
+                            'module_order': module_index,
+                            'item_order': item_index,
+                            'active': True
+                        }
+                    )
+
+            if seen_paths:
+                Privilegio.objects.exclude(path__in=seen_paths).update(active=False)
+
+        return Response({'updated': len(seen_paths)})

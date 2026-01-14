@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 import axios from 'axios';
+import { getPrivilegeModules } from '../config/navigation';
 
 const AuthContext = createContext();
 
@@ -11,6 +12,20 @@ const api = axios.create({
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const syncPrivileges = async () => {
+    const modules = getPrivilegeModules().map((m) => ({
+      key: m.key,
+      label: m.label,
+      items: m.items.map((i) => ({ path: i.to, label: i.label }))
+    }));
+
+    try {
+      await api.post('operadores/privilegios/sync/', { modules });
+    } catch (error) {
+      // Sync é best-effort para manter o catálogo atualizado.
+    }
+  };
 
   // --- INTERCEPTADOR GLOBAL DE ERROS ---
   useEffect(() => {
@@ -42,6 +57,9 @@ export function AuthProvider({ children }) {
           try {
               const res = await api.get('me/');
               setUser(res.data);
+              if (res.data?.is_superuser) {
+                await syncPrivileges();
+              }
           } catch (err) {
               logout();
           }
@@ -68,6 +86,9 @@ export function AuthProvider({ children }) {
       
       const userResponse = await api.get('me/');
       setUser(userResponse.data);
+      if (userResponse.data?.is_superuser) {
+        await syncPrivileges();
+      }
       return { success: true };
     } catch (error) {
       return { 
