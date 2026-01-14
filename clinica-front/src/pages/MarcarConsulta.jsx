@@ -216,7 +216,7 @@ export default function MarcarConsulta() {
             const data = res.data.results || res.data;
             setConvenios(Array.isArray(data) ? data.map(c => ({ id: c.id, label: c.nome })) : []);
         }).catch(() => {});
-        api.get('agendamento/bloqueios/').then(res => setListaBloqueios(res.data.results || res.data)).catch(() => {});
+        api.get('bloqueios/').then(res => setListaBloqueios(res.data.results || res.data)).catch(() => {});
     }
   }, [api]);
 
@@ -398,10 +398,10 @@ export default function MarcarConsulta() {
   return (
     <Layout>
       <style>{calendarStyles}</style>
-      <div className="max-w-[1920px] pb-20">
+      <div className="max-w-[1920px] pb-20 pt-2">
         
         {/* CABEÇALHO */}
-        <div className="mb-4">
+        <div className="mb-3">
             <h1 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-3">
                 <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20"><CalendarIcon size={28}/></div>
                 Marcar Consulta
@@ -410,7 +410,7 @@ export default function MarcarConsulta() {
         </div>
 
         {/* CARD DE FILTROS */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] shadow-sm border border-slate-200 dark:border-slate-700 mb-5">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
             <div className="flex flex-col md:flex-row gap-4 items-center">
                 <div className="flex items-center gap-2 text-slate-400 font-black uppercase text-xs tracking-widest min-w-fit">
                     <Filter size={16}/> Filtros
