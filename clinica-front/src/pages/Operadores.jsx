@@ -104,7 +104,7 @@ export default function Operadores() {
                                 {op.profissional_nome && (
                                     <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
                                         <Stethoscope size={14} className="text-emerald-500"/>
-                                        <span className="uppercase tracking-widest">Vinculado: {op.profissional_nome}</span>
+                                        <span className="uppercase tracking-widest">{op.profissional_nome}</span>
                                     </div>
                                 )}
                                 {!op.is_superuser && (
