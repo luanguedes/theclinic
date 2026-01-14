@@ -36,7 +36,7 @@ export default function TabsBar() {
   const overlap = shouldOverlap ? (maxSlots > 4 ? 14 : maxSlots > 3 ? 12 : 8) : 0;
 
   return (
-    <div ref={containerRef} className="relative flex items-center justify-center w-full overflow-hidden">
+    <div ref={containerRef} className="relative flex items-center justify-center w-full max-w-[680px] overflow-hidden">
       {tabs.map((tab, idx) => {
         const Icon = tab.icon;
         const isActive = currentPath === tab.path;
