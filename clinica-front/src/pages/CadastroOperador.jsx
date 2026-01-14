@@ -78,6 +78,7 @@ export default function CadastroOperador() {
   const [fetching, setFetching] = useState(id ? true : false);
   const [profissionais, setProfissionais] = useState([]);
   const [privilegeModules, setPrivilegeModules] = useState([]);
+  const [expandedModules, setExpandedModules] = useState({});
   
   const [formData, setFormData] = useState({
     username: '', password: '', first_name: '', email: '',
@@ -166,6 +167,10 @@ export default function CadastroOperador() {
       });
       return { ...prev, privilegios: Array.from(set) };
     });
+  };
+
+  const toggleModuleView = (moduleKey) => {
+    setExpandedModules((prev) => ({ ...prev, [moduleKey]: !prev[moduleKey] }));
   };
 
   const computeModuleAccess = (key) => {
@@ -335,10 +340,18 @@ export default function CadastroOperador() {
                   {privilegeModules.map((module) => {
                     const ids = module.items.map((item) => item.id);
                     const hasAll = ids.length > 0 && ids.every((idItem) => formData.privilegios.includes(idItem));
+                    const isExpanded = !!expandedModules[module.key];
                     return (
                       <div key={module.key} className="border border-slate-100 dark:border-slate-700 rounded-2xl p-4 bg-slate-50/60 dark:bg-slate-900/40">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{module.label}</span>
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => toggleModuleView(module.key)}
+                            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-700"
+                          >
+                            <span className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>⌄</span>
+                            {module.label}
+                          </button>
                           <button
                             type="button"
                             onClick={() => toggleModule(module.key, ids)}
@@ -347,24 +360,26 @@ export default function CadastroOperador() {
                             {hasAll ? 'Limpar módulo' : 'Selecionar tudo'}
                           </button>
                         </div>
-                        <div className="space-y-2">
-                          {module.items.map((item) => {
-                            const checked = formData.privilegios.includes(item.id);
-                            return (
-                              <label key={item.id} className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${checked ? 'bg-white border-blue-100 dark:bg-slate-800' : 'bg-transparent border-transparent'}`}>
-                                <span className={`text-[10px] font-black uppercase tracking-widest ${checked ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>
-                                  {item.label}
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => togglePrivilege(item.id)}
-                                  className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all"
-                                />
-                              </label>
-                            );
-                          })}
-                        </div>
+                        {isExpanded && (
+                          <div className="space-y-2 mt-3">
+                            {module.items.map((item) => {
+                              const checked = formData.privilegios.includes(item.id);
+                              return (
+                                <label key={item.id} className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${checked ? 'bg-white border-blue-100 dark:bg-slate-800' : 'bg-transparent border-transparent'}`}>
+                                  <span className={`text-[10px] font-black uppercase tracking-widest ${checked ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>
+                                    {item.label}
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => togglePrivilege(item.id)}
+                                    className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all"
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
