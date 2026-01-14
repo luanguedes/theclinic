@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pin, PinOff, X } from 'lucide-react';
 import { useTabs } from '../context/TabsContext';
@@ -7,6 +7,8 @@ export default function TabsBar() {
   const { tabs, currentPath, closeTab, togglePin, moveTab } = useTabs();
   const navigate = useNavigate();
   const [dragIndex, setDragIndex] = useState(null);
+  const [shouldOverlap, setShouldOverlap] = useState(false);
+  const containerRef = useRef(null);
 
   const handleClose = (path) => {
     const idx = tabs.findIndex((t) => t.path === path);
@@ -18,11 +20,23 @@ export default function TabsBar() {
     }
   };
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const check = () => {
+      setShouldOverlap(el.scrollWidth > el.clientWidth + 8);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tabs.length]);
+
   const maxSlots = Math.max(1, Math.min(5, tabs.length));
-  const overlap = maxSlots > 4 ? 14 : maxSlots > 3 ? 12 : 8;
+  const overlap = shouldOverlap ? (maxSlots > 4 ? 14 : maxSlots > 3 ? 12 : 8) : 0;
 
   return (
-    <div className="relative flex items-center w-full max-w-[520px] overflow-hidden">
+    <div ref={containerRef} className="relative flex items-center w-full overflow-hidden">
       {tabs.map((tab, idx) => {
         const Icon = tab.icon;
         const isActive = currentPath === tab.path;

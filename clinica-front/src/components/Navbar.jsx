@@ -105,8 +105,8 @@ export default function Navbar() {
         ? 'bg-white/95 dark:bg-slate-900/95 backdrop-blur-md h-14 border-slate-200 dark:border-slate-800 shadow-sm' 
         : 'bg-white dark:bg-slate-900 h-16 border-transparent'}
     `}>
-      <div className="container mx-auto px-4 md:px-6 h-full flex items-center gap-6">
-        <div className="flex items-center gap-4 h-full">
+      <div className="container mx-auto px-4 md:px-6 h-full flex items-center">
+        <div className="flex items-center gap-4 h-full min-w-[220px]">
           <Link to="/dashboard" className="flex items-center gap-2 group">
             <div className={`bg-blue-600 text-white rounded-xl shadow-md group-hover:rotate-12 transition-all duration-500 ${scrolled ? 'p-1.5' : 'p-2'}`}>
               <Stethoscope size={scrolled ? 18 : 22} strokeWidth={3} />
@@ -119,12 +119,12 @@ export default function Navbar() {
 
         </div>
 
-        <div className="flex-1 hidden md:flex justify-center">
+        <div className="flex-1 hidden md:flex justify-center px-4">
           <TabsBar />
         </div>
 
         {/* LADO DIREITO */}
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-2 ml-auto min-w-[220px] justify-end">
           <button onClick={toggleTheme} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-blue-600 hover:text-white transition-all">
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
