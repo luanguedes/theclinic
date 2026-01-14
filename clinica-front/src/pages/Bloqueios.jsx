@@ -27,12 +27,16 @@ export default function Bloqueios() {
     const [form, setForm] = useState(formInicial);
 
     const [conflictData, setConflictData] = useState(null);
+    const [loteBase, setLoteBase] = useState(null);
+    const [periodosPendentes, setPeriodosPendentes] = useState([]);
+    const [periodoAtualConflito, setPeriodoAtualConflito] = useState(null);
     const [modalDisparoOpen, setModalDisparoOpen] = useState(false);
     const [listaAfetados, setListaAfetados] = useState([]);
     const [selecionados, setSelecionados] = useState([]);
     const [enviandoWpp, setEnviandoWpp] = useState(false);
     const [motivoSalvo, setMotivoSalvo] = useState('');
     const [configSistema, setConfigSistema] = useState(null);
+    const [periodos, setPeriodos] = useState([]);
 
     const hojeIso = new Date().toISOString().split('T')[0];
 
@@ -78,13 +82,67 @@ export default function Bloqueios() {
     const handleCancelEdit = () => {
         setEditingId(null);
         setForm(formInicial);
+        setPeriodos([]);
+        setLoteBase(null);
+        setPeriodosPendentes([]);
+        setPeriodoAtualConflito(null);
+    };
+
+    const formatDateBr = (dateStr) => {
+        if (!dateStr) return '';
+        const iso = String(dateStr).split('T')[0];
+        const [y, m, d] = iso.split('-');
+        if (!d) return new Date(dateStr).toLocaleDateString('pt-BR');
+        return `${d}/${m}/${y}`;
+    };
+
+    const buildPeriodo = () => ({
+        data_inicio: form.data_inicio,
+        data_fim: form.data_fim,
+        hora_inicio: form.hora_inicio,
+        hora_fim: form.hora_fim,
+        recorrente: form.recorrente
+    });
+
+    const addPeriodo = () => {
+        if (!form.data_inicio || !form.data_fim) {
+            notify.warning("Informe data de início e fim para adicionar o período.");
+            return;
+        }
+        if (form.tipo === 'bloqueio' && (!form.hora_inicio || !form.hora_fim)) {
+            notify.warning("Informe hora de início e fim para adicionar o período.");
+            return;
+        }
+        setPeriodos(prev => ([...prev, buildPeriodo()]));
+        setForm(prev => ({ ...prev, data_inicio: '', data_fim: '' }));
+    };
+
+    const removePeriodo = (index) => {
+        setPeriodos(prev => prev.filter((_, idx) => idx !== index));
+    };
+
+    const processarPeriodos = async (periodosLista, base) => {
+        for (let i = 0; i < periodosLista.length; i += 1) {
+            const periodo = periodosLista[i];
+            const res = await api.post('bloqueios/verificar_conflitos/', { ...base, ...periodo });
+            if (res.data.conflito) {
+                setConflictData(res.data);
+                setPeriodoAtualConflito(periodo);
+                setPeriodosPendentes(periodosLista.slice(i + 1));
+                return false;
+            }
+            await api.post('bloqueios/', { ...base, ...periodo, acao_conflito: 'manter' });
+        }
+        return true;
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!editingId && form.data_inicio < hojeIso) {
-            return notify.warning("Não é possível criar um bloqueio retroativo.");
+        if (!editingId) {
+            const temRetroativo = (periodos.length > 0 ? periodos : [buildPeriodo()])
+                .some(p => p.data_inicio && p.data_inicio < hojeIso);
+            if (temRetroativo) return notify.warning("Não é possível criar um bloqueio retroativo.");
         }
 
         setLoading(true);
@@ -95,17 +153,20 @@ export default function Bloqueios() {
                 handleCancelEdit();
                 loadData();
             } else {
-                const res = await api.post('bloqueios/verificar_conflitos/', form);
-                
-                if (res.data.conflito) {
-                    setConflictData(res.data);
+                const base = { ...form };
+                const periodosLista = periodos.length > 0 ? periodos : [buildPeriodo()];
+                setLoteBase(base);
+
+                const ok = await processarPeriodos(periodosLista, base);
+                if (!ok) {
                     setLoading(false);
-                    return; 
+                    return;
                 }
 
-                await api.post('bloqueios/', { ...form, acao_conflito: 'manter' });
                 notify.success("Bloqueio aplicado com sucesso!");
                 setForm(formInicial);
+                setPeriodos([]);
+                setLoteBase(null);
                 loadData();
             }
         } catch (error) {
@@ -117,7 +178,9 @@ export default function Bloqueios() {
 
     const resolverConflito = async (acao) => {
         try {
-            const res = await api.post('bloqueios/', { ...form, acao_conflito: acao });
+            const base = loteBase || { ...form };
+            const periodo = periodoAtualConflito || buildPeriodo();
+            const res = await api.post('bloqueios/', { ...base, ...periodo, acao_conflito: acao });
             
             if (res.data.afetados && res.data.afetados.length > 0) {
                 setListaAfetados(res.data.afetados);
@@ -129,7 +192,17 @@ export default function Bloqueios() {
             }
 
             setConflictData(null);
+            setPeriodoAtualConflito(null);
+
+            if (periodosPendentes.length > 0) {
+                const ok = await processarPeriodos(periodosPendentes, base);
+                if (!ok) return;
+            }
+
             setForm(formInicial);
+            setPeriodos([]);
+            setLoteBase(null);
+            setPeriodosPendentes([]);
             loadData();
         } catch (error) { notify.error("Erro ao processar resolução de conflitos."); }
     };
@@ -233,9 +306,39 @@ export default function Bloqueios() {
                             )}
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className={labelClass}>Data Início</label><input type="date" value={form.data_inicio} onChange={e=>setForm({...form, data_inicio: e.target.value})} className={inputClass} required/></div>
-                                <div><label className={labelClass}>Data Fim</label><input type="date" value={form.data_fim} onChange={e=>setForm({...form, data_fim: e.target.value})} className={inputClass} required/></div>
+                                <div><label className={labelClass}>Data Início</label><input type="date" value={form.data_inicio} onChange={e=>setForm({...form, data_inicio: e.target.value})} className={inputClass} required={periodos.length === 0}/></div>
+                                <div><label className={labelClass}>Data Fim</label><input type="date" value={form.data_fim} onChange={e=>setForm({...form, data_fim: e.target.value})} className={inputClass} required={periodos.length === 0}/></div>
                             </div>
+
+                            {!editingId && (
+                                <div className="flex items-center justify-between">
+                                    <button type="button" onClick={addPeriodo} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-colors">
+                                        + Add Período
+                                    </button>
+                                    {periodos.length > 0 && (
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                            {periodos.length} período(s) adicionado(s)
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            {periodos.length > 0 && (
+                                <div className="space-y-2">
+                                    {periodos.map((p, idx) => (
+                                        <div key={`${p.data_inicio}-${p.data_fim}-${idx}`} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                {formatDateBr(p.data_inicio)} {p.data_inicio !== p.data_fim && <>/ {formatDateBr(p.data_fim)}</>}
+                                                {form.tipo === 'bloqueio' && <span className="text-slate-400"> • {p.hora_inicio?.slice(0,5)}-{p.hora_fim?.slice(0,5)}</span>}
+                                                {form.tipo === 'feriado' && p.recorrente && <span className="text-blue-500"> • anual</span>}
+                                            </div>
+                                            <button type="button" onClick={() => removePeriodo(idx)} className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                                <Trash2 size={14}/>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             
                             {form.tipo === 'bloqueio' && (
                                 <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300">
@@ -293,8 +396,8 @@ export default function Bloqueios() {
                                             <td className="px-6 py-6 dark:text-white">
                                                 <div className="flex items-center gap-2 font-black text-xs">
                                                     <CalendarDays size={14} className="text-blue-500"/>
-                                                    {new Date(b.data_inicio).toLocaleDateString('pt-BR')}
-                                                    {b.data_inicio !== b.data_fim && <><span className="text-slate-300">/</span> {new Date(b.data_fim).toLocaleDateString('pt-BR')}</>}
+                                                    {formatDateBr(b.data_inicio)}
+                                                    {b.data_inicio !== b.data_fim && <><span className="text-slate-300">/</span> {formatDateBr(b.data_fim)}</>}
                                                 </div>
                                                 {b.tipo === 'bloqueio' && (
                                                     <div className="text-[10px] text-slate-400 font-bold mt-1 flex items-center gap-1">
