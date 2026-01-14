@@ -4,35 +4,36 @@ import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
-  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, Users 
+  UserCog, Mail, Lock, Shield, Save, Check, Stethoscope, CalendarDays, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, Users, AlertCircle 
 } from 'lucide-react';
 
 const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const containerRef = useRef(null);
+    const safeOptions = Array.isArray(options) ? options : [];
 
     useEffect(() => { 
-        const selected = options.find(o => String(o.id) === String(value)); 
+        const selected = safeOptions.find(o => String(o.id) === String(value)); 
         if (selected) setQuery(selected.label);
         else if (!value) setQuery('');
-    }, [value, options]);
+    }, [value, safeOptions]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
                 setIsOpen(false);
-                const selected = options.find(o => String(o.id) === String(value));
+                const selected = safeOptions.find(o => String(o.id) === String(value));
                 setQuery(selected ? selected.label : '');
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [containerRef, value, options]);
+    }, [containerRef, value, safeOptions]);
 
-    const filtered = (query === '' || query === (options.find(o => String(o.id) === String(value))?.label)) 
-        ? options 
-        : options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+    const filtered = (query === '' || query === (safeOptions.find(o => String(o.id) === String(value))?.label)) 
+        ? safeOptions 
+        : safeOptions.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
     
     return (
         <div className="relative mb-4" ref={containerRef}>
@@ -40,7 +41,7 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
             <div className="relative">
                 <input 
                     type="text"
-                    className="w-full pl-10 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400" 
+                    className="w-full pl-10 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400 text-sm font-bold" 
                     value={query} 
                     onFocus={() => setIsOpen(true)}
                     onClick={() => setIsOpen(true)}
@@ -56,7 +57,7 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
             {isOpen && (
                 <ul className="absolute top-full mt-1 z-[100] w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl max-h-60 overflow-auto animate-in fade-in zoom-in-95 duration-150">
                     {filtered.length > 0 ? filtered.map(opt => (
-                        <li key={opt.id} onMouseDown={() => { onChange(opt.id); setQuery(opt.label); setIsOpen(false); }} className={`p-3 cursor-pointer text-sm border-b last:border-0 border-slate-50 dark:border-slate-700 flex justify-between items-center hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-700 dark:text-slate-200 transition-colors`}>
+                        <li key={opt.id} onMouseDown={() => { onChange(opt.id); setQuery(opt.label); setIsOpen(false); }} className={`p-3 cursor-pointer text-sm border-b last:border-0 border-slate-50 dark:border-slate-700 flex justify-between items-center hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-700 dark:text-slate-200 transition-colors font-bold`}>
                             {opt.label}
                             {String(value) === String(opt.id) && <Check size={16} className="text-blue-500" strokeWidth={3}/>}
                         </li>
@@ -164,7 +165,7 @@ export default function CadastroOperador() {
     }
   };
 
-  const inputClass = "w-full pl-10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400";
+  const inputClass = "w-full pl-10 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400 text-sm font-bold";
   const labelClass = "block text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
 
   if (fetching) return (
@@ -178,7 +179,7 @@ export default function CadastroOperador() {
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto pb-20 tracking-tight">
+      <div className="max-w-6xl mx-auto pb-20 tracking-tight">
         <button 
             onClick={() => navigate('/operadores')} 
             className="mb-6 flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm text-xs font-black uppercase tracking-widest"
@@ -186,8 +187,8 @@ export default function CadastroOperador() {
             <ArrowLeft size={16}/> Voltar para lista
         </button>
 
-        <div className="mb-10 flex items-center space-x-5">
-          <div className="bg-blue-600 p-4 rounded-2xl shadow-xl shadow-blue-500/20 text-white">
+        <div className="mb-10 flex items-center gap-5">
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-4 rounded-2xl shadow-xl shadow-blue-500/20 text-white">
             <UserCog size={32} />
           </div>
           <div>
@@ -279,12 +280,12 @@ export default function CadastroOperador() {
                     { id: 'acesso_atendimento', label: 'Prontuário', icon: Stethoscope, color: 'text-indigo-500' },
                     { id: 'acesso_faturamento', label: 'Financeiro', icon: DollarSign, color: 'text-amber-500' }
                   ].map((perm) => (
-                    <label key={perm.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${formData[perm.id] ? 'bg-slate-50 border-blue-100 dark:bg-slate-700/50' : 'bg-transparent border-transparent opacity-60'}`}>
+                    <label key={perm.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${formData[perm.id] ? 'bg-slate-50 border-blue-100 dark:bg-slate-700/50' : 'bg-transparent border-transparent opacity-60'} ${formData.is_superuser ? 'pointer-events-none opacity-60' : ''}`}>
                         <div className="flex items-center gap-3">
                             <perm.icon size={18} className={formData[perm.id] ? perm.color : 'text-slate-400'}/>
                             <span className={`text-xs font-black uppercase tracking-widest ${formData[perm.id] ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>{perm.label}</span>
                         </div>
-                        <input type="checkbox" name={perm.id} checked={formData[perm.id]} onChange={handleChange} className="w-5 h-5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all"/>
+                        <input type="checkbox" name={perm.id} checked={formData[perm.id]} onChange={handleChange} className="w-5 h-5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 transition-all" disabled={formData.is_superuser}/>
                     </label>
                   ))}
                   
