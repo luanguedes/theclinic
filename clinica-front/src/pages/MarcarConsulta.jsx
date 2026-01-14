@@ -191,6 +191,16 @@ export default function MarcarConsulta() {
       return date < hoje;
   };
 
+  const getBloqueioAtivo = (dataIso) => {
+      const diaMes = dataIso.slice(5);
+      return listaBloqueios.find(b => {
+          const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
+          const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
+          const bateProf = !b.profissional || (profissionalId && b.profissional === parseInt(profissionalId));
+          return (bateData || bateRecorrente) && bateProf;
+      });
+  };
+
   useEffect(() => {
     if (api) {
         api.get('configuracoes/sistema/').then(res => setConfigSistema(res.data)).catch(() => {});
@@ -231,7 +241,7 @@ export default function MarcarConsulta() {
   useEffect(() => {
     if (profissionalId && especialidadeId && dataApi) carregarAgenda();
     else setVagasDoDia([]);
-  }, [profissionalId, especialidadeId, dataApi, regrasProfissional]);
+  }, [profissionalId, especialidadeId, dataApi, regrasProfissional, listaBloqueios]);
 
   const carregarAgenda = async () => {
     setLoadingAgenda(true);
@@ -246,13 +256,7 @@ export default function MarcarConsulta() {
   const getTileClassName = ({ date, view }) => {
     if (view !== 'month') return null;
     const dataIso = getLocalISODate(date);
-    const diaMes = dataIso.slice(5);
-    const bloqueio = listaBloqueios.find(b => {
-        const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
-        const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
-        const bateProf = !b.profissional || (profissionalId && b.profissional === parseInt(profissionalId));
-        return (bateData || bateRecorrente) && bateProf;
-    });
+    const bloqueio = getBloqueioAtivo(dataIso);
     if (bloqueio) return bloqueio.tipo === 'feriado' ? 'dia-feriado' : 'dia-bloqueado';
     if (!especialidadeId) return null;
     const jsDay = date.getDay();
@@ -265,13 +269,7 @@ export default function MarcarConsulta() {
     let slots = [];
     const jsDay = dateValue.getDay(); 
     const dataIso = getLocalISODate(dateValue);
-    const diaMes = dataIso.slice(5);
-    const bloqueioAtivo = listaBloqueios.find(b => {
-        const bateData = (b.data_inicio <= dataIso && b.data_fim >= dataIso);
-        const bateRecorrente = b.recorrente && (b.data_inicio.slice(5) === diaMes);
-        const bateProf = !b.profissional || (profissionalId && b.profissional === parseInt(profissionalId));
-        return (bateData || bateRecorrente) && bateProf;
-    });
+    const bloqueioAtivo = getBloqueioAtivo(dataIso);
 
     const regrasFiltradas = regras.filter(r => r.dia_semana === jsDay && r.data_inicio <= dataApi && r.data_fim >= dataApi && String(r.especialidade) === String(especialidadeId));
 
@@ -313,6 +311,18 @@ export default function MarcarConsulta() {
     if (!pacienteId) return notify.warning("Selecione um paciente.");
     setLoadingSave(true);
     const hora = tipoModal === 'encaixe' ? encaixeHora : horarioSelecionado;
+    const bloqueioAtivo = getBloqueioAtivo(dataApi);
+    if (tipoModal === 'encaixe' && bloqueioAtivo) {
+        const tipoLabel = bloqueioAtivo.tipo === 'feriado' ? 'feriado' : 'bloqueio';
+        const confirmado = await confirmDialog(
+            `Existe ${tipoLabel} na data selecionada. Deseja agendar mesmo assim?`,
+            "Confirmar Encaixe",
+            "Sim, agendar",
+            "Cancelar",
+            "warning"
+        );
+        if (!confirmado) { setLoadingSave(false); return; }
+    }
     try {
         const payload = { profissional: profissionalId, especialidade: especialidadeId, paciente: pacienteId, data: dataApi, horario: hora, convenio: convenioId || null, valor: valorSelecionado, observacoes: observacao, is_encaixe: tipoModal === 'encaixe', enviar_whatsapp: enviarWhatsapp };
         if(agendamentoIdEditar) {
@@ -391,17 +401,17 @@ export default function MarcarConsulta() {
       <div className="max-w-[1920px] pb-20">
         
         {/* CABEÇALHO */}
-        <div className="mb-8">
+        <div className="mb-6">
             <h1 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-3">
                 <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20"><CalendarIcon size={28}/></div>
                 Marcar Consulta
             </h1>
-            <p className="text-slate-500 font-medium text-sm mt-2 ml-1">Selecione o profissional e a data desejada.</p>
+            <p className="text-slate-500 font-medium text-sm mt-1 ml-1">Selecione o profissional e a data desejada.</p>
         </div>
 
         {/* CARD DE FILTROS */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 mb-8">
-            <div className="flex flex-col md:flex-row gap-6 items-center">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] shadow-sm border border-slate-200 dark:border-slate-700 mb-6">
+            <div className="flex flex-col md:flex-row gap-4 items-center">
                 <div className="flex items-center gap-2 text-slate-400 font-black uppercase text-xs tracking-widest min-w-fit">
                     <Filter size={16}/> Filtros
                 </div>
@@ -411,18 +421,18 @@ export default function MarcarConsulta() {
         </div>
 
         {/* GRID PRINCIPAL: 40% Calendar - 60% Slots */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* COLUNA ESQUERDA: CALENDÁRIO (MAIOR) */}
-            <div className="lg:col-span-5 space-y-6">
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-[32px] shadow-lg shadow-blue-500/5 border border-slate-100 dark:border-slate-700 overflow-hidden">
+            <div className="lg:col-span-5 space-y-5">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] shadow-lg shadow-blue-500/5 border border-slate-100 dark:border-slate-700 overflow-hidden">
                     <Calendar onChange={(d) => { setDateValue(d); setDataApi(getLocalISODate(d)); }} value={dateValue} locale="pt-BR" tileClassName={getTileClassName}/>
                 </div>
                 
                 {/* LEGENDA (GRANDE E CLARA) */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-[24px] border border-slate-200 dark:border-slate-700">
-                    <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 mb-4">Legenda de Disponibilidade</h3>
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-[22px] border border-slate-200 dark:border-slate-700">
+                    <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 mb-3">Legenda de Disponibilidade</h3>
+                    <div className="grid grid-cols-2 gap-3">
                         <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-lg bg-green-200 border-2 border-green-500"></div><span className="font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">Livre</span></div>
                         <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-lg bg-orange-200 border-2 border-orange-500"></div><span className="font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">Bloqueio</span></div>
                         <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-lg bg-purple-200 border-2 border-purple-500"></div><span className="font-bold text-xs text-slate-600 dark:text-slate-300 uppercase">Feriado</span></div>
@@ -433,10 +443,10 @@ export default function MarcarConsulta() {
 
             {/* COLUNA DIREITA: VAGAS */}
             <div className="lg:col-span-7">
-                <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col min-h-[600px]">
-                    <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-[32px]">
+                <div className="bg-white dark:bg-slate-800 rounded-[28px] shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col min-h-[560px]">
+                    <div className="p-5 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-[28px]">
                         <div>
-                            <h3 className="font-black text-xl text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                            <h3 className="font-black text-lg text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
                                 <CalendarDays className="text-blue-500"/>
                                 {dateValue.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
                             </h3>
@@ -444,12 +454,12 @@ export default function MarcarConsulta() {
                                 {loadingAgenda ? 'Buscando...' : `${vagasDoDia.length} Horários Listados`}
                             </p>
                         </div>
-                        <button onClick={() => { setTipoModal('encaixe'); setAgendamentoIdEditar(null); setPacienteId(''); setConvenioId(''); setValorSelecionado(''); setModalOpen(true); }} className="bg-amber-500 hover:bg-amber-600 text-white font-black py-3 px-6 rounded-xl text-xs uppercase flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-all">
+                        <button onClick={() => { setTipoModal('encaixe'); setAgendamentoIdEditar(null); setPacienteId(''); setConvenioId(''); setValorSelecionado(''); setModalOpen(true); }} className="bg-amber-500 hover:bg-amber-600 text-white font-black py-2.5 px-5 rounded-xl text-xs uppercase flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-all">
                             <Plus size={16}/> Encaixe Extra
                         </button>
                     </div>
                     
-                    <div className="flex-1 p-6 bg-slate-50 dark:bg-slate-900/20 rounded-b-[32px]">
+                    <div className="flex-1 p-5 bg-slate-50 dark:bg-slate-900/20 rounded-b-[28px]">
                         {!profissionalId ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
                                 <User size={64} className="mb-4 text-slate-300"/>
@@ -458,7 +468,7 @@ export default function MarcarConsulta() {
                         ) : loadingAgenda ? (
                             <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48}/></div>
                         ) : vagasDoDia.length > 0 ? (
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                 {vagasDoDia.map((slot, idx) => {
                                     const isPast = isDateInPast(dateValue);
                                     const isExpirado = isPast || (dateValue.toDateString() === new Date().toDateString() && slot.hora < new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}));
@@ -472,7 +482,7 @@ export default function MarcarConsulta() {
                                                 setConvenioId(slot.convenio_regra_id || ''); setPacienteId(''); setTipoModal('normal'); setModalOpen(true); 
                                             }
                                         }} 
-                                        className={`relative group p-4 rounded-2xl border-2 flex flex-col justify-between h-28 transition-all shadow-sm hover:shadow-md ${
+                                        className={`relative group p-3.5 rounded-2xl border-2 flex flex-col justify-between h-24 transition-all shadow-sm hover:shadow-md ${
                                             slot.ocupado ? 'bg-white border-blue-100 dark:bg-slate-800 dark:border-slate-700' : 
                                             isLocked || isExpirado ? 'bg-slate-100 opacity-50 cursor-not-allowed border-transparent' : 
                                             'bg-white border-green-100 hover:border-green-500 cursor-pointer hover:-translate-y-1'
