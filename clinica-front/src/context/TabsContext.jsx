@@ -44,7 +44,18 @@ export function TabsProvider({ children }) {
     const raw = sessionStorage.getItem('theclinic.tabs');
     try {
       const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.filter((t) => t.path !== '/dashboard') : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((t) => t.path !== '/dashboard')
+        .map((t) => {
+          const def = TAB_DEFS.find((d) => d.match(t.path));
+          return {
+            path: t.path,
+            title: t.title || def?.title || 'Página',
+            icon: def?.icon,
+            pinned: !!t.pinned
+          };
+        });
     } catch {
       return [];
     }
@@ -81,7 +92,8 @@ export function TabsProvider({ children }) {
   }, [currentPath, currentDef]);
 
   useEffect(() => {
-    sessionStorage.setItem('theclinic.tabs', JSON.stringify(tabs));
+    const payload = tabs.map((t) => ({ path: t.path, title: t.title, pinned: t.pinned }));
+    sessionStorage.setItem('theclinic.tabs', JSON.stringify(payload));
   }, [tabs]);
 
   const closeTab = (path) => {
