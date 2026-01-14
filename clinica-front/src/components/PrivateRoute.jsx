@@ -1,7 +1,9 @@
+import { useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import { Loader2 } from 'lucide-react';
-import { MENU_ITEMS, hasRouteAccess } from '../config/navigation';
+import { hasRouteAccess } from '../config/navigation';
 
 /**
  * Componente de Proteção de Rota
@@ -10,6 +12,8 @@ import { MENU_ITEMS, hasRouteAccess } from '../config/navigation';
 export default function PrivateRoute({ children }) {
     const { user, loading } = useAuth();
     const location = useLocation();
+    const { notify } = useNotification();
+    const lastDeniedPathRef = useRef(null);
 
     // 1. Estado de Carregamento Profissional
     if (loading) {
@@ -40,20 +44,18 @@ export default function PrivateRoute({ children }) {
         return <Navigate to="/dashboard" replace />;
     }
 
-    // 6. Controle de acesso por rota
-    if (!user.is_superuser) {
-        const allowedByRoute = hasRouteAccess(user, path);
-        if (!allowedByRoute) {
-            const moduleMatch = MENU_ITEMS.find((m) =>
-                m.items.some((item) => path === item.to || path.startsWith(`${item.to}/`))
-            );
-            if (moduleMatch && !moduleMatch.access(user)) {
-                return <Navigate to="/dashboard" replace />;
-            }
-            if (!moduleMatch && path !== '/dashboard') {
-                return <Navigate to="/dashboard" replace />;
-            }
+    const accessDenied = !user.is_superuser && !hasRouteAccess(user, path);
+
+    useEffect(() => {
+        if (accessDenied && lastDeniedPathRef.current !== path) {
+            notify?.warning?.("Você não tem acesso a esta página. Solicite o acesso ao administrador do sistema.");
+            lastDeniedPathRef.current = path;
         }
+    }, [accessDenied, notify, path]);
+
+    // 6. Controle de acesso por rota
+    if (accessDenied) {
+        return <Navigate to="/dashboard" replace />;
     }
 
     return children;
