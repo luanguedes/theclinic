@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from './AuthContext';
 import {
   ClipboardList,
   Bell,
@@ -40,26 +41,9 @@ const MAX_TABS = 6;
 
 export function TabsProvider({ children }) {
   const location = useLocation();
-  const [tabs, setTabs] = useState(() => {
-    const raw = sessionStorage.getItem('theclinic.tabs');
-    try {
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .filter((t) => t.path !== '/dashboard')
-        .map((t) => {
-          const def = TAB_DEFS.find((d) => d.match(t.path));
-          return {
-            path: t.path,
-            title: t.title || def?.title || 'Página',
-            icon: def?.icon,
-            pinned: !!t.pinned
-          };
-        });
-    } catch {
-      return [];
-    }
-  });
+  const { user } = useAuth();
+  const storageKey = user?.username ? `theclinic.tabs.${user.username}` : null;
+  const [tabs, setTabs] = useState([]);
 
   const currentPath = location.pathname;
 
@@ -92,9 +76,38 @@ export function TabsProvider({ children }) {
   }, [currentPath, currentDef]);
 
   useEffect(() => {
-    const payload = tabs.map((t) => ({ path: t.path, title: t.title, pinned: t.pinned }));
-    sessionStorage.setItem('theclinic.tabs', JSON.stringify(payload));
-  }, [tabs]);
+    if (!storageKey) {
+      setTabs([]);
+      return;
+    }
+    const raw = sessionStorage.getItem(storageKey);
+    try {
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) { setTabs([]); return; }
+      const hydrated = parsed
+        .filter((t) => t.path !== '/dashboard')
+        .map((t) => {
+          const def = TAB_DEFS.find((d) => d.match(t.path));
+          return {
+            path: t.path,
+            title: t.title || def?.title || 'Página',
+            icon: def?.icon,
+            pinned: true
+          };
+        });
+      setTabs(hydrated);
+    } catch {
+      setTabs([]);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    const payload = tabs
+      .filter((t) => t.pinned)
+      .map((t) => ({ path: t.path, title: t.title }));
+    sessionStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [tabs, storageKey]);
 
   const closeTab = (path) => {
     setTabs((prev) => prev.filter((t) => t.path !== path));
