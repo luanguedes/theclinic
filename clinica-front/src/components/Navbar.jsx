@@ -106,8 +106,8 @@ export default function Navbar() {
         : 'bg-white dark:bg-slate-900 h-16 border-transparent'}
     `}>
       <div className="w-full px-3 md:px-4 h-full flex items-center">
-        <div className="flex items-center gap-4 h-full min-w-[200px] mr-4">
-          <Link to="/dashboard" className="flex items-center gap-2 group">
+        <div className="flex items-center gap-4 h-full min-w-[180px] mr-2">
+          <Link to="/dashboard" className="flex items-center gap-2 group pr-2">
             <div className={`bg-blue-600 text-white rounded-xl shadow-md group-hover:rotate-12 transition-all duration-500 ${scrolled ? 'p-1.5' : 'p-2'}`}>
               <Stethoscope size={scrolled ? 18 : 22} strokeWidth={3} />
             </div>
