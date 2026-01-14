@@ -313,54 +313,57 @@ export default function Configuracoes() {
                                     {/* === ABA AUTOMAÇÃO (MANTIDA COMPLETA) === */}
                                     {activeTab === 'comunicacao' && (
                                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                            <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between gap-6">
-                                                <div>
-                                                    <h3 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                                        <Activity size={16}/> Status da Conexão WhatsApp
-                                                    </h3>
-                                                    <div className="mt-3 flex items-center gap-3">
-                                                        <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${whatsappStatus.connected === true ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : whatsappStatus.connected === false ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                                                            {whatsappStatus.loading ? 'Verificando' : whatsappStatus.connected === true ? 'Conectado' : whatsappStatus.connected === false ? 'Desconectado' : 'Indefinido'}
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                                {/* Master Switch */}
+                                                <div className={`p-6 rounded-[28px] border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}>
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <h3 className={`font-black text-base uppercase tracking-tight ${config.enviar_whatsapp_global ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500'}`}>
+                                                                {config.enviar_whatsapp_global ? 'Serviço de WhatsApp Ativo' : 'Serviço de WhatsApp Pausado'}
+                                                            </h3>
+                                                            <p className="text-xs font-medium opacity-60 mt-1">Status da API de mensageria em tempo real.</p>
                                                         </div>
+                                                        <label className="relative inline-flex items-center cursor-pointer scale-110 mr-2">
+                                                            <input type="checkbox" name="enviar_whatsapp_global" className="sr-only peer" checked={!!config.enviar_whatsapp_global} onChange={handleChange}/>
+                                                            <div className={`w-9 h-5 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${config.enviar_whatsapp_global ? 'bg-slate-300 peer-checked:bg-emerald-600' : 'bg-slate-300'}`}></div>
+                                                        </label>
                                                     </div>
-                                                    {whatsappStatus.error && (
-                                                        <p className="mt-2 text-[10px] font-bold text-rose-500 uppercase tracking-widest">
-                                                            {whatsappStatus.error}
-                                                        </p>
-                                                    )}
                                                 </div>
-                                                <div className="flex items-center gap-3">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setQrModalOpen(true)}
-                                                        className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all flex items-center gap-2"
-                                                    >
-                                                        <QrCode size={14}/> Conectar
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={loadWhatsappStatus}
-                                                        disabled={whatsappStatus.loading}
-                                                        className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                                    >
-                                                        {whatsappStatus.loading ? <Loader2 className="animate-spin" size={14}/> : 'Atualizar'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            
-                                            {/* Master Switch */}
-                                            <div className={`p-6 rounded-[28px] border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}>
-                                                <div className="flex items-center justify-between">
+
+                                                {/* Status da Conexão */}
+                                                <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between gap-6">
                                                     <div>
-                                                        <h3 className={`font-black text-base uppercase tracking-tight ${config.enviar_whatsapp_global ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500'}`}>
-                                                            {config.enviar_whatsapp_global ? 'Serviço de WhatsApp Ativo' : 'Serviço de WhatsApp Pausado'}
+                                                        <h3 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                                            <Activity size={16}/> Status da Conexão WhatsApp
                                                         </h3>
-                                                        <p className="text-xs font-medium opacity-60 mt-1">Status da API de mensageria em tempo real.</p>
+                                                        <div className="mt-3 flex items-center gap-3">
+                                                            <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${whatsappStatus.connected === true ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : whatsappStatus.connected === false ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                                                                {whatsappStatus.loading ? 'Verificando' : whatsappStatus.connected === true ? 'Conectado' : whatsappStatus.connected === false ? 'Desconectado' : 'Indefinido'}
+                                                            </div>
+                                                        </div>
+                                                        {whatsappStatus.error && (
+                                                            <p className="mt-2 text-[10px] font-bold text-rose-500 uppercase tracking-widest">
+                                                                {whatsappStatus.error}
+                                                            </p>
+                                                        )}
                                                     </div>
-                                                    <label className="relative inline-flex items-center cursor-pointer scale-110 mr-2">
-                                                        <input type="checkbox" name="enviar_whatsapp_global" className="sr-only peer" checked={!!config.enviar_whatsapp_global} onChange={handleChange}/>
-                                                        <div className={`w-9 h-5 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${config.enviar_whatsapp_global ? 'bg-slate-300 peer-checked:bg-emerald-600' : 'bg-slate-300'}`}></div>
-                                                    </label>
+                                                    <div className="flex items-center gap-3">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setQrModalOpen(true)}
+                                                            className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all flex items-center gap-2"
+                                                        >
+                                                            <QrCode size={14}/> Conectar
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={loadWhatsappStatus}
+                                                            disabled={whatsappStatus.loading}
+                                                            className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                                        >
+                                                            {whatsappStatus.loading ? <Loader2 className="animate-spin" size={14}/> : 'Atualizar'}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
 
