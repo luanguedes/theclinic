@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
-import { Search, UserPlus, Shield, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Search, UserPlus, Shield, Pencil, Trash2, Loader2, Stethoscope } from 'lucide-react';
 
 export default function Operadores() {
     const { api } = useAuth();
@@ -101,6 +101,12 @@ export default function Operadores() {
                                     <Shield size={14} className={op.is_superuser ? 'text-slate-900' : 'text-slate-300'}/>
                                     {op.is_superuser ? 'Acesso Irrestrito (Root)' : 'Permissões Limitadas'}
                                 </div>
+                                {op.profissional_nome && (
+                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                                        <Stethoscope size={14} className="text-emerald-500"/>
+                                        <span className="uppercase tracking-widest">Vinculado: {op.profissional_nome}</span>
+                                    </div>
+                                )}
                                 {!op.is_superuser && (
                                     <div className="flex flex-wrap gap-1 mt-2">
                                         {op.acesso_agendamento && <span className="px-2 py-1 bg-green-50 text-green-700 text-[9px] font-black uppercase rounded border border-green-100">Agenda</span>}
