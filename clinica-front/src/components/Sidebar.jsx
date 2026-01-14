@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+  LayoutDashboard,
   Stethoscope,
   CalendarDays,
   Settings,
@@ -64,6 +65,17 @@ export default function Sidebar() {
   return (
     <aside className="flex flex-col w-16 md:w-20 px-1 md:px-2 py-6 border-r border-slate-100 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 backdrop-blur-md sticky top-16 h-[calc(100vh-64px)]">
       <div className="flex flex-col gap-3">
+        <Link
+          to="/dashboard"
+          className={`flex flex-col items-center gap-1 py-3 rounded-2xl transition-all ${
+            location.pathname === '/dashboard'
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900'
+          }`}
+        >
+          <LayoutDashboard size={20} />
+          <span className="text-[9px] font-black uppercase tracking-widest">Dashboard</span>
+        </Link>
         {MENU.filter((m) => m.access(user)).map((menu) => {
           const Icon = menu.icon;
           const isActive = menu.items.some((i) => location.pathname.startsWith(i.to));
@@ -76,7 +88,7 @@ export default function Sidebar() {
                 <span className="text-[9px] font-black uppercase tracking-widest">{menu.label}</span>
               </div>
 
-              <div className="absolute left-full top-0 ml-3 w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-40">
+              <div className="absolute left-full top-0 ml-3 w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[200]">
                 <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
                   <div className="p-3 border-b border-slate-100 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
                     <Icon size={14}/> {menu.label}

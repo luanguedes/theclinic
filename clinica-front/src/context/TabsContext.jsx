@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard,
   ClipboardList,
   Bell,
   Users,
@@ -19,7 +18,6 @@ import {
 const TabsContext = createContext();
 
 const TAB_DEFS = [
-  { match: (p) => p === '/dashboard', title: 'Dashboard', icon: LayoutDashboard },
   { match: (p) => p.startsWith('/prontuarios'), title: 'Prontuários', icon: ClipboardList },
   { match: (p) => p.startsWith('/triagem'), title: 'Triagem', icon: Bell },
   { match: (p) => p.startsWith('/recepcao'), title: 'Recepção', icon: Users },
@@ -37,12 +35,20 @@ const TAB_DEFS = [
   { match: (p) => p.startsWith('/agenda'), title: 'Agenda', icon: CalendarDays }
 ];
 
-const IGNORE_PATHS = ['/', '/trocasenhaobrigatoria'];
+const IGNORE_PATHS = ['/', '/trocasenhaobrigatoria', '/dashboard'];
 const MAX_TABS = 6;
 
 export function TabsProvider({ children }) {
   const location = useLocation();
-  const [tabs, setTabs] = useState([]);
+  const [tabs, setTabs] = useState(() => {
+    const raw = sessionStorage.getItem('theclinic.tabs');
+    try {
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((t) => t.path !== '/dashboard') : [];
+    } catch {
+      return [];
+    }
+  });
 
   const currentPath = location.pathname;
 
@@ -73,6 +79,10 @@ export function TabsProvider({ children }) {
       return next;
     });
   }, [currentPath, currentDef]);
+
+  useEffect(() => {
+    sessionStorage.setItem('theclinic.tabs', JSON.stringify(tabs));
+  }, [tabs]);
 
   const closeTab = (path) => {
     setTabs((prev) => prev.filter((t) => t.path !== path));
