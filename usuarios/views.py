@@ -1,10 +1,10 @@
-from rest_framework import viewsets, permissions, filters, status
+﻿from rest_framework import viewsets, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from .models import Operador, Privilegio
-from .serializers import OperadorSerializer, PrivilegioSerializer
+from .serializers import OperadorSerializer, PrivilegioSerializer, MinhaContaSerializer
 
 class OperadorViewSet(viewsets.ModelViewSet):
     queryset = Operador.objects.all().select_related('profissional').prefetch_related('privilegios').order_by('first_name')
@@ -36,20 +36,20 @@ class MeView(APIView):
     def get(self, request):
         user = request.user
         
-        # 1. Tenta carregar o ID do profissional com segurança máxima
+        # 1. Tenta carregar o ID do profissional com seguranÇõa mÇ­xima
         prof_id = None
         try:
             # Verifica se o atributo existe E se tem valor associado
             if hasattr(user, 'profissional') and user.profissional_id:
                 prof_id = user.profissional_id
         except Exception as e:
-            print(f"Aviso: Erro ao ler profissional do usuário {user.id}: {e}")
+            print(f"Aviso: Erro ao ler profissional do usuÇ­rio {user.id}: {e}")
             prof_id = None
 
-        # 2. Tenta carregar o status de senha com segurança
+        # 2. Tenta carregar o status de senha com seguranÇõa
         force_change = False
         try:
-            # Usa getattr para evitar erro se o campo não for reconhecido pelo Django no momento
+            # Usa getattr para evitar erro se o campo nÇœo for reconhecido pelo Django no momento
             force_change = getattr(user, 'force_password_change', False)
         except Exception as e:
             print(f"Aviso: Erro ao ler force_password_change: {e}")
@@ -92,8 +92,9 @@ class MeView(APIView):
             "profissional_id": prof_id,
             "force_password_change": force_change,
             "allowed_routes": allowed_routes,
+            "theme_preference": getattr(user, 'theme_preference', 'light'),
 
-            # Permissões (seguras com getattr)
+            # PermissÇæes (seguras com getattr)
             "acesso_agendamento": getattr(user, 'acesso_agendamento', False),
             "acesso_atendimento": getattr(user, 'acesso_atendimento', False),
             "acesso_faturamento": getattr(user, 'acesso_faturamento', False),
@@ -107,17 +108,41 @@ class TrocarSenhaView(APIView):
 
     def post(self, request):
         nova_senha = request.data.get('nova_senha')
+        senha_atual = request.data.get('senha_atual')
+        confirmacao = request.data.get('confirmacao')
         if not nova_senha or len(nova_senha) < 6:
-            return Response({'error': 'A senha deve ter no mínimo 6 caracteres.'}, status=400)
+            return Response({'error': 'A senha deve ter no mÇðnimo 6 caracteres.'}, status=400)
 
         user = request.user
+        if confirmacao is not None and confirmacao != nova_senha:
+            return Response({'error': 'A confirmaÇõÇœo de senha nÇœo coincide.'}, status=400)
+
+        if not getattr(user, 'force_password_change', False):
+            if not senha_atual or not user.check_password(senha_atual):
+                return Response({'error': 'Senha atual invÇ­lida.'}, status=400)
+
         user.set_password(nova_senha)
         
-        # --- DESLIGA A OBRIGATORIEDADE APÓS TROCAR ---
+        # --- DESLIGA A OBRIGATORIEDADE APÇ“S TROCAR ---
         user.force_password_change = False
         user.save()
 
         return Response({'message': 'Senha alterada com sucesso!'})
+
+
+class MinhaContaView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = MinhaContaSerializer(request.user)
+        return Response(serializer.data)
+
+    def put(self, request):
+        serializer = MinhaContaSerializer(request.user, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class PrivilegioListView(APIView):
@@ -162,7 +187,7 @@ class PrivilegioSyncView(APIView):
         payload = request.data or {}
         modules = payload.get('modules', [])
         if not isinstance(modules, list):
-            return Response({'error': 'Payload inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Payload invÇ­lido.'}, status=status.HTTP_400_BAD_REQUEST)
 
         seen_paths = set()
         with transaction.atomic():
@@ -194,3 +219,4 @@ class PrivilegioSyncView(APIView):
                 Privilegio.objects.exclude(path__in=seen_paths).update(active=False)
 
         return Response({'updated': len(seen_paths)})
+

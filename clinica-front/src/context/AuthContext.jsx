@@ -27,6 +27,15 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const refreshUser = async () => {
+    const res = await api.get('me/');
+    setUser(res.data);
+    if (res.data?.is_superuser) {
+      await syncPrivileges();
+    }
+    return res.data;
+  };
+
   // --- INTERCEPTADOR GLOBAL DE ERROS ---
   useEffect(() => {
     const interceptor = api.interceptors.response.use(
@@ -55,11 +64,7 @@ export function AuthProvider({ children }) {
         if (token) {
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
           try {
-              const res = await api.get('me/');
-              setUser(res.data);
-              if (res.data?.is_superuser) {
-                await syncPrivileges();
-              }
+              await refreshUser();
           } catch (err) {
               logout();
           }
@@ -83,12 +88,7 @@ export function AuthProvider({ children }) {
       }
 
       api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
-      
-      const userResponse = await api.get('me/');
-      setUser(userResponse.data);
-      if (userResponse.data?.is_superuser) {
-        await syncPrivileges();
-      }
+      await refreshUser();
       return { success: true };
     } catch (error) {
       return { 
@@ -106,7 +106,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, api }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, api, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

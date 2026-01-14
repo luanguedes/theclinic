@@ -20,7 +20,7 @@ export default function PrivateRoute({ children }) {
     useEffect(() => {
         if (!accessDenied) return;
         if (lastDeniedPathRef.current === path) return;
-        notify?.warning?.("O operador nao tem acesso a esta pagina. Solicite o acesso ao administrador do sistema.");
+        notify?.warning?.("O operador não tem acesso a esta página. Solicite o acesso ao administrador do sistema.");
         lastDeniedPathRef.current = path;
     }, [accessDenied, notify, path]);
 

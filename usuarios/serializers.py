@@ -47,7 +47,7 @@ class OperadorSerializer(serializers.ModelSerializer):
             'is_superuser', 'profissional', 'profissional_nome',
             'acesso_agendamento', 'acesso_atendimento', 
             'acesso_faturamento', 'acesso_cadastros', 'acesso_configuracoes',
-            'force_password_change',
+            'force_password_change', 'theme_preference',
             'privilegios', 'privilegios_detalhes'
         ]
 
@@ -91,3 +91,9 @@ class PrivilegioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Privilegio
         fields = ['id', 'path', 'label', 'module_key', 'module_label', 'module_order', 'item_order', 'active']
+
+
+class MinhaContaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Operador
+        fields = ['username', 'first_name', 'theme_preference']

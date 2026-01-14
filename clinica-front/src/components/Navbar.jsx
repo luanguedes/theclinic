@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -8,13 +8,14 @@ import {
   Stethoscope, Settings, LogOut, 
   Moon, Sun, 
   X,
-  MessageCircle, QrCode, Loader2
+  MessageCircle, QrCode, Loader2,
+  UserCircle, KeyRound, Save
 } from 'lucide-react';
 
 export default function Navbar() {
-  const { user, logout, api } = useAuth();
+  const { user, logout, api, refreshUser } = useAuth();
   const { notify } = useNotification();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setThemePreference } = useTheme();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [whatsappStatus, setWhatsappStatus] = useState({ loading: true, connected: null, state: 'carregando', error: null });
@@ -22,8 +23,18 @@ export default function Navbar() {
   const [qrLoading, setQrLoading] = useState(false);
   const [qrImage, setQrImage] = useState('');
   const [qrError, setQrError] = useState('');
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [accountForm, setAccountForm] = useState({
+    first_name: '',
+    username: '',
+    theme_preference: 'light',
+    senha_atual: '',
+    nova_senha: '',
+    confirmacao: ''
+  });
 
-  // --- CORREÇÃO DO TREMOR (MANTIDA) ---
+  // --- CORREÃ‡ÃƒO DO TREMOR (MANTIDA) ---
   useEffect(() => {
     const handleScroll = () => {
       const currentScroll = window.scrollY;
@@ -45,6 +56,18 @@ export default function Navbar() {
       loadWhatsappStatus();
     }
   }, [waModalOpen]);
+
+  useEffect(() => {
+    if (!accountModalOpen || !user) return;
+    setAccountForm({
+      first_name: user.first_name || '',
+      username: user.username || '',
+      theme_preference: user.theme_preference || 'light',
+      senha_atual: '',
+      nova_senha: '',
+      confirmacao: ''
+    });
+  }, [accountModalOpen, user]);
 
   const handleLogout = () => { logout(); navigate('/'); };
 
@@ -95,12 +118,77 @@ export default function Navbar() {
     return { label: 'Indefinido', className: 'bg-slate-400 text-white' };
   };
 
+  const handleThemeToggle = async () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setThemePreference(nextTheme);
+    if (!user) return;
+    try {
+      await api.put('operadores/minha-conta/', { theme_preference: nextTheme });
+      await refreshUser();
+    } catch (error) {
+      notify?.error?.('Nao foi possivel salvar o tema. Tente novamente.');
+      setThemePreference(theme);
+    }
+  };
+
+  const handleAccountChange = (event) => {
+    const { name, value } = event.target;
+    setAccountForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleAccountSave = async () => {
+    if (!user || !api) return;
+    if (!accountForm.first_name.trim()) {
+      return notify?.warning?.('Informe o nome do operador.');
+    }
+    if (!accountForm.username.trim()) {
+      return notify?.warning?.('Informe o nome de acesso.');
+    }
+
+    const wantsPasswordChange = !!(accountForm.senha_atual || accountForm.nova_senha || accountForm.confirmacao);
+    if (wantsPasswordChange) {
+      if (!accountForm.senha_atual) return notify?.warning?.('Informe a senha atual.');
+      if (!accountForm.nova_senha) return notify?.warning?.('Informe a nova senha.');
+      if (accountForm.nova_senha.length < 6) return notify?.warning?.('A nova senha deve ter no minimo 6 caracteres.');
+      if (accountForm.confirmacao !== accountForm.nova_senha) {
+        return notify?.warning?.('A confirmacao de senha nao coincide.');
+      }
+    }
+
+    setAccountSaving(true);
+    try {
+      await api.put('operadores/minha-conta/', {
+        first_name: accountForm.first_name,
+        username: accountForm.username,
+        theme_preference: accountForm.theme_preference
+      });
+
+      if (wantsPasswordChange) {
+        await api.post('operadores/trocar-senha/', {
+          senha_atual: accountForm.senha_atual,
+          nova_senha: accountForm.nova_senha,
+          confirmacao: accountForm.confirmacao
+        });
+      }
+
+      await refreshUser();
+      setThemePreference(accountForm.theme_preference);
+      notify?.success?.('Conta atualizada com sucesso.');
+      setAccountModalOpen(false);
+    } catch (error) {
+      const message = error?.response?.data?.error || error?.response?.data?.detail || 'Erro ao atualizar conta.';
+      notify?.error?.(message);
+    } finally {
+      setAccountSaving(false);
+    }
+  };
+
   return (
     <nav className={`
       sticky top-0 w-full transition-all duration-500 ease-in-out border-b
-      /* AQUI ESTÁ A CORREÇÃO GLOBAL: Z-INDEX 90 (Sidebar usa 80, modais 120+) */
+      /* AQUI ESTÃ A CORREÃ‡ÃƒO GLOBAL: Z-INDEX 90 (Sidebar usa 80, modais 120+) */
       z-[90]
-      /* AQUI ESTÁ A REDUÇÃO DE TAMANHO: h-16 (64px) normal, h-14 (56px) scroll */
+      /* AQUI ESTÃ A REDUÃ‡ÃƒO DE TAMANHO: h-16 (64px) normal, h-14 (56px) scroll */
       ${scrolled 
         ? 'bg-white/95 dark:bg-slate-900/95 backdrop-blur-md h-14 border-slate-200 dark:border-slate-800 shadow-sm' 
         : 'bg-white dark:bg-slate-900 h-16 border-transparent'}
@@ -113,7 +201,7 @@ export default function Navbar() {
             </div>
             <div className="hidden lg:block transition-all duration-300">
               <span className={`font-black tracking-tighter text-slate-800 dark:text-white block leading-none uppercase ${scrolled ? 'text-base' : 'text-lg'}`}>TheClinic</span>
-              <span className={`text-blue-600 font-black tracking-[0.3em] uppercase ${scrolled ? 'text-[7px]' : 'text-[8px]'}`}>Gestão</span>
+              <span className={`text-blue-600 font-black tracking-[0.3em] uppercase ${scrolled ? 'text-[7px]' : 'text-[8px]'}`}>GestÃ£o</span>
             </div>
           </Link>
 
@@ -125,7 +213,7 @@ export default function Navbar() {
 
         {/* LADO DIREITO */}
         <div className="flex items-center gap-2 ml-auto min-w-[220px] justify-end">
-          <button onClick={toggleTheme} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-blue-600 hover:text-white transition-all">
+          <button onClick={handleThemeToggle} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-blue-600 hover:text-white transition-all">
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
 
@@ -134,7 +222,7 @@ export default function Navbar() {
               <button
                 onClick={() => setWaModalOpen(true)}
                 className="group flex items-center gap-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-emerald-600 hover:text-white transition-all overflow-hidden"
-                title="Conexão WhatsApp"
+                title="ConexÃ£o WhatsApp"
               >
                 <div className="relative">
                   <MessageCircle size={16} />
@@ -145,7 +233,7 @@ export default function Navbar() {
                 </span>
               </button>
 
-              <Link to="/configuracoes" className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-900 hover:text-white transition-all" title="Configurações Globais">
+              <Link to="/configuracoes" className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-900 hover:text-white transition-all" title="ConfiguraÃ§Ãµes Globais">
                 <Settings size={16} />
               </Link>
             </>
@@ -166,8 +254,11 @@ export default function Navbar() {
 
             <div className="absolute top-full right-0 w-48 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[60]">
                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-1.5 backdrop-blur-xl">
+                  <button onClick={() => setAccountModalOpen(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <UserCircle size={14} /> Conta
+                  </button>
                   <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest text-red-500 hover:bg-red-50 transition-colors">
-                    <LogOut size={14} /> Encerrar Sessão
+                    <LogOut size={14} /> Encerrar SessÃ£o
                   </button>
                </div>
             </div>
@@ -180,7 +271,7 @@ export default function Navbar() {
           <div className="bg-white dark:bg-slate-800 rounded-[28px] shadow-2xl w-full max-w-lg overflow-hidden border border-white/10">
             <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
               <h3 className="font-black uppercase tracking-widest text-xs flex items-center gap-2">
-                <MessageCircle size={16} className="text-emerald-400"/> Conexão WhatsApp
+                <MessageCircle size={16} className="text-emerald-400"/> ConexÃ£o WhatsApp
               </h3>
               <button onClick={() => setWaModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={20}/></button>
             </div>
@@ -235,6 +326,131 @@ export default function Navbar() {
           </div>
         </div>
       )}
+      {accountModalOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-[28px] shadow-2xl w-full max-w-2xl overflow-hidden border border-white/10">
+            <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
+              <h3 className="font-black uppercase tracking-widest text-xs flex items-center gap-2">
+                <UserCircle size={16} className="text-blue-300"/> Conta do Operador
+              </h3>
+              <button onClick={() => setAccountModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={20}/></button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nome do Operador</label>
+                  <input
+                    name="first_name"
+                    value={accountForm.first_name}
+                    onChange={handleAccountChange}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold dark:text-white outline-none focus:ring-4 focus:ring-blue-500/10"
+                    placeholder="Digite seu nome"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nome de Acesso</label>
+                  <input
+                    name="username"
+                    value={accountForm.username}
+                    onChange={handleAccountChange}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold dark:text-white outline-none focus:ring-4 focus:ring-blue-500/10"
+                    placeholder="Digite seu usuario"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Modo de Visualizacao</label>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAccountForm((prev) => ({ ...prev, theme_preference: 'light' }))}
+                    className={`px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${accountForm.theme_preference === 'light' ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                  >
+                    Modo Claro
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAccountForm((prev) => ({ ...prev, theme_preference: 'dark' }))}
+                    className={`px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${accountForm.theme_preference === 'dark' ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-900/20' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                  >
+                    Modo Escuro
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                  <KeyRound size={16} className="text-amber-500" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Trocar Senha</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Senha Atual</label>
+                    <input
+                      name="senha_atual"
+                      type="password"
+                      value={accountForm.senha_atual}
+                      onChange={handleAccountChange}
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold dark:text-white outline-none focus:ring-4 focus:ring-amber-500/10"
+                      placeholder="********"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nova Senha</label>
+                    <input
+                      name="nova_senha"
+                      type="password"
+                      value={accountForm.nova_senha}
+                      onChange={handleAccountChange}
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold dark:text-white outline-none focus:ring-4 focus:ring-amber-500/10"
+                      placeholder="********"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Confirmar Senha</label>
+                    <input
+                      name="confirmacao"
+                      type="password"
+                      value={accountForm.confirmacao}
+                      onChange={handleAccountChange}
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold dark:text-white outline-none focus:ring-4 focus:ring-amber-500/10"
+                      placeholder="********"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">A troca exige senha atual.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 px-6 pb-6">
+              <button
+                onClick={() => setAccountModalOpen(false)}
+                className="flex-1 h-11 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAccountSave}
+                disabled={accountSaving}
+                className="flex-1 h-11 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] bg-slate-900 text-white hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {accountSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
+
+
+
+
+
+
+
+
+
+
