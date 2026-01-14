@@ -24,13 +24,14 @@ export default function TabsBar() {
     const el = containerRef.current;
     if (!el) return;
     const check = () => {
-      setShouldOverlap(el.scrollWidth > el.clientWidth + 8);
+      const spacing = shouldOverlap ? 0 : 8 * Math.max(0, tabs.length - 1);
+      setShouldOverlap(el.scrollWidth > (el.clientWidth + spacing));
     };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [tabs.length]);
+  }, [tabs.length, shouldOverlap]);
 
   const maxSlots = Math.max(1, Math.min(5, tabs.length));
   const overlap = shouldOverlap ? (maxSlots > 4 ? 14 : maxSlots > 3 ? 12 : 8) : 0;
