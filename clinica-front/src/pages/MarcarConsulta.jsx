@@ -48,8 +48,8 @@ const calendarStyles = `
   .react-calendar__tile:enabled:hover { background-color: #f1f5f9; }
   .dark .react-calendar__tile:enabled:hover { background-color: #334155; }
   
-  .react-calendar__tile--now { background: transparent !important; color: #2563eb !important; border: 2px solid #2563eb !important; }
-  .react-calendar__tile--active { background: #2563eb !important; color: white !important; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+  .react-calendar__tile--now { background: transparent !important; color: #0f172a !important; border: none !important; }
+  .react-calendar__tile--active { background: transparent !important; color: #2563eb !important; border: 2px solid #2563eb !important; box-shadow: none; }
   
   /* Status dos Dias */
   .dia-livre { background-color: #dcfce7 !important; color: #166534 !important; font-weight: 800; }
@@ -401,7 +401,7 @@ export default function MarcarConsulta() {
       <div className="max-w-[1920px] pb-20">
         
         {/* CABEÇALHO */}
-        <div className="mb-6">
+        <div className="mb-4">
             <h1 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-3">
                 <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20"><CalendarIcon size={28}/></div>
                 Marcar Consulta
@@ -410,7 +410,7 @@ export default function MarcarConsulta() {
         </div>
 
         {/* CARD DE FILTROS */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] shadow-sm border border-slate-200 dark:border-slate-700 mb-6">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-[28px] shadow-sm border border-slate-200 dark:border-slate-700 mb-5">
             <div className="flex flex-col md:flex-row gap-4 items-center">
                 <div className="flex items-center gap-2 text-slate-400 font-black uppercase text-xs tracking-widest min-w-fit">
                     <Filter size={16}/> Filtros
@@ -482,7 +482,7 @@ export default function MarcarConsulta() {
                                                 setConvenioId(slot.convenio_regra_id || ''); setPacienteId(''); setTipoModal('normal'); setModalOpen(true); 
                                             }
                                         }} 
-                                        className={`relative group p-3.5 rounded-2xl border-2 flex flex-col justify-between h-24 transition-all shadow-sm hover:shadow-md ${
+                                        className={`relative group p-4 rounded-2xl border-2 flex flex-col justify-between h-28 transition-all shadow-sm hover:shadow-md ${
                                             slot.ocupado ? 'bg-white border-blue-100 dark:bg-slate-800 dark:border-slate-700' : 
                                             isLocked || isExpirado ? 'bg-slate-100 opacity-50 cursor-not-allowed border-transparent' : 
                                             'bg-white border-green-100 hover:border-green-500 cursor-pointer hover:-translate-y-1'

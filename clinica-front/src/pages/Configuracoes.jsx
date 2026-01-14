@@ -318,9 +318,9 @@ export default function Configuracoes() {
                                                 <div className={`p-6 rounded-[28px] border-2 transition-all ${config.enviar_whatsapp_global ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}>
                                                     <div className="flex items-center justify-between">
                                                         <div>
-                                                            <h3 className={`font-black text-base uppercase tracking-tight ${config.enviar_whatsapp_global ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500'}`}>
-                                                                {config.enviar_whatsapp_global ? 'Serviço de WhatsApp Ativo' : 'Serviço de WhatsApp Pausado'}
-                                                            </h3>
+                                                        <h3 className={`font-black text-lg uppercase tracking-tight ${config.enviar_whatsapp_global ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500'}`}>
+                                                            {config.enviar_whatsapp_global ? 'Serviço de WhatsApp Ativo' : 'Serviço de WhatsApp Pausado'}
+                                                        </h3>
                                                             <p className="text-xs font-medium opacity-60 mt-1">Desabilita o envio de mensagens globalmente.</p>
                                                         </div>
                                                         <label className="relative inline-flex items-center cursor-pointer scale-110 mr-2">
@@ -383,8 +383,8 @@ export default function Configuracoes() {
                                                         ].map((item) => (
                                                             <div key={item.id} className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-xl transition-colors">
                                                                 <div>
-                                                                    <span className="block text-xs font-black text-slate-700 dark:text-white uppercase tracking-tight">{item.label}</span>
-                                                                    <span className="text-[9px] text-slate-400 font-bold uppercase">{item.sub}</span>
+                                                                    <span className="block text-sm font-black text-slate-700 dark:text-white uppercase tracking-tight">{item.label}</span>
+                                                                    <span className="text-[10px] text-slate-400 font-bold uppercase">{item.sub}</span>
                                                                 </div>
                                                                 <label className="relative inline-flex items-center cursor-pointer">
                                                                     <input type="checkbox" name={item.id} className="sr-only peer" checked={config[item.id]} onChange={handleChange}/>
