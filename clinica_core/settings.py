@@ -203,6 +203,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",          # Para seus testes locais (Vite/React)
     "http://localhost:3000",          # Caso use outra porta local
     "https://theclinic.up.railway.app", # SEU FRONTEND EM PRODUÇÃO (Sem barra no final)
+    "https://theclinic-production.up.railway.app", # Backend/API em producao
 ]
 
 CORS_ALLOW_CREDENTIALS = True
