@@ -1,4 +1,5 @@
 import Navbar from './Navbar';
+import Sidebar from './Sidebar';
 
 /**
  * Layout Principal do Sistema
@@ -13,16 +14,19 @@ export default function Layout({ children }) {
       <Navbar />
 
       {/* Área de Conteúdo Principal */}
-      <main className="container mx-auto px-4 md:px-6 lg:px-8 py-8 max-w-7xl">
-        
-        {/* Wrapper de animação: garante que cada página carregada 
-          tenha um efeito suave de entrada.
-        */}
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
-          {children}
-        </div>
-        
-      </main>
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 px-4 md:px-6 lg:px-8 py-8">
+          <div className="container mx-auto max-w-7xl">
+            {/* Wrapper de animação: garante que cada página carregada 
+              tenha um efeito suave de entrada.
+            */}
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
+              {children}
+            </div>
+          </div>
+        </main>
+      </div>
 
       {/* Rodapé ou Indicador de Segurança (Opcional) */}
       <footer className="py-6 text-center opacity-30 text-[10px] font-bold uppercase tracking-widest pointer-events-none">

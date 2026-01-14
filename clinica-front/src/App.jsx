@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { NotificationProvider } from './context/NotificationContext'; 
+import { TabsProvider } from './context/TabsContext';
 
 // Componentes de Infraestrutura
 import PrivateRoute from './components/PrivateRoute'; 
@@ -56,46 +57,48 @@ function App() {
       <AuthProvider>
         <ThemeProvider>
           <NotificationProvider> 
-            <ScrollToTop />
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                {/* ROTA PÚBLICA */}
-                <Route path="/" element={<Login />} />
-                
-                {/* SEGURANÇA CRÍTICA */}
-                <Route path="/trocasenhaobrigatoria" element={
-                  <PrivateRoute><TrocaSenhaObrigatoria /></PrivateRoute>
-                } />
-                
-                {/* DASHBOARD PRINCIPAL */}
-                <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            <TabsProvider>
+              <ScrollToTop />
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  {/* ROTA PÚBLICA */}
+                  <Route path="/" element={<Login />} />
+                  
+                  {/* SEGURANÇA CRÍTICA */}
+                  <Route path="/trocasenhaobrigatoria" element={
+                    <PrivateRoute><TrocaSenhaObrigatoria /></PrivateRoute>
+                  } />
+                  
+                  {/* DASHBOARD PRINCIPAL */}
+                  <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
 
-                {/* GESTÃO DE PESSOAS E OPERAÇÃO */}
-                <Route path="/pacientes" element={<PrivateRoute><Pacientes /></PrivateRoute>} />
-                <Route path="/operadores" element={<PrivateRoute><Operadores /></PrivateRoute>} />
-                <Route path="/operadores/novo" element={<PrivateRoute><CadastroOperador /></PrivateRoute>} />
-                <Route path="/operadores/editar/:id" element={<PrivateRoute><CadastroOperador /></PrivateRoute>} />
-                <Route path="/profissionais" element={<PrivateRoute><Profissionais /></PrivateRoute>} />
-                <Route path="/profissionais/novo" element={<PrivateRoute><ProfissionalForm /></PrivateRoute>} />
-                <Route path="/profissionais/:id" element={<PrivateRoute><ProfissionalForm /></PrivateRoute>} />
-                <Route path="/especialidades" element={<PrivateRoute><Especialidades /></PrivateRoute>} />
+                  {/* GESTÃO DE PESSOAS E OPERAÇÃO */}
+                  <Route path="/pacientes" element={<PrivateRoute><Pacientes /></PrivateRoute>} />
+                  <Route path="/operadores" element={<PrivateRoute><Operadores /></PrivateRoute>} />
+                  <Route path="/operadores/novo" element={<PrivateRoute><CadastroOperador /></PrivateRoute>} />
+                  <Route path="/operadores/editar/:id" element={<PrivateRoute><CadastroOperador /></PrivateRoute>} />
+                  <Route path="/profissionais" element={<PrivateRoute><Profissionais /></PrivateRoute>} />
+                  <Route path="/profissionais/novo" element={<PrivateRoute><ProfissionalForm /></PrivateRoute>} />
+                  <Route path="/profissionais/:id" element={<PrivateRoute><ProfissionalForm /></PrivateRoute>} />
+                  <Route path="/especialidades" element={<PrivateRoute><Especialidades /></PrivateRoute>} />
 
-                {/* MÓDULO DE AGENDA E RECEPÇÃO */}
-                <Route path="/recepcao" element={<PrivateRoute><Recepcao /></PrivateRoute>} />
-                <Route path="/agenda/marcar" element={<PrivateRoute><MarcarConsulta /></PrivateRoute>} />
-                <Route path="/agenda/configurar" element={<PrivateRoute><ConfigurarAgenda /></PrivateRoute>} />
-                <Route path="/agenda/criar" element={<PrivateRoute><CriarAgenda /></PrivateRoute>} />
-                <Route path="/agenda/bloqueios" element={<PrivateRoute><Bloqueios /></PrivateRoute>} />
+                  {/* MÓDULO DE AGENDA E RECEPÇÃO */}
+                  <Route path="/recepcao" element={<PrivateRoute><Recepcao /></PrivateRoute>} />
+                  <Route path="/agenda/marcar" element={<PrivateRoute><MarcarConsulta /></PrivateRoute>} />
+                  <Route path="/agenda/configurar" element={<PrivateRoute><ConfigurarAgenda /></PrivateRoute>} />
+                  <Route path="/agenda/criar" element={<PrivateRoute><CriarAgenda /></PrivateRoute>} />
+                  <Route path="/agenda/bloqueios" element={<PrivateRoute><Bloqueios /></PrivateRoute>} />
 
-                {/* CONFIGURAÇÕES GLOBAIS E ADMINISTRAÇÃO */}
-                <Route path="/convenios" element={<PrivateRoute><Convenios /></PrivateRoute>} />
-                <Route path="/clinica" element={<PrivateRoute><DadosClinica /></PrivateRoute>} />
-                <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
-                
-                {/* REDIRECIONAMENTO DE SEGURANÇA */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Suspense>
+                  {/* CONFIGURAÇÕES GLOBAIS E ADMINISTRAÇÃO */}
+                  <Route path="/convenios" element={<PrivateRoute><Convenios /></PrivateRoute>} />
+                  <Route path="/clinica" element={<PrivateRoute><DadosClinica /></PrivateRoute>} />
+                  <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
+                  
+                  {/* REDIRECIONAMENTO DE SEGURANÇA */}
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </TabsProvider>
           </NotificationProvider>
         </ThemeProvider>
       </AuthProvider>

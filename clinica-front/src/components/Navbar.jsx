@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import TabsBar from './TabsBar';
 import { 
-  Stethoscope, CalendarDays, Settings, LogOut, 
-  ChevronDown, Moon, Sun, Building2, ShieldCheck, 
-  Menu, X, User as UserIcon, Bell, LayoutDashboard,
-  Users, Plus, History, ClipboardList, Briefcase, Heart,
+  Stethoscope, Settings, LogOut, 
+  Moon, Sun, 
+  X,
   MessageCircle, QrCode, Loader2
 } from 'lucide-react';
 
@@ -16,7 +16,6 @@ export default function Navbar() {
   const { notify } = useNotification();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [whatsappStatus, setWhatsappStatus] = useState({ loading: true, connected: null, state: 'carregando', error: null });
   const [waModalOpen, setWaModalOpen] = useState(false);
@@ -96,45 +95,6 @@ export default function Navbar() {
     return { label: 'Indefinido', className: 'bg-slate-400 text-white' };
   };
 
-  const NavItem = ({ icon: Icon, title, children, activePaths = [] }) => {
-    const isCurrent = activePaths.some(path => location.pathname.startsWith(path));
-    return (
-      <div className="relative group h-full flex items-center">
-        <button className={`
-          flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all duration-300
-          ${isCurrent 
-            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' 
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}
-        `}>
-          <Icon size={14} strokeWidth={2.5} />
-          <span>{title}</span>
-          <ChevronDown size={12} className={`opacity-40 group-hover:rotate-180 transition-transform duration-300 ${isCurrent ? 'text-white' : ''}`} />
-        </button>
-        
-        {/* Z-Index aumentado aqui para garantir que o dropdown sobreponha conteúdo, mas não modais */}
-        <div className="absolute top-[95%] left-0 w-56 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[60] transform origin-top translate-y-1 group-hover:translate-y-0">
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden backdrop-blur-xl">
-            <div className="p-1.5 space-y-0.5">
-              {children}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const DropdownLink = ({ to, text, icon: Icon }) => (
-    <Link to={to} className={`
-      flex items-center gap-2.5 px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-tight transition-all
-      ${location.pathname === to 
-        ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' 
-        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}
-    `}>
-      <Icon size={14} className={location.pathname === to ? 'text-blue-600' : 'text-slate-400'} />
-      {text}
-    </Link>
-  );
-
   return (
     <nav className={`
       sticky top-0 w-full transition-all duration-500 ease-in-out border-b
@@ -145,9 +105,8 @@ export default function Navbar() {
         ? 'bg-white/95 dark:bg-slate-900/95 backdrop-blur-md h-14 border-slate-200 dark:border-slate-800 shadow-sm' 
         : 'bg-white dark:bg-slate-900 h-16 border-transparent'}
     `}>
-      <div className="container mx-auto px-4 md:px-6 h-full flex justify-between items-center">
-        
-        <div className="flex items-center gap-6 h-full">
+      <div className="container mx-auto px-4 md:px-6 h-full flex items-center gap-6">
+        <div className="flex items-center gap-4 h-full">
           <Link to="/dashboard" className="flex items-center gap-2 group">
             <div className={`bg-blue-600 text-white rounded-xl shadow-md group-hover:rotate-12 transition-all duration-500 ${scrolled ? 'p-1.5' : 'p-2'}`}>
               <Stethoscope size={scrolled ? 18 : 22} strokeWidth={3} />
@@ -158,41 +117,14 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* MENU CENTRAL */}
-          <div className="hidden md:flex items-center gap-1 h-full">
-            {(user?.is_superuser || user?.acesso_atendimento) && (
-              <NavItem icon={Stethoscope} title="Atendimento" activePaths={['/prontuarios', '/triagem']}>
-                <DropdownLink to="/prontuarios" text="Prontuários" icon={ClipboardList} />
-                <DropdownLink to="/triagem" text="Triagem" icon={Bell} />
-              </NavItem>
-            )}
+        </div>
 
-            {(user?.is_superuser || user?.acesso_agendamento) && (
-              <NavItem icon={CalendarDays} title="Agenda" activePaths={['/recepcao', '/agenda']}>
-                <DropdownLink to="/recepcao" text="Recepção" icon={Users} />
-                <DropdownLink to="/agenda/marcar" text="Marcar Consulta" icon={Plus} />
-                <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-2"></div>
-                <DropdownLink to="/agenda/configurar" text="Criar Agendas" icon={CalendarDays} />
-                <DropdownLink to="/agenda/bloqueios" text="Bloqueios e Feriados" icon={X} />
-              </NavItem>
-            )}
-
-            {(user?.is_superuser || user?.acesso_cadastros) && (
-              <NavItem icon={Settings} title="Sistema" activePaths={['/pacientes', '/operadores', '/profissionais', '/especialidades', '/convenios', '/clinica']}>
-                <DropdownLink to="/pacientes" text="Pacientes" icon={Users} />
-                <DropdownLink to="/operadores" text="Operadores" icon={ShieldCheck} />
-                <DropdownLink to="/profissionais" text="Profissionais" icon={Briefcase} />
-                <DropdownLink to="/especialidades" text="Especialidades" icon={Heart} />
-                <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-2"></div>
-                <DropdownLink to="/convenios" text="Convênios" icon={ShieldCheck} />
-                <DropdownLink to="/clinica" text="Dados da Clínica" icon={Building2} />
-              </NavItem>
-            )}
-          </div>
+        <div className="flex-1 hidden md:flex justify-center">
+          <TabsBar />
         </div>
 
         {/* LADO DIREITO */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto">
           <button onClick={toggleTheme} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-blue-600 hover:text-white transition-all">
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
