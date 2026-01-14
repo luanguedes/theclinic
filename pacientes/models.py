@@ -44,6 +44,8 @@ class Paciente(models.Model):
     cidade = models.CharField(max_length=100, blank=True)
     estado = models.CharField(max_length=2, blank=True)
 
+    aceite_lgpd = models.BooleanField(default=False)
+
     historico_medico = models.TextField(blank=True)
     
     criado_em = models.DateTimeField(auto_now_add=True)

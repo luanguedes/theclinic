@@ -226,7 +226,7 @@ export default function Pacientes() {
                       </td>
                       <td className="px-8 py-6 font-mono text-slate-500 dark:text-slate-400 font-bold">
                         <div className="flex items-center gap-3">
-                            {verCpfs[p.id] || user?.is_superuser ? p.cpf : ocultarCPF(p.cpf)}
+                            {verCpfs[p.id] ? p.cpf : ocultarCPF(p.cpf)}
                             <button onClick={() => setVerCpfs(prev => ({...prev, [p.id]: !prev[p.id]}))} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md transition-colors text-slate-400">
                                 {verCpfs[p.id] ? <EyeOff size={14}/> : <Eye size={14}/>}
                             </button>
@@ -238,7 +238,7 @@ export default function Pacientes() {
                       <td className="px-8 py-6 text-right">
                         {/* CORREÇÃO: Botões de ação sempre visíveis, removido opacity-0 */}
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => {setForm(p); setEditandoId(p.id); setViewMode('form');}} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar"><Pencil size={18} /></button>
+                          <button onClick={() => {setForm({ ...formInicial, ...p, aceite_lgpd: !!p.aceite_lgpd }); setEditandoId(p.id); setViewMode('form');}} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar"><Pencil size={18} /></button>
                           <button onClick={() => handleExcluir(p.id)} className="p-2.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="Remover"><Trash2 size={18} /></button>
                         </div>
                       </td>
@@ -292,6 +292,7 @@ export default function Pacientes() {
                 <div className="md:col-span-7"><label className={labelClass}>Logradouro</label><input name="logradouro" value={form.logradouro} onChange={handleChange} className={inputClass} /></div>
                 <div className="md:col-span-2"><label className={labelClass}>Nº</label><input name="numero" value={form.numero} onChange={handleChange} className={inputClass} /></div>
 
+                <div className="md:col-span-4"><label className={labelClass}>Complemento</label><input name="complemento" value={form.complemento} onChange={handleChange} className={inputClass} /></div>
                 <div className="md:col-span-4"><label className={labelClass}>Bairro</label><input name="bairro" value={form.bairro} onChange={handleChange} className={inputClass} /></div>
                 <div className="md:col-span-4"><label className={labelClass}>Cidade</label><input name="cidade" value={form.cidade} onChange={handleChange} className={inputClass} /></div>
                 <div className="md:col-span-4"><label className={labelClass}>UF</label><input name="estado" value={form.estado} onChange={handleChange} className={inputClass} maxLength={2} style={{textTransform:'uppercase'}}/></div>
