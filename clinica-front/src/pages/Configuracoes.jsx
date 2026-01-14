@@ -321,7 +321,7 @@ export default function Configuracoes() {
                                                             <h3 className={`font-black text-base uppercase tracking-tight ${config.enviar_whatsapp_global ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500'}`}>
                                                                 {config.enviar_whatsapp_global ? 'Serviço de WhatsApp Ativo' : 'Serviço de WhatsApp Pausado'}
                                                             </h3>
-                                                            <p className="text-xs font-medium opacity-60 mt-1">Status da API de mensageria em tempo real.</p>
+                                                            <p className="text-xs font-medium opacity-60 mt-1">Desabilita o envio de mensagens globalmente.</p>
                                                         </div>
                                                         <label className="relative inline-flex items-center cursor-pointer scale-110 mr-2">
                                                             <input type="checkbox" name="enviar_whatsapp_global" className="sr-only peer" checked={!!config.enviar_whatsapp_global} onChange={handleChange}/>
@@ -371,17 +371,17 @@ export default function Configuracoes() {
                                             <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8 transition-all duration-500 ${!config.enviar_whatsapp_global ? 'opacity-40 grayscale pointer-events-none blur-[1px]' : ''}`}>
                                                 
                                                 {/* Coluna Esquerda: Gatilhos */}
-                                                <div className="bg-white dark:bg-slate-800 p-6 rounded-[28px] border border-slate-200 dark:border-slate-700 shadow-sm">
-                                                    <h3 className="font-black text-xs uppercase tracking-[0.2em] mb-6 text-slate-400 flex items-center gap-2">
-                                                        <Bell size={16}/> Gatilhos de Disparo
+                                                <div className="bg-white dark:bg-slate-800 p-5 rounded-[26px] border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                    <h3 className="font-black text-xs uppercase tracking-[0.2em] mb-4 text-slate-400 flex items-center gap-2">
+                                                        <Bell size={16}/> Gatilhos de Disparo Whatsapp
                                                     </h3>
-                                                    <div className="space-y-5">
+                                                    <div className="space-y-2.5">
                                                         {[
-                                                            { id: 'enviar_wpp_confirmacao', label: 'Confirmação', sub: 'No ato da marcação.' },
-                                                            { id: 'enviar_wpp_bloqueio', label: 'Agenda', sub: 'Bloqueios/Feriados.' },
+                                                            { id: 'enviar_wpp_confirmacao', label: 'Confirmação', sub: 'No ato do agendamento.' },
+                                                            { id: 'enviar_wpp_bloqueio', label: 'Bloqueios', sub: 'Bloqueios/Feriados.' },
                                                             { id: 'enviar_wpp_lembrete', label: 'Lembretes', sub: '24h antes da data.' }
                                                         ].map((item) => (
-                                                            <div key={item.id} className="flex items-center justify-between p-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-xl transition-colors">
+                                                            <div key={item.id} className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-xl transition-colors">
                                                                 <div>
                                                                     <span className="block text-xs font-black text-slate-700 dark:text-white uppercase tracking-tight">{item.label}</span>
                                                                     <span className="text-[9px] text-slate-400 font-bold uppercase">{item.sub}</span>
