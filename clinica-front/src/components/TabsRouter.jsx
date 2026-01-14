@@ -47,7 +47,7 @@ const renderRoutes = (locationOverride) => (
     <Route path="/recepcao" element={<PrivateRoute><Recepcao /></PrivateRoute>} />
     <Route path="/agenda/marcar" element={<PrivateRoute><MarcarConsulta /></PrivateRoute>} />
     <Route path="/agenda/configurar" element={<PrivateRoute><ConfigurarAgenda /></PrivateRoute>} />
-    <Route path="/agenda/criar" element={<PrivateRoute><CriarAgenda /></PrivateRoute>} />
+    <Route path="/agenda/configurar/nova" element={<PrivateRoute><CriarAgenda /></PrivateRoute>} />
     <Route path="/agenda/bloqueios" element={<PrivateRoute><Bloqueios /></PrivateRoute>} />
     <Route path="/convenios" element={<PrivateRoute><Convenios /></PrivateRoute>} />
     <Route path="/clinica" element={<PrivateRoute><DadosClinica /></PrivateRoute>} />

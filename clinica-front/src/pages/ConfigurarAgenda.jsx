@@ -335,7 +335,7 @@ export default function ConfigurarAgenda() {
                 <h1 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-tighter"><CalendarRange className="text-purple-600"/> Configuração de Horários</h1>
                 <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Gerencie regras de atendimento e vigências</p>
             </div>
-            <button onClick={() => navigate('/agenda/criar')} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-lg transition-all active:scale-95"><Plus size={18}/> Nova Agenda</button>
+            <button onClick={() => navigate('/agenda/configurar/nova')} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-lg transition-all active:scale-95"><Plus size={18}/> Nova Agenda</button>
         </div>
 
         {/* FILTROS E BUSCAS */}

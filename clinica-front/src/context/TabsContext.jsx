@@ -2,11 +2,12 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { useNotification } from './NotificationContext';
-import { getFlatMenuItems } from '../config/navigation';
+import { getFlatMenuItems, hasRouteAccess } from '../config/navigation';
 
 const TabsContext = createContext();
 
 const TAB_DEFS = getFlatMenuItems().map((item) => ({
+  path: item.to,
   match: (p) => p.startsWith(item.to),
   title: item.label,
   icon: item.icon
@@ -31,9 +32,11 @@ export function TabsProvider({ children }) {
   useEffect(() => {
     if (IGNORE_PATHS.includes(currentPath)) return;
     if (!currentDef) return;
+    if (user && !hasRouteAccess(user, currentPath)) return;
 
+    const tabPath = currentDef.path;
     setTabs((prev) => {
-      const exists = prev.find((t) => t.path === currentPath);
+      const exists = prev.find((t) => t.path === tabPath);
       if (exists) return prev;
 
       if (prev.length >= MAX_TABS) {
@@ -42,7 +45,7 @@ export function TabsProvider({ children }) {
       }
 
       const next = [...prev, {
-        path: currentPath,
+        path: tabPath,
         title: currentDef.title,
         icon: currentDef.icon,
         pinned: false
@@ -66,7 +69,7 @@ export function TabsProvider({ children }) {
         .map((t) => {
           const def = TAB_DEFS.find((d) => d.match(t.path));
           return {
-            path: t.path,
+            path: def?.path || t.path,
             title: t.title || def?.title || 'Página',
             icon: def?.icon,
             pinned: true

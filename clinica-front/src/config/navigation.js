@@ -32,11 +32,6 @@ const AGENDA_ITEMS = [
   { to: '/agenda/bloqueios', label: 'Bloqueios e Feriados', icon: CalendarX }
 ];
 
-const AGENDA_PRIVILEGE_ITEMS = [
-  ...AGENDA_ITEMS,
-  { to: '/agenda/criar', label: 'Criar Agenda (Assistente)' }
-];
-
 const SISTEMA_ITEMS = [
   { to: '/pacientes', label: 'Pacientes', icon: Users },
   { to: '/operadores', label: 'Operadores', icon: ShieldCheck },
@@ -110,6 +105,6 @@ export const getFlatMenuItems = () => (
 export const getPrivilegeModules = () => ([
   { key: 'dashboard', label: 'Dashboard', items: [DASHBOARD_ITEM] },
   { key: 'atendimento', label: 'Atendimento', items: ATENDIMENTO_ITEMS },
-  { key: 'agenda', label: 'Agenda', items: AGENDA_PRIVILEGE_ITEMS },
+  { key: 'agenda', label: 'Agenda', items: AGENDA_ITEMS },
   { key: 'sistema', label: 'Sistema', items: SISTEMA_PRIVILEGE_ITEMS }
 ]);

@@ -9,7 +9,7 @@ export default function TabsBar() {
   const [dragIndex, setDragIndex] = useState(null);
   const handleClose = (path) => {
     const idx = tabs.findIndex((t) => t.path === path);
-    const isActive = currentPath === path;
+    const isActive = currentPath === path || currentPath.startsWith(`${path}/`);
     closeTab(path);
     if (isActive) {
       const next = tabs[idx - 1] || tabs[idx + 1];
@@ -21,7 +21,7 @@ export default function TabsBar() {
     <div className="relative flex items-center justify-start w-full min-w-0 overflow-hidden gap-2 flex-nowrap">
       {tabs.map((tab, idx) => {
         const Icon = tab.icon;
-        const isActive = currentPath === tab.path;
+        const isActive = currentPath === tab.path || currentPath.startsWith(`${tab.path}/`);
         const z = 50 + idx;
         return (
           <div
@@ -41,7 +41,7 @@ export default function TabsBar() {
             }`}
             onClick={() => navigate(tab.path)}
             title={tab.title}
-            style={{ zIndex: z, flexGrow: 1, flexShrink: idx + 1 }}
+            style={{ zIndex: z }}
           >
             {Icon && <Icon size={14} className="shrink-0" />}
             <span className="min-w-0 flex-1 truncate text-left">{tab.title}</span>

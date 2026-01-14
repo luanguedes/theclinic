@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ChevronRight } from 'lucide-react';
-import { DASHBOARD_ITEM, MENU_ITEMS } from '../config/navigation';
+import { DASHBOARD_ITEM, MENU_ITEMS, hasRouteAccess } from '../config/navigation';
 
 export default function Sidebar() {
   const { user } = useAuth();
@@ -23,7 +23,9 @@ export default function Sidebar() {
         </Link>
         {MENU_ITEMS.filter((m) => m.access(user)).map((menu) => {
           const Icon = menu.icon;
-          const isActive = menu.items.some((i) => location.pathname.startsWith(i.to));
+          const visibleItems = menu.items.filter((item) => hasRouteAccess(user, item.to));
+          if (visibleItems.length === 0) return null;
+          const isActive = visibleItems.some((i) => location.pathname.startsWith(i.to));
           return (
             <div key={menu.key} className="relative group">
               <div className={`w-full flex flex-col items-center gap-1 py-4 rounded-3xl transition-all cursor-pointer ${
@@ -39,7 +41,7 @@ export default function Sidebar() {
                     <Icon size={14}/> {menu.label}
                   </div>
                   <div className="p-2 space-y-1">
-                    {menu.items.map((item) => {
+                    {visibleItems.map((item) => {
                       const ItemIcon = item.icon;
                       const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
                       return (
