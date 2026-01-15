@@ -158,15 +158,17 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
             regras_antigas = AgendaConfig.objects.filter(group_id=group_id)
             if not regras_antigas.exists(): return Response({"error": "Agenda não encontrada."}, status=status.HTTP_404_NOT_FOUND)
             
+            data = request.data
+            dias = data.get('dias_semana', [])
+            if not dias:
+                regras_antigas.delete()
+                return Response({"message": "Grupo removido com sucesso."})
+
             primeira = regras_antigas.first()
             prof = primeira.profissional_id
             spec = primeira.especialidade_id
-            
+
             regras_antigas.delete()
-            
-            data = request.data
-            dias = data.get('dias_semana', [])
-            if not dias: raise Exception("Dias obrigatórios")
             
             tipo = data.get('tipo')
             situacao = data.get('situacao', True)
