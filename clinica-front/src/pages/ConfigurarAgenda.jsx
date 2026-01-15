@@ -71,7 +71,7 @@ const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter
         <div className="relative w-full h-full" ref={containerRef}>
             <input 
                 type="text" 
-                className="w-full h-full pl-3 pr-8 bg-white dark:bg-slate-900 border-y border-r border-slate-200 dark:border-slate-700 outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all text-sm font-bold"
+                className="w-full h-full pl-3 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all text-sm font-bold"
                 placeholder={placeholder}
                 value={text}
                 onChange={e => { setText(e.target.value); setIsOpen(true); onChange(''); }}
@@ -79,7 +79,7 @@ const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter
                 onKeyDown={handleKeyDown}
             />
             {isOpen && (
-                <ul className="absolute top-full left-0 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-b-xl shadow-xl max-h-60 overflow-auto z-50">
+                <ul className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-60 overflow-auto z-50">
                     {filtered.length > 0 ? filtered.map(opt => (
                         <li key={opt.id} onMouseDown={() => { onChange(opt.id); setText(opt.label); setIsOpen(false); }} className="px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer text-sm dark:text-white flex justify-between font-medium">
                             {opt.label}
@@ -241,7 +241,7 @@ export default function ConfigurarAgenda() {
   const handleKeyDown = (e) => { if (e.key === 'Enter') addFilter(); };
 
   const renderDynamicInput = () => {
-      const commonClass = "w-full pl-3 pr-12 bg-white dark:bg-slate-900 border-y border-r border-slate-200 dark:border-slate-700 p-3 outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all h-full text-sm font-bold";
+      const commonClass = "w-full pl-3 pr-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all h-full text-sm font-bold";
       switch (filterType) {
           case 'data_inicial': case 'data_final': case 'data_especifica':
               return <input type="date" value={filterValue} onChange={e => setFilterValue(e.target.value)} className={commonClass} onKeyDown={handleKeyDown}/>;

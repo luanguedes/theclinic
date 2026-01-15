@@ -4,7 +4,7 @@ import { useNotification } from '../context/NotificationContext';
 import { 
   Search, UserPlus, MapPin, Pencil, Trash2, Save, ArrowLeft, Loader2, 
   User, Heart, Accessibility, Users, Baby, Eye, EyeOff, ShieldCheck,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Filter, ChevronDown, X
 } from 'lucide-react';
 import Layout from '../components/Layout';
 
@@ -27,9 +27,11 @@ export default function Pacientes() {
   const [verCpfs, setVerCpfs] = useState({}); 
 
   const [pacientes, setPacientes] = useState([]);
-  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [filterType, setFilterType] = useState('texto');
+  const [filterValue, setFilterValue] = useState('');
+  const [activeFilters, setActiveFilters] = useState([]);
 
   const formInicial = {
     nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '',
@@ -104,7 +106,14 @@ export default function Pacientes() {
     if (!api) return;
     setLoading(true);
     try {
-      const { data } = await api.get(`pacientes/?page=${page}&search=${search}`);
+      const params = new URLSearchParams();
+      params.append('page', page);
+      activeFilters.forEach((f) => {
+        if (!f.value) return;
+        if (f.type === 'texto') params.append('search', f.value);
+        else params.append(f.type, f.value);
+      });
+      const { data } = await api.get(`pacientes/?${params.toString()}`);
       setPacientes(data.results || []);
       setTotalPages(data.num_pages || Math.max(1, Math.ceil((data.count || 0) / (data.page_size || 1))));
     } catch (error) {
@@ -112,7 +121,7 @@ export default function Pacientes() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchPacientes(); }, [page, search, api]);
+  useEffect(() => { fetchPacientes(); }, [page, activeFilters, api]);
 
   const buscarCep = async () => {
     const cepLimpo = form.cep.replace(/\D/g, '');
@@ -168,6 +177,86 @@ export default function Pacientes() {
     }
   };
 
+  const filterTypeOptions = [
+    { value: 'texto', label: 'Busca Geral' },
+    { value: 'cpf', label: 'CPF' },
+    { value: 'telefone', label: 'Telefone' },
+    { value: 'cidade', label: 'Cidade' },
+    { value: 'prioridade', label: 'Prioridade' },
+    { value: 'sexo', label: 'Sexo' }
+  ];
+
+  const sexoOptions = [
+    { value: 'Feminino', label: 'Feminino' },
+    { value: 'Masculino', label: 'Masculino' },
+    { value: 'Outro', label: 'Outro' }
+  ];
+
+  const addFilter = () => {
+    if (!filterValue) return;
+    const typeLabel = filterTypeOptions.find((o) => o.value === filterType)?.label || 'Filtro';
+    let display = filterValue;
+    if (filterType === 'prioridade') {
+      display = PRIORIDADES[filterValue]?.label || filterValue;
+    }
+    if (filterType === 'sexo') {
+      display = sexoOptions.find((o) => o.value === filterValue)?.label || filterValue;
+    }
+    const newFilter = { id: Date.now(), type: filterType, value: filterValue, display: `${typeLabel}: ${display}` };
+    const cleanFilters = activeFilters.filter((f) => f.type !== filterType);
+    setActiveFilters([...cleanFilters, newFilter]);
+    setFilterValue('');
+    setPage(1);
+  };
+
+  const removeFilter = (id) => {
+    setActiveFilters(activeFilters.filter((f) => f.id !== id));
+    setPage(1);
+  };
+
+  const clearAllFilters = () => {
+    setActiveFilters([]);
+    setFilterValue('');
+    setPage(1);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') addFilter();
+  };
+
+  const renderDynamicInput = () => {
+    const commonClass = `${inputClass} h-11`;
+    if (filterType === 'prioridade') {
+      return (
+        <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={commonClass}>
+          <option value="">Selecione...</option>
+          {Object.entries(PRIORIDADES).map(([key, value]) => (
+            <option key={key} value={key}>{value.label}</option>
+          ))}
+        </select>
+      );
+    }
+    if (filterType === 'sexo') {
+      return (
+        <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={commonClass}>
+          <option value="">Selecione...</option>
+          {sexoOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      );
+    }
+    return (
+      <input
+        placeholder="Digite para buscar..."
+        value={filterValue}
+        onChange={(e) => setFilterValue(e.target.value)}
+        className={commonClass}
+        onKeyDown={handleKeyDown}
+      />
+    );
+  };
+
   const inputClass = "w-full bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-bold";
   const labelClass = "block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
 
@@ -183,18 +272,44 @@ export default function Pacientes() {
               </button>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 mb-8 relative">
-                <label className={labelClass}>Localizar na Base de Dados</label>
-                <div className="relative">
-                    <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
-                    <input 
-                        placeholder="Pesquisar por nome ou CPF..." 
-                        value={search} 
-                        onChange={e => { setSearch(e.target.value); setPage(1); }} 
-                        className={`${inputClass} pl-12`}
-                    />
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 mb-6">
+                <div className="flex flex-col md:flex-row gap-3 items-center">
+                  <div className="w-full md:w-60">
+                    <div className="relative h-11">
+                      <select
+                        value={filterType}
+                        onChange={(e) => setFilterType(e.target.value)}
+                        className="w-full h-full pl-10 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 appearance-none cursor-pointer"
+                      >
+                        {filterTypeOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Filter size={14} /></div>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><ChevronDown size={14} /></div>
+                    </div>
+                  </div>
+                  <div className="flex-1 relative">
+                    {renderDynamicInput()}
+                    <button onClick={addFilter} className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2 rounded-xl shadow-lg hover:bg-blue-700 transition">
+                      <Search size={14} />
+                    </button>
+                  </div>
+                  <button onClick={clearAllFilters} className="h-11 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all">
+                    Limpar
+                  </button>
                 </div>
-            </div>
+                {activeFilters.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {activeFilters.map((f) => (
+                      <span key={f.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest">
+                        {f.display}
+                        <button onClick={() => removeFilter(f.id)} className="text-blue-500 hover:text-blue-700"><X size={12} /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
               <table className="w-full text-left text-sm">

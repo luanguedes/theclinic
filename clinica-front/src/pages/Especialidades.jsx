@@ -2,23 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
-import { Search, Plus, Heart, Edit, Trash2, Save, X, Loader2, Activity } from 'lucide-react';
+import { Search, Plus, Heart, Edit, Trash2, Save, X, Loader2, Activity, Filter, ChevronDown } from 'lucide-react';
 
 export default function Especialidades() {
     const { api } = useAuth();
     const { notify, confirmDialog } = useNotification();
     const [items, setItems] = useState([]);
-    const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [filterType, setFilterType] = useState('texto');
+    const [filterValue, setFilterValue] = useState('');
+    const [activeFilters, setActiveFilters] = useState([]);
     
     // Removida descrição, mantido apenas nome
     const [form, setForm] = useState({ nome: '' });
     const [editingId, setEditingId] = useState(null);
 
-    useEffect(() => { if (api) fetchItems(); }, [api, page, search]);
+    useEffect(() => { if (api) fetchItems(); }, [api, page, activeFilters]);
 
     const fetchItems = async () => {
         setLoading(true);
@@ -26,7 +28,11 @@ export default function Especialidades() {
             // CORREÇÃO DE ROTA: Removido 'configuracoes/'
             const params = new URLSearchParams();
             params.append('page', page);
-            if (search) params.append('search', search);
+            activeFilters.forEach((f) => {
+                if (!f.value) return;
+                if (f.type === 'texto') params.append('search', f.value);
+                else params.append(f.type, f.value);
+            });
             const { data } = await api.get(`especialidades/?${params.toString()}`);
             setItems(data.results || []);
             setTotalPages(data.num_pages || Math.max(1, Math.ceil((data.count || 0) / (data.page_size || 1))));
@@ -56,6 +62,49 @@ export default function Especialidades() {
         }
     };
 
+    const filterTypeOptions = [
+        { value: 'texto', label: 'Busca Geral' },
+        { value: 'id', label: 'Codigo' }
+    ];
+
+    const addFilter = () => {
+        if (!filterValue) return;
+        const typeLabel = filterTypeOptions.find((o) => o.value === filterType)?.label || 'Filtro';
+        const newFilter = { id: Date.now(), type: filterType, value: filterValue, display: `${typeLabel}: ${filterValue}` };
+        const cleanFilters = activeFilters.filter((f) => f.type !== filterType);
+        setActiveFilters([...cleanFilters, newFilter]);
+        setFilterValue('');
+        setPage(1);
+    };
+
+    const removeFilter = (id) => {
+        setActiveFilters(activeFilters.filter((f) => f.id !== id));
+        setPage(1);
+    };
+
+    const clearAllFilters = () => {
+        setActiveFilters([]);
+        setFilterValue('');
+        setPage(1);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') addFilter();
+    };
+
+    const renderDynamicInput = () => {
+        const commonClass = "w-full h-11 pl-3 pr-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm font-bold";
+        return (
+            <input
+                placeholder="Digite para buscar..."
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+                className={commonClass}
+                onKeyDown={handleKeyDown}
+            />
+        );
+    };
+
     return (
         <Layout>
             <div className="max-w-4xl mx-auto pb-20">
@@ -69,7 +118,43 @@ export default function Especialidades() {
 
                 <div className="bg-white dark:bg-slate-800 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50">
-                        <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Pesquisar..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="w-full pl-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-500 text-sm font-bold"/></div>
+                        <div className="flex flex-col md:flex-row gap-3 items-center">
+                            <div className="w-full md:w-60">
+                                <div className="relative h-11">
+                                    <select
+                                        value={filterType}
+                                        onChange={(e) => setFilterType(e.target.value)}
+                                        className="w-full h-full pl-10 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 appearance-none cursor-pointer"
+                                    >
+                                        {filterTypeOptions.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Filter size={14} /></div>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><ChevronDown size={14} /></div>
+                                </div>
+                            </div>
+                            <div className="flex-1 relative">
+                                {renderDynamicInput()}
+                                <button onClick={addFilter} className="absolute right-2 top-1/2 -translate-y-1/2 bg-pink-600 text-white p-2 rounded-xl shadow-lg hover:bg-pink-700 transition">
+                                    <Search size={14} />
+                                </button>
+                            </div>
+                            <button onClick={clearAllFilters} className="h-11 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all">
+                                Limpar
+                            </button>
+                        </div>
+                        {activeFilters.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-4">
+                                {activeFilters.map((f) => (
+                                    <span key={f.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-pink-50 text-pink-700 text-[10px] font-black uppercase tracking-widest">
+                                        {f.display}
+                                        <button onClick={() => removeFilter(f.id)} className="text-pink-500 hover:text-pink-700"><X size={12} /></button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     </div>
                     <div className="divide-y divide-slate-100 dark:divide-slate-700">
                         {loading ? <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-pink-600"/></div> : 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
-import { Search, UserPlus, Shield, Pencil, Trash2, Loader2, Stethoscope } from 'lucide-react';
+import { Search, UserPlus, Shield, Pencil, Trash2, Loader2, Stethoscope, Filter, ChevronDown, X } from 'lucide-react';
 
 export default function Operadores() {
     const { api } = useAuth();
@@ -12,20 +12,26 @@ export default function Operadores() {
 
     const [operadores, setOperadores] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [filterType, setFilterType] = useState('texto');
+    const [filterValue, setFilterValue] = useState('');
+    const [activeFilters, setActiveFilters] = useState([]);
     
     useEffect(() => {
         if (api) fetchOperadores();
-    }, [api, page, searchTerm]);
+    }, [api, page, activeFilters]);
 
     const fetchOperadores = async () => {
         setLoading(true);
         try {
             const params = new URLSearchParams();
             params.append('page', page);
-            if (searchTerm) params.append('search', searchTerm);
+            activeFilters.forEach((f) => {
+                if (!f.value) return;
+                if (f.type === 'texto') params.append('search', f.value);
+                else params.append(f.type, f.value);
+            });
             const { data } = await api.get(`operadores/?${params.toString()}`);
             setOperadores(data.results || []);
             setTotalPages(data.num_pages || Math.max(1, Math.ceil((data.count || 0) / (data.page_size || 1))));
@@ -47,6 +53,87 @@ export default function Operadores() {
         }
     };
 
+    const statusOptions = [
+        { value: 'true', label: 'Ativo' },
+        { value: 'false', label: 'Inativo' }
+    ];
+
+    const perfilOptions = [
+        { value: 'true', label: 'Administrador' },
+        { value: 'false', label: 'Operador' }
+    ];
+
+    const filterTypeOptions = [
+        { value: 'texto', label: 'Busca Geral' },
+        { value: 'is_active', label: 'Status' },
+        { value: 'is_superuser', label: 'Perfil' }
+    ];
+
+    const addFilter = () => {
+        if (!filterValue) return;
+        const typeLabel = filterTypeOptions.find((o) => o.value === filterType)?.label || 'Filtro';
+        let display = filterValue;
+        if (filterType === 'is_active') {
+            display = statusOptions.find((o) => o.value === filterValue)?.label || filterValue;
+        }
+        if (filterType === 'is_superuser') {
+            display = perfilOptions.find((o) => o.value === filterValue)?.label || filterValue;
+        }
+        const newFilter = { id: Date.now(), type: filterType, value: filterValue, display: `${typeLabel}: ${display}` };
+        const cleanFilters = activeFilters.filter((f) => f.type !== filterType);
+        setActiveFilters([...cleanFilters, newFilter]);
+        setFilterValue('');
+        setPage(1);
+    };
+
+    const removeFilter = (id) => {
+        setActiveFilters(activeFilters.filter((f) => f.id !== id));
+        setPage(1);
+    };
+
+    const clearAllFilters = () => {
+        setActiveFilters([]);
+        setFilterValue('');
+        setPage(1);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') addFilter();
+    };
+
+    const renderDynamicInput = () => {
+        const commonClass = 'w-full h-11 pl-3 pr-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all text-sm font-bold';
+        if (filterType === 'is_active') {
+            return (
+                <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={commonClass}>
+                    <option value="">Selecione...</option>
+                    {statusOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+            );
+        }
+        if (filterType === 'is_superuser') {
+            return (
+                <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={commonClass}>
+                    <option value="">Selecione...</option>
+                    {perfilOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+            );
+        }
+        return (
+            <input
+                placeholder="Digite para buscar..."
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+                className={commonClass}
+                onKeyDown={handleKeyDown}
+            />
+        );
+    };
+
     return (
         <Layout>
             <div className="max-w-6xl mx-auto pb-20">
@@ -63,15 +150,42 @@ export default function Operadores() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-4 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 mb-6">
-                    <div className="relative">
-                        <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
-                        <input 
-                            placeholder="Buscar por nome ou usuário..." 
-                            value={searchTerm} 
-                            onChange={e => { setSearchTerm(e.target.value); setPage(1); }} 
-                            className="w-full pl-12 bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-blue-100"
-                        />
+                    <div className="flex flex-col md:flex-row gap-3 items-center">
+                        <div className="w-full md:w-60">
+                            <div className="relative h-11">
+                                <select
+                                    value={filterType}
+                                    onChange={(e) => setFilterType(e.target.value)}
+                                    className="w-full h-full pl-10 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 appearance-none cursor-pointer"
+                                >
+                                    {filterTypeOptions.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Filter size={14} /></div>
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><ChevronDown size={14} /></div>
+                            </div>
+                        </div>
+                        <div className="flex-1 relative">
+                            {renderDynamicInput()}
+                            <button onClick={addFilter} className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2 rounded-xl shadow-lg hover:bg-blue-700 transition">
+                                <Search size={14} />
+                            </button>
+                        </div>
+                        <button onClick={clearAllFilters} className="h-11 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all">
+                            Limpar
+                        </button>
                     </div>
+                    {activeFilters.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-4">
+                            {activeFilters.map((f) => (
+                                <span key={f.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest">
+                                    {f.display}
+                                    <button onClick={() => removeFilter(f.id)} className="text-blue-500 hover:text-blue-700"><X size={12} /></button>
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

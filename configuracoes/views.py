@@ -33,6 +33,23 @@ class ConvenioViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['nome']
 
+    def _parse_bool(self, value):
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in ['1', 'true', 'yes', 'sim']:
+            return True
+        if normalized in ['0', 'false', 'no', 'nao']:
+            return False
+        return None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        ativo = self._parse_bool(self.request.query_params.get('ativo'))
+        if ativo is not None:
+            qs = qs.filter(ativo=ativo)
+        return qs
+
 class DadosClinicaView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)

@@ -61,7 +61,7 @@ const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter
     <div className="relative w-full h-full" ref={containerRef}>
       <input
         type="text"
-        className="w-full h-full pl-3 pr-8 bg-white dark:bg-slate-900 border-y border-r border-slate-200 dark:border-slate-700 outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all text-sm font-bold"
+        className="w-full h-full pl-3 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all text-sm font-bold"
         placeholder={placeholder}
         value={text}
         onChange={(e) => {
@@ -73,7 +73,7 @@ const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter
         onKeyDown={handleKeyDown}
       />
       {isOpen && (
-        <ul className="absolute top-full left-0 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-b-xl shadow-xl max-h-60 overflow-auto z-50">
+        <ul className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-60 overflow-auto z-50">
           {filtered.length > 0 ? (
             filtered.map((opt) => (
               <li
@@ -443,7 +443,7 @@ export default function Logs() {
   ];
 
   const renderDynamicInput = () => {
-    const commonClass = 'w-full pl-3 pr-12 bg-white dark:bg-slate-900 border-y border-r border-slate-200 dark:border-slate-700 p-3 outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all h-full text-sm font-bold';
+    const commonClass = 'w-full pl-3 pr-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-xl outline-none dark:text-white focus:ring-2 focus:ring-blue-100 transition-all h-full text-sm font-bold';
     switch (filterType) {
       case 'date_start':
       case 'date_end':

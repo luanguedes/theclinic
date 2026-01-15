@@ -13,6 +13,34 @@ class OperadorViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['username', 'first_name', 'email']
 
+    def _parse_bool(self, value):
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in ['1', 'true', 'yes', 'sim']:
+            return True
+        if normalized in ['0', 'false', 'no', 'nao']:
+            return False
+        return None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+
+        is_superuser = self._parse_bool(params.get('is_superuser'))
+        if is_superuser is not None:
+            qs = qs.filter(is_superuser=is_superuser)
+
+        is_active = self._parse_bool(params.get('is_active'))
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active)
+
+        profissional_id = params.get('profissional_id')
+        if profissional_id:
+            qs = qs.filter(profissional_id=profissional_id)
+
+        return qs
+
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()

@@ -12,6 +12,20 @@ class EspecialidadeViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['nome']
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+
+        nome = params.get('nome')
+        if nome:
+            qs = qs.filter(nome__icontains=nome)
+
+        esp_id = params.get('id')
+        if esp_id:
+            qs = qs.filter(id=esp_id)
+
+        return qs
+
     def list(self, request, *args, **kwargs):
         # Se vier nopage=true, ignora paginação e retorna tudo
         if request.query_params.get('nopage'):
@@ -28,3 +42,17 @@ class ProfissionalViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ['nome', 'cpf']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+
+        cpf = params.get('cpf')
+        if cpf:
+            qs = qs.filter(cpf__icontains=cpf)
+
+        especialidade_id = params.get('especialidade_id')
+        if especialidade_id:
+            qs = qs.filter(especialidades_vinculo__especialidade_id=especialidade_id).distinct()
+
+        return qs

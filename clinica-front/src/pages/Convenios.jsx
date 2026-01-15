@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { 
-    Building2, Search, Plus, Pencil, Trash2, X, Save, Percent, Loader2 
+    Building2, Search, Plus, Pencil, Trash2, X, Save, Percent, Loader2, Filter, ChevronDown 
 } from 'lucide-react';
 
 export default function Convenios() {
@@ -12,9 +12,11 @@ export default function Convenios() {
   
   const [convenios, setConvenios] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [filterType, setFilterType] = useState('texto');
+  const [filterValue, setFilterValue] = useState('');
+  const [activeFilters, setActiveFilters] = useState([]);
   
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -25,14 +27,18 @@ export default function Convenios() {
 
   useEffect(() => {
     if (api) loadData();
-  }, [api, search, page]);
+  }, [api, page, activeFilters]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append('page', page);
-      if (search) params.append('search', search);
+      activeFilters.forEach((f) => {
+        if (!f.value) return;
+        if (f.type === 'texto') params.append('search', f.value);
+        else params.append(f.type, f.value);
+      });
       const res = await api.get(`configuracoes/convenios/?${params.toString()}`);
       setConvenios(res.data.results || []);
       setTotalPages(res.data.num_pages || Math.max(1, Math.ceil((res.data.count || 0) / (res.data.page_size || 1))));
@@ -103,6 +109,68 @@ export default function Convenios() {
     }
   };
 
+  const statusOptions = [
+    { value: 'true', label: 'Ativo' },
+    { value: 'false', label: 'Inativo' }
+  ];
+
+  const filterTypeOptions = [
+    { value: 'texto', label: 'Busca Geral' },
+    { value: 'ativo', label: 'Status' }
+  ];
+
+  const addFilter = () => {
+    if (!filterValue) return;
+    const typeLabel = filterTypeOptions.find((o) => o.value === filterType)?.label || 'Filtro';
+    let display = filterValue;
+    if (filterType === 'ativo') {
+      display = statusOptions.find((o) => o.value === filterValue)?.label || filterValue;
+    }
+    const newFilter = { id: Date.now(), type: filterType, value: filterValue, display: `${typeLabel}: ${display}` };
+    const cleanFilters = activeFilters.filter((f) => f.type !== filterType);
+    setActiveFilters([...cleanFilters, newFilter]);
+    setFilterValue('');
+    setPage(1);
+  };
+
+  const removeFilter = (id) => {
+    setActiveFilters(activeFilters.filter((f) => f.id !== id));
+    setPage(1);
+  };
+
+  const clearAllFilters = () => {
+    setActiveFilters([]);
+    setFilterValue('');
+    setPage(1);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') addFilter();
+  };
+
+  const renderDynamicInput = () => {
+    const commonClass = "w-full h-11 pl-3 pr-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold";
+    if (filterType === 'ativo') {
+      return (
+        <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={commonClass}>
+          <option value="">Selecione...</option>
+          {statusOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      );
+    }
+    return (
+      <input
+        placeholder="Digite para buscar..."
+        value={filterValue}
+        onChange={(e) => setFilterValue(e.target.value)}
+        className={commonClass}
+        onKeyDown={handleKeyDown}
+      />
+    );
+  };
+
   const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-white transition-all";
   const labelClass = "block text-sm font-bold text-slate-600 dark:text-slate-300 mb-1 uppercase tracking-tight";
 
@@ -125,14 +193,43 @@ export default function Convenios() {
             </button>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-6 relative">
-            <Search className="absolute left-7 top-7 text-slate-400" size={18} />
-            <input 
-                placeholder="Pesquisar convênio pelo nome..." 
-                value={search} 
-                onChange={e => { setSearch(e.target.value); setPage(1); }} 
-                className="w-full pl-10 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3 outline-none dark:text-white transition-colors focus:border-blue-500"
-            />
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 mb-6">
+            <div className="flex flex-col md:flex-row gap-3 items-center">
+                <div className="w-full md:w-60">
+                    <div className="relative h-11">
+                        <select
+                            value={filterType}
+                            onChange={(e) => setFilterType(e.target.value)}
+                            className="w-full h-full pl-10 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 appearance-none cursor-pointer"
+                        >
+                            {filterTypeOptions.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                        </select>
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Filter size={14} /></div>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><ChevronDown size={14} /></div>
+                    </div>
+                </div>
+                <div className="flex-1 relative">
+                    {renderDynamicInput()}
+                    <button onClick={addFilter} className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2 rounded-xl shadow-lg hover:bg-blue-700 transition">
+                        <Search size={14} />
+                    </button>
+                </div>
+                <button onClick={clearAllFilters} className="h-11 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all">
+                    Limpar
+                </button>
+            </div>
+            {activeFilters.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-4">
+                    {activeFilters.map((f) => (
+                        <span key={f.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest">
+                            {f.display}
+                            <button onClick={() => removeFilter(f.id)} className="text-blue-500 hover:text-blue-700"><X size={12} /></button>
+                        </span>
+                    ))}
+                </div>
+            )}
         </div>
 
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
