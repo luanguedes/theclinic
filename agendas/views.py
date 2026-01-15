@@ -42,14 +42,64 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
             return forwarded.split(',')[0].strip()
         return request.META.get('REMOTE_ADDR', '')
 
-    def _log_group_change(self, request, action, group_id, object_repr):
+    def _format_weekdays(self, dias):
+        map_dias = {
+            0: 'Dom',
+            1: 'Seg',
+            2: 'Ter',
+            3: 'Qua',
+            4: 'Qui',
+            5: 'Sex',
+            6: 'Sab'
+        }
+        return [map_dias.get(int(dia), str(dia)) for dia in sorted(dias)]
+
+    def _build_group_payload(self, group_id, fallback=None):
+        qs = AgendaConfig.objects.filter(group_id=group_id)
+        if not qs.exists():
+            return fallback or {}
+        primeira = qs.first()
+        dias = list(qs.values_list('dia_semana', flat=True).distinct())
+        return {
+            'profissional': str(primeira.profissional),
+            'especialidade': str(primeira.especialidade),
+            'convenio': str(primeira.convenio) if primeira.convenio else None,
+            'dias_semana': self._format_weekdays(dias),
+            'data_inicio': primeira.data_inicio.isoformat(),
+            'data_fim': primeira.data_fim.isoformat(),
+            'hora_inicio': str(primeira.hora_inicio),
+            'hora_fim': str(primeira.hora_fim),
+            'intervalo_minutos': primeira.intervalo_minutos,
+            'quantidade_atendimentos': primeira.quantidade_atendimentos,
+            'tipo': primeira.tipo,
+            'valor': str(primeira.valor),
+            'situacao': primeira.situacao
+        }
+
+    def _log_group_change(self, request, action, group_id, object_repr, payload=None):
         action_label = {
             'CREATE': 'Inclusao',
             'UPDATE': 'Alteracao',
             'DELETE': 'Exclusao',
             'REPORT_VIEW': 'Relatorio'
         }.get(action, action)
+        summary = f'{action_label} de agenda: {object_repr or "grupo"}'[:255]
+        payload = payload or self._build_group_payload(group_id)
         user = getattr(request, 'user', None)
+        if action == 'CREATE':
+            existing = AuditLog.objects.filter(
+                action='CREATE',
+                app_label='agendas',
+                model_name='agendaconfig',
+                object_id=str(group_id)
+            ).order_by('-created_at').first()
+            if existing:
+                existing.summary = summary
+                existing.object_repr = (object_repr or '')[:255]
+                existing.after = payload or existing.after
+                existing.save(update_fields=['summary', 'object_repr', 'after'])
+                return
+
         AuditLog.objects.create(
             action=action,
             method=request.method,
@@ -61,7 +111,8 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
             model_name='agendaconfig',
             object_id=str(group_id),
             object_repr=(object_repr or '')[:255],
-            summary=f'{action_label} de agenda: {object_repr or "grupo"}'[:255],
+            summary=summary,
+            after=payload,
             ip_address=self._get_client_ip(request),
             user_agent=request.META.get('HTTP_USER_AGENT', '')[:255],
         )
@@ -69,9 +120,7 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = self._normalize_create_payload(request.data)
         group_id = data.get('group_id')
-        is_first_in_group = False
-        if group_id:
-            is_first_in_group = not AgendaConfig.objects.filter(group_id=group_id).exists()
+        has_group = bool(group_id)
 
         request.audit_suppress = True
         try:
@@ -81,7 +130,7 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
         finally:
             request.audit_suppress = False
 
-        if group_id and is_first_in_group:
+        if has_group:
             instance = serializer.instance
             object_repr = f'{instance.profissional} - {instance.especialidade}'
             self._log_group_change(request, 'CREATE', group_id, object_repr)
@@ -208,6 +257,22 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
             prof = primeira.profissional_id
             spec = primeira.especialidade_id
             object_repr = f'{primeira.profissional} - {primeira.especialidade}' if primeira else ''
+            dias_atuais = list(regras_antigas.values_list('dia_semana', flat=True).distinct())
+            before_payload = {
+                'profissional': str(primeira.profissional) if primeira else None,
+                'especialidade': str(primeira.especialidade) if primeira else None,
+                'convenio': str(primeira.convenio) if primeira and primeira.convenio else None,
+                'dias_semana': self._format_weekdays(dias_atuais),
+                'data_inicio': primeira.data_inicio.isoformat() if primeira else None,
+                'data_fim': primeira.data_fim.isoformat() if primeira else None,
+                'hora_inicio': str(primeira.hora_inicio) if primeira else None,
+                'hora_fim': str(primeira.hora_fim) if primeira else None,
+                'intervalo_minutos': primeira.intervalo_minutos if primeira else None,
+                'quantidade_atendimentos': primeira.quantidade_atendimentos if primeira else None,
+                'tipo': primeira.tipo if primeira else None,
+                'valor': str(primeira.valor) if primeira else None,
+                'situacao': primeira.situacao if primeira else None
+            }
 
             data = request.data
             dias = data.get('dias_semana', [])
@@ -247,7 +312,7 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
                 request.audit_suppress = False
 
             if deleted:
-                self._log_group_change(request, 'DELETE', group_id, object_repr)
+                self._log_group_change(request, 'DELETE', group_id, object_repr, payload=before_payload)
                 return Response({"message": "Grupo removido com sucesso."})
 
             self._log_group_change(request, 'UPDATE', group_id, object_repr)

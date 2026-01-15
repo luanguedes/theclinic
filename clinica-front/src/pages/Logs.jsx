@@ -132,6 +132,7 @@ const fieldLabelsByModel = {
     profissional: 'Profissional',
     especialidade: 'Especialidade',
     convenio: 'Convenio',
+    dias_semana: 'Dias da Semana',
     dia_semana: 'Dia da Semana',
     data_inicio: 'Data Inicio',
     data_fim: 'Data Fim',
@@ -616,14 +617,14 @@ export default function Logs() {
 
         {detailLog && (
           <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
-            <div className="bg-white dark:bg-slate-800 rounded-[28px] shadow-2xl w-full max-w-3xl overflow-hidden border border-white/10">
+            <div className="bg-white dark:bg-slate-800 rounded-[24px] shadow-2xl w-full max-w-2xl max-h-[82vh] overflow-hidden border border-white/10">
               <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
                 <h3 className="font-black uppercase tracking-widest text-xs flex items-center gap-2">
                   <FileText size={16} className="text-blue-300"/> Detalhe do Log
                 </h3>
                 <button onClick={() => setDetailLog(null)} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
               </div>
-              <div className="p-6 space-y-4">
+              <div className="p-4 space-y-3 overflow-y-auto max-h-[72vh]">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Antes</p>
@@ -632,9 +633,9 @@ export default function Logs() {
                     ) : (
                       <div className="mt-3 space-y-2">
                         {detailBefore.map((item) => (
-                          <div key={item.label} className="flex items-start justify-between gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
-                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200 text-right">{item.value}</span>
+                          <div key={item.label} className="flex items-start justify-between gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
+                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-right">{item.value}</span>
                           </div>
                         ))}
                       </div>
@@ -647,9 +648,9 @@ export default function Logs() {
                     ) : (
                       <div className="mt-3 space-y-2">
                         {detailAfter.map((item) => (
-                          <div key={item.label} className="flex items-start justify-between gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
-                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200 text-right">{item.value}</span>
+                          <div key={item.label} className="flex items-start justify-between gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
+                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 text-right">{item.value}</span>
                           </div>
                         ))}
                       </div>
@@ -663,13 +664,13 @@ export default function Logs() {
                   ) : (
                     <div className="mt-3 space-y-2">
                       {detailDiff.map((item) => (
-                        <div key={item.label} className="flex flex-col gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
-                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</div>
-                          <div className="flex items-center justify-between gap-3 text-xs">
+                        <div key={item.label} className="flex flex-col gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5">
+                          <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</div>
+                          <div className="flex items-center justify-between gap-3 text-[11px]">
                             <span className="text-slate-400">Antes</span>
                             <span className="font-bold text-slate-700 dark:text-slate-200">{item.before}</span>
                           </div>
-                          <div className="flex items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center justify-between gap-3 text-[11px]">
                             <span className="text-slate-400">Depois</span>
                             <span className="font-bold text-slate-700 dark:text-slate-200">{item.after}</span>
                           </div>
