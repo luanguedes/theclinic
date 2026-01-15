@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
+import useUnsavedChanges from '../hooks/useUnsavedChanges';
 import { Building, Save, MapPin, Info, Loader2, Upload, Image as ImageIcon, X } from 'lucide-react';
 
 export default function DadosClinica() {
@@ -24,6 +25,10 @@ export default function DadosClinica() {
     logradouro: '', numero: '', complemento: '', 
     bairro: '', cidade: '', estado: '', cep: ''
   });
+  const initialSnapshotRef = useRef(null);
+
+  const buildSnapshot = (nextForm, logoChanged) =>
+    JSON.stringify({ form: nextForm, logoChanged });
 
   const mascaraCNPJ = (v) => v.replace(/\D/g, '').replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2').slice(0, 18);
   const mascaraTelefone = (v) => v.replace(/\D/g, '').replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').slice(0, 15);
@@ -34,17 +39,19 @@ export default function DadosClinica() {
       try {
         const res = await api.get('configuracoes/clinica/');
         const dados = res.data;
-        setForm({
+        const nextForm = {
           ...dados,
           razao_social: dados.razao_social || '',
           cnpj: dados.cnpj ? mascaraCNPJ(dados.cnpj) : '',
           telefone: dados.telefone ? mascaraTelefone(dados.telefone) : '',
           cep: dados.cep ? mascaraCEP(dados.cep) : ''
-        });
+        };
+        setForm(nextForm);
         
         if (dados.logo) {
             setLogoPreview(dados.logo); 
         }
+        initialSnapshotRef.current = buildSnapshot(nextForm, false);
       } catch (e) {
         notify.error("Erro ao carregar os dados da clínica.");
       } finally {
@@ -53,6 +60,13 @@ export default function DadosClinica() {
     };
     fetchData();
   }, [api]);
+
+  useEffect(() => {
+    if (fetching) return;
+    if (initialSnapshotRef.current === null) {
+      initialSnapshotRef.current = buildSnapshot(form, false);
+    }
+  }, [fetching, form]);
 
   const buscarCep = async () => {
     const cepLimpo = form.cep.replace(/\D/g, '');
@@ -126,6 +140,8 @@ export default function DadosClinica() {
       });
       
       notify.success("Dados da clínica atualizados com sucesso!");
+      initialSnapshotRef.current = buildSnapshot(form, false);
+      setLogoFile(null);
     } catch (e) {
       notify.error("Erro ao salvar alterações. Verifique os dados inseridos.");
     } finally {
@@ -135,6 +151,8 @@ export default function DadosClinica() {
 
   const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all";
   const labelClass = "block text-sm font-bold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-tight";
+  const isDirty = initialSnapshotRef.current && buildSnapshot(form, !!logoFile) !== initialSnapshotRef.current;
+  useUnsavedChanges(isDirty && !loading && !fetching);
 
   if (fetching) return (
     <Layout>

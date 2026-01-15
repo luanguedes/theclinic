@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
+import useUnsavedChanges from '../hooks/useUnsavedChanges';
 import { 
   UserCog, Mail, Lock, Shield, Save, Check, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, AlertCircle, MessageCircle 
 } from 'lucide-react';
@@ -89,6 +90,7 @@ export default function CadastroOperador() {
     profissional: null,
     privilegios: []
   });
+  const initialSnapshotRef = useRef(null);
 
   useEffect(() => {
     if (api) {
@@ -105,7 +107,7 @@ export default function CadastroOperador() {
             api.get(`operadores/${id}/`)
                 .then(res => {
                     const data = res.data;
-                    setFormData({
+                    const nextForm = {
                         username: data.username || '',
                         first_name: data.first_name || '',
                         email: data.email || '',
@@ -119,7 +121,9 @@ export default function CadastroOperador() {
                         profissional: data.profissional || null,
                         password: '',
                         privilegios: data.privilegios || []
-                    });
+                    };
+                    setFormData(nextForm);
+                    initialSnapshotRef.current = JSON.stringify(nextForm);
                 })
                 .catch(() => {
                     notify.error("Operador não encontrado.");
@@ -129,6 +133,13 @@ export default function CadastroOperador() {
         }
     }
   }, [id, api, navigate]);
+
+  useEffect(() => {
+    if (id) return;
+    if (initialSnapshotRef.current === null) {
+      initialSnapshotRef.current = JSON.stringify(formData);
+    }
+  }, [id]);
 
   const handleChange = (e) => {
     const { name, checked, value, type } = e.target;
@@ -214,6 +225,8 @@ export default function CadastroOperador() {
   const inputClass = "w-full pl-10 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-400 text-sm font-bold";
   const labelClass = "block text-xs font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
   const privilegeDisabled = formData.is_superuser;
+  const isDirty = initialSnapshotRef.current && JSON.stringify(formData) !== initialSnapshotRef.current;
+  useUnsavedChanges(isDirty && !loading && !fetching);
 
   if (fetching) return (
     <Layout>

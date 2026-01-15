@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
+import useUnsavedChanges from '../hooks/useUnsavedChanges';
 import { 
     Settings, Shield, Layout as LayoutIcon, CalendarClock, Save, Loader2, AlertTriangle, 
     Lock, MessageCircle, Play, Clock, Bell, Activity, Check, QrCode, X
@@ -47,6 +48,7 @@ export default function Configuracoes() {
         stats_hoje: { total: 0, enviados: 0, pendentes: 0 },
         stats_amanha: { total: 0, enviados: 0, pendentes: 0 }
     });
+    const initialSnapshotRef = useRef(null);
 
     // --- CÁLCULOS AUXILIARES (Correção do erro jaRodouHoje) ---
     const hojeIso = new Date().toISOString().split('T')[0];
@@ -81,12 +83,30 @@ export default function Configuracoes() {
         if (qrModalOpen) carregarQrCode();
     }, [qrModalOpen]);
 
+    const compareConfig = (data) => ({
+        max_tentativas_login: data.max_tentativas_login,
+        tempo_bloqueio_minutos: data.tempo_bloqueio_minutos,
+        tempo_sessao_minutos: data.tempo_sessao_minutos,
+        itens_por_pagina: data.itens_por_pagina,
+        modo_manutencao: data.modo_manutencao,
+        janela_agendamento_meses: data.janela_agendamento_meses,
+        enviar_whatsapp_global: data.enviar_whatsapp_global,
+        enviar_wpp_confirmacao: data.enviar_wpp_confirmacao,
+        enviar_wpp_bloqueio: data.enviar_wpp_bloqueio,
+        enviar_wpp_lembrete: data.enviar_wpp_lembrete,
+        horario_disparo_lembrete: data.horario_disparo_lembrete
+    });
+
     const loadConfig = async () => {
         setLoading(true);
         try {
             const res = await api.get('configuracoes/sistema/');
             if(res.data) {
-                setConfig(prev => ({ ...prev, ...res.data }));
+                setConfig(prev => {
+                    const merged = { ...prev, ...res.data };
+                    initialSnapshotRef.current = JSON.stringify(compareConfig(merged));
+                    return merged;
+                });
             }
         } catch (error) {
             notify.error("Não foi possível carregar as configurações globais.");
@@ -94,6 +114,13 @@ export default function Configuracoes() {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (loading) return;
+        if (initialSnapshotRef.current === null) {
+            initialSnapshotRef.current = JSON.stringify(compareConfig(config));
+        }
+    }, [loading, config]);
 
     const handleSave = async (e) => {
         e.preventDefault();
@@ -106,6 +133,7 @@ export default function Configuracoes() {
         try {
             await api.put('configuracoes/sistema/', config);
             notify.success("Configurações aplicadas com sucesso!");
+            initialSnapshotRef.current = JSON.stringify(compareConfig(config));
         } catch (error) {
             notify.error("Falha ao salvar. Tente novamente.");
         } finally {
@@ -210,6 +238,8 @@ export default function Configuracoes() {
 
     const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold dark:text-white transition-all";
     const labelClass = "block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-widest";
+    const isDirty = initialSnapshotRef.current && JSON.stringify(compareConfig(config)) !== initialSnapshotRef.current;
+    useUnsavedChanges(isDirty && !saving && !loading);
 
     return (
         <Layout>

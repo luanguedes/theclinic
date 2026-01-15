@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
+import useUnsavedChanges from '../hooks/useUnsavedChanges';
 import { useNavigate } from 'react-router-dom';
 import { 
     CalendarClock, CheckCircle2, Clock, Calculator, ArrowLeft, 
@@ -124,6 +125,30 @@ export default function CriarAgenda() {
   const [periodoQtd, setPeriodoQtd] = useState(10);
 
   const [horariosFixos, setHorariosFixos] = useState([{ time: '08:00', qtd: 10 }]);
+  const initialSnapshotRef = useRef(null);
+
+  const buildSnapshot = () => ({
+    profissionalId,
+    especialidadeId,
+    convenioId,
+    valorConsulta,
+    regrasAdicionadas,
+    diasSelecionados,
+    activeTab,
+    dataInicioVigencia,
+    dataFimVigencia,
+    modoCalculo,
+    horaInicio,
+    horaFim,
+    intervalo,
+    quantidade,
+    periodoInicio,
+    periodoFim,
+    periodoIntervalo,
+    periodoQtd,
+    horariosFixos,
+    editingRuleId
+  });
 
   const diasSemana = [
     { id: 1, label: 'Seg' }, { id: 2, label: 'Ter' }, { id: 3, label: 'Qua' },
@@ -154,6 +179,32 @@ export default function CriarAgenda() {
     setDiasSelecionados(Array.from(diasNoPeriodo));
 
   }, [dataInicioVigencia, dataFimVigencia]);
+
+  useEffect(() => {
+    if (initialSnapshotRef.current !== null) return;
+    initialSnapshotRef.current = JSON.stringify(buildSnapshot());
+  }, [
+    profissionalId,
+    especialidadeId,
+    convenioId,
+    valorConsulta,
+    regrasAdicionadas,
+    diasSelecionados,
+    activeTab,
+    dataInicioVigencia,
+    dataFimVigencia,
+    modoCalculo,
+    horaInicio,
+    horaFim,
+    intervalo,
+    quantidade,
+    periodoInicio,
+    periodoFim,
+    periodoIntervalo,
+    periodoQtd,
+    horariosFixos,
+    editingRuleId
+  ]);
 
   useEffect(() => {
     if (api) {
@@ -348,6 +399,7 @@ export default function CriarAgenda() {
 
         await Promise.all(promises);
         notify.success("Agenda completa gerada com sucesso!");
+        initialSnapshotRef.current = JSON.stringify(buildSnapshot());
         navigate('/agenda/configurar');
     } catch (error) {
         notify.error('Erro crítico ao salvar agendas.');
@@ -356,6 +408,8 @@ export default function CriarAgenda() {
 
   const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 dark:text-white outline-none focus:ring-2 focus:ring-purple-500 transition-all font-bold text-sm";
   const labelClass = "block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider";
+  const isDirty = initialSnapshotRef.current && JSON.stringify(buildSnapshot()) !== initialSnapshotRef.current;
+  useUnsavedChanges(isDirty && !loading);
 
   return (
     <Layout>

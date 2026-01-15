@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { 
@@ -7,6 +7,7 @@ import {
   ChevronLeft, ChevronRight, Filter, ChevronDown, X
 } from 'lucide-react';
 import Layout from '../components/Layout';
+import useUnsavedChanges from '../hooks/useUnsavedChanges';
 
 const PRIORIDADES = {
     'idoso': { label: 'Idoso (60+)', icon: <Users size={14} />, color: 'text-amber-500' },
@@ -39,6 +40,7 @@ export default function Pacientes() {
     prioridade: '', aceite_lgpd: false 
   };
   const [form, setForm] = useState(formInicial);
+  const initialSnapshotRef = useRef(null);
 
   const hoje = new Date().toISOString().split('T')[0];
 
@@ -122,6 +124,14 @@ export default function Pacientes() {
   };
 
   useEffect(() => { fetchPacientes(); }, [page, activeFilters, api]);
+
+  useEffect(() => {
+    if (viewMode !== 'form') {
+      initialSnapshotRef.current = null;
+      return;
+    }
+    initialSnapshotRef.current = JSON.stringify(form);
+  }, [viewMode, editandoId]);
 
   const buscarCep = async () => {
     const cepLimpo = form.cep.replace(/\D/g, '');
@@ -259,6 +269,8 @@ export default function Pacientes() {
 
   const inputClass = "w-full bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-bold";
   const labelClass = "block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-widest";
+  const isDirty = viewMode === 'form' && initialSnapshotRef.current && JSON.stringify(form) !== initialSnapshotRef.current;
+  useUnsavedChanges(isDirty && !loading);
 
   return (
     <Layout>

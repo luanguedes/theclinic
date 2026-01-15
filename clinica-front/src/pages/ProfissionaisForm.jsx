@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
+import useUnsavedChanges from '../hooks/useUnsavedChanges';
 import { 
     User, Save, ArrowLeft, Plus, Trash2, 
     BriefcaseMedical, ChevronDown, Check, X, Loader2, Award 
@@ -91,6 +92,7 @@ export default function ProfissionalForm() {
   const [listaEspecialidades, setListaEspecialidades] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const initialSnapshotRef = useRef(null);
 
   const hoje = new Date().toISOString().split('T')[0];
 
@@ -106,15 +108,16 @@ export default function ProfissionalForm() {
         
         if (id) {
             api.get(`profissionais/${id}/`).then(res => {
-                setFormData({ 
+                const nextForm = { 
                     nome: res.data.nome, 
                     cpf: res.data.cpf, 
                     data_nascimento: res.data.data_nascimento
-                });
+                };
+                setFormData(nextForm);
                 
-                // --- CORREÇÃO: MAPEAMENTO EXATO COM SEU SERIALIZER ---
+                // --- CORRE????O: MAPEAMENTO EXATO COM SEU SERIALIZER ---
                 const vinculos = (res.data.especialidades || []).map(v => ({
-                    // 'especialidade_leitura' é o campo ReadOnly que criamos no serializer 
+                    // 'especialidade_leitura' ? o campo ReadOnly que criamos no serializer 
                     // para garantir que o ID venha limpo do backend.
                     especialidade_id: v.especialidade_leitura, 
                     sigla_conselho: v.sigla_conselho || '',
@@ -123,6 +126,7 @@ export default function ProfissionalForm() {
                 }));
                 
                 setItems(vinculos);
+                initialSnapshotRef.current = JSON.stringify({ formData: nextForm, items: vinculos });
             }).catch((err) => {
                 console.error(err);
                 notify.error("Erro ao carregar dados.");
@@ -131,6 +135,13 @@ export default function ProfissionalForm() {
         } else { setFetching(false); }
     }
   }, [id, api]);
+
+  useEffect(() => {
+    if (id) return;
+    if (initialSnapshotRef.current === null) {
+      initialSnapshotRef.current = JSON.stringify({ formData, items });
+    }
+  }, [id]);
 
   const handleChange = (e) => {
     let { name, value } = e.target;
@@ -183,6 +194,8 @@ export default function ProfissionalForm() {
 
   const inputClass = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-all font-bold";
   const subLabelClass = "text-[10px] font-black text-slate-400 mb-1 block uppercase tracking-widest";
+  const isDirty = initialSnapshotRef.current && JSON.stringify({ formData, items }) !== initialSnapshotRef.current;
+  useUnsavedChanges(isDirty && !loading && !fetching);
 
   if (fetching) return <Layout><div className="h-[50vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600"/></div></Layout>;
 
