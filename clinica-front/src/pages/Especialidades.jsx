@@ -155,7 +155,6 @@ export default function Especialidades() {
                             </div>
                         )}
                     </div>
-                    </div>
                     <div className="divide-y divide-slate-100 dark:divide-slate-700">
                         {loading ? <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-pink-600"/></div> : 
                         items.map(item => (
