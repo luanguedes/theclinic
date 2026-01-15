@@ -98,11 +98,89 @@ const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter
 };
 
 const actionOptions = [
-  { value: 'CREATE', label: 'Create' },
-  { value: 'UPDATE', label: 'Update' },
-  { value: 'DELETE', label: 'Delete' },
+  { value: 'CREATE', label: 'Inclusao' },
+  { value: 'UPDATE', label: 'Alteracao' },
+  { value: 'DELETE', label: 'Exclusao' },
   { value: 'REPORT_VIEW', label: 'Relatorio' }
 ];
+
+const actionLabelMap = {
+  CREATE: 'Inclusao',
+  UPDATE: 'Alteracao',
+  DELETE: 'Exclusao',
+  REPORT_VIEW: 'Relatorio'
+};
+
+const modelLabelMap = {
+  'agendas.agendaconfig': 'Configuracao de Horarios',
+  'agendamento.agendamento': 'Agendamentos',
+  'pacientes.paciente': 'Pacientes',
+  'profissionais.profissional': 'Profissionais',
+  'configuracoes.convenio': 'Convenios',
+  'usuarios.operador': 'Operadores'
+};
+
+const fieldLabelsByModel = {
+  'agendas.agendaconfig': {
+    profissional: 'Profissional',
+    especialidade: 'Especialidade',
+    convenio: 'Convenio',
+    dia_semana: 'Dia da Semana',
+    data_inicio: 'Data Inicio',
+    data_fim: 'Data Fim',
+    hora_inicio: 'Hora Inicio',
+    hora_fim: 'Hora Fim',
+    intervalo_minutos: 'Intervalo (min)',
+    quantidade_atendimentos: 'Vagas',
+    tipo: 'Tipo',
+    valor: 'Valor',
+    situacao: 'Situacao'
+  }
+};
+
+const getModelKey = (log) => {
+  const app = log?.app_label || '';
+  const model = log?.model_name || '';
+  return `${app}.${model}`.toLowerCase();
+};
+
+const getModelLabel = (log) => {
+  const key = getModelKey(log);
+  const label = modelLabelMap[key];
+  if (label) return label;
+  return (log?.model_name || '').replace(/_/g, ' ') || 'Registro';
+};
+
+const getActionLabel = (action) => actionLabelMap[action] || action || 'Acao';
+
+const mapFields = (obj, modelKey) => {
+  if (!obj || typeof obj !== 'object') return obj;
+  const labels = fieldLabelsByModel[modelKey] || {};
+  const mapped = {};
+  Object.entries(obj).forEach(([key, value]) => {
+    const label = labels[key] || key.replace(/_/g, ' ');
+    mapped[label] = value;
+  });
+  return mapped;
+};
+
+const mapDiff = (diff, modelKey) => {
+  if (!diff || typeof diff !== 'object') return diff;
+  const labels = fieldLabelsByModel[modelKey] || {};
+  const mapped = {};
+  Object.entries(diff).forEach(([key, value]) => {
+    const label = labels[key] || key.replace(/_/g, ' ');
+    mapped[label] = { antes: value?.before, depois: value?.after };
+  });
+  return mapped;
+};
+
+const formatSummary = (log) => {
+  const action = getActionLabel(log?.action);
+  const model = getModelLabel(log);
+  const subject = log?.object_repr || '';
+  return subject ? `${action} em ${model}: ${subject}` : `${action} em ${model}`;
+};
 
 export default function Logs() {
   const { api } = useAuth();
@@ -190,10 +268,8 @@ export default function Logs() {
     { value: 'texto', label: 'Busca Geral' },
     { value: 'operator_id', label: 'Operador' },
     { value: 'action', label: 'Acao' },
-    { value: 'path', label: 'Rota' },
-    { value: 'model', label: 'Model' },
-    { value: 'app', label: 'App' },
-    { value: 'object_id', label: 'Item ID' },
+    { value: 'model', label: 'Tela' },
+    { value: 'object_id', label: 'Item' },
     { value: 'date_start', label: 'Data Inicio' },
     { value: 'date_end', label: 'Data Fim' }
   ];
@@ -236,6 +312,7 @@ export default function Logs() {
 
   const thClass = 'px-5 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest';
   const tdClass = 'px-5 py-4 text-sm text-slate-700 dark:text-slate-300';
+  const detailModelKey = detailLog ? getModelKey(detailLog) : '';
 
   return (
     <Layout>
@@ -299,8 +376,7 @@ export default function Logs() {
                   <th className={thClass}>Data</th>
                   <th className={thClass}>Operador</th>
                   <th className={thClass}>Acao</th>
-                  <th className={thClass}>Rota</th>
-                  <th className={thClass}>Modelo</th>
+                  <th className={thClass}>Tela</th>
                   <th className={thClass}>Item</th>
                   <th className={thClass}>Resumo</th>
                   <th className="px-5 py-4 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Detalhe</th>
@@ -309,14 +385,14 @@ export default function Logs() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="p-10 text-center">
+                    <td colSpan="7" className="p-10 text-center">
                       <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32} />
                       <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">Carregando logs...</span>
                     </td>
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="p-10 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">Nenhum log encontrado.</td>
+                    <td colSpan="7" className="p-10 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">Nenhum log encontrado.</td>
                   </tr>
                 ) : (
                   logs.map((log) => (
@@ -337,20 +413,17 @@ export default function Logs() {
                       </td>
                       <td className={tdClass}>
                         <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 border border-slate-200">
-                          {log.action}
+                          {getActionLabel(log.action)}
                         </span>
                       </td>
                       <td className={tdClass}>
-                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">{log.path || '-'}</span>
-                      </td>
-                      <td className={tdClass}>
-                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">{log.app_label}.{log.model_name}</span>
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">{getModelLabel(log)}</span>
                       </td>
                       <td className={tdClass}>
                         <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">{log.object_id || '-'}</span>
                       </td>
                       <td className={tdClass}>
-                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{log.summary || '-'}</span>
+                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{formatSummary(log)}</span>
                       </td>
                       <td className="px-5 py-4 text-right">
                         <button onClick={() => setDetailLog(log)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition">
@@ -399,20 +472,20 @@ export default function Logs() {
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Antes</p>
                     <pre className="text-[10px] text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap">
-                      {detailLog.before ? JSON.stringify(detailLog.before, null, 2) : 'Sem dados'}
+                      {detailLog.before ? JSON.stringify(mapFields(detailLog.before, detailModelKey), null, 2) : 'Sem dados'}
                     </pre>
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depois</p>
                     <pre className="text-[10px] text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap">
-                      {detailLog.after ? JSON.stringify(detailLog.after, null, 2) : 'Sem dados'}
+                      {detailLog.after ? JSON.stringify(mapFields(detailLog.after, detailModelKey), null, 2) : 'Sem dados'}
                     </pre>
                   </div>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Diff</p>
                   <pre className="text-[10px] text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap">
-                    {detailLog.diff ? JSON.stringify(detailLog.diff, null, 2) : 'Sem diff'}
+                    {detailLog.diff ? JSON.stringify(mapDiff(detailLog.diff, detailModelKey), null, 2) : 'Sem diff'}
                   </pre>
                 </div>
               </div>

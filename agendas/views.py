@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.apps import apps
 from django.utils import timezone
+from auditoria.models import AuditLog
 import uuid
 from .models import AgendaConfig
 from .serializers import AgendaConfigSerializer
@@ -34,6 +35,36 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
                 normalized['group_id'] = uuid.uuid4()
 
         return normalized
+
+    def _get_client_ip(self, request):
+        forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+        if forwarded:
+            return forwarded.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR', '')
+
+    def _log_group_change(self, request, action, group_id, object_repr):
+        action_label = {
+            'CREATE': 'Inclusao',
+            'UPDATE': 'Alteracao',
+            'DELETE': 'Exclusao',
+            'REPORT_VIEW': 'Relatorio'
+        }.get(action, action)
+        user = getattr(request, 'user', None)
+        AuditLog.objects.create(
+            action=action,
+            method=request.method,
+            path=request.path,
+            operator=user if getattr(user, 'is_authenticated', False) else None,
+            operator_username=getattr(user, 'username', '') if getattr(user, 'is_authenticated', False) else '',
+            operator_name=getattr(user, 'first_name', '') if getattr(user, 'is_authenticated', False) else '',
+            app_label='agendas',
+            model_name='agendaconfig',
+            object_id=str(group_id),
+            object_repr=(object_repr or '')[:255],
+            summary=f'{action_label} de agenda: {object_repr or "grupo"}'[:255],
+            ip_address=self._get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:255],
+        )
 
     def create(self, request, *args, **kwargs):
         data = self._normalize_create_payload(request.data)
@@ -158,40 +189,51 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
             regras_antigas = AgendaConfig.objects.filter(group_id=group_id)
             if not regras_antigas.exists(): return Response({"error": "Agenda não encontrada."}, status=status.HTTP_404_NOT_FOUND)
             
-            data = request.data
-            dias = data.get('dias_semana', [])
-            if not dias:
-                regras_antigas.delete()
-                return Response({"message": "Grupo removido com sucesso."})
-
             primeira = regras_antigas.first()
             prof = primeira.profissional_id
             spec = primeira.especialidade_id
+            object_repr = f'{primeira.profissional} - {primeira.especialidade}' if primeira else ''
 
-            regras_antigas.delete()
-            
-            tipo = data.get('tipo')
-            situacao = data.get('situacao', True)
-            
-            # Tratamento SEGURO do convênio
-            c_val = data.get('convenio')
-            convenio_id = None
-            if c_val and str(c_val).strip() not in ['', 'null', 'undefined', 'None']:
-                try: convenio_id = int(c_val)
-                except: convenio_id = None
-
-            for dia in dias:
-                base = {
-                    'group_id': group_id, 'profissional_id': prof, 'especialidade_id': spec,
-                    'convenio_id': convenio_id, 'dia_semana': dia,
-                    'data_inicio': data['data_inicio'], 'data_fim': data['data_fim'],
-                    'valor': data.get('valor', 0), 'tipo': tipo, 'situacao': situacao
-                }
-                
-                if tipo == 'fixo':
-                    for h in data.get('lista_horarios', []):
-                        AgendaConfig.objects.create(**base, hora_inicio=h['time'], hora_fim=h['time'], intervalo_minutos=0, quantidade_atendimentos=h['qtd'])
+            data = request.data
+            dias = data.get('dias_semana', [])
+            deleted = False
+            request.audit_suppress = True
+            try:
+                if not dias:
+                    regras_antigas.delete()
+                    deleted = True
                 else:
-                    AgendaConfig.objects.create(**base, hora_inicio=data['hora_inicio'], hora_fim=data['hora_fim'], intervalo_minutos=data['intervalo_minutos'], quantidade_atendimentos=data.get('quantidade_atendimentos', 1))
+                    regras_antigas.delete()
 
+                    tipo = data.get('tipo')
+                    situacao = data.get('situacao', True)
+
+                    # Tratamento SEGURO do convênio
+                    c_val = data.get('convenio')
+                    convenio_id = None
+                    if c_val and str(c_val).strip() not in ['', 'null', 'undefined', 'None']:
+                        try: convenio_id = int(c_val)
+                        except: convenio_id = None
+
+                    for dia in dias:
+                        base = {
+                            'group_id': group_id, 'profissional_id': prof, 'especialidade_id': spec,
+                            'convenio_id': convenio_id, 'dia_semana': dia,
+                            'data_inicio': data['data_inicio'], 'data_fim': data['data_fim'],
+                            'valor': data.get('valor', 0), 'tipo': tipo, 'situacao': situacao
+                        }
+                        
+                        if tipo == 'fixo':
+                            for h in data.get('lista_horarios', []):
+                                AgendaConfig.objects.create(**base, hora_inicio=h['time'], hora_fim=h['time'], intervalo_minutos=0, quantidade_atendimentos=h['qtd'])
+                        else:
+                            AgendaConfig.objects.create(**base, hora_inicio=data['hora_inicio'], hora_fim=data['hora_fim'], intervalo_minutos=data['intervalo_minutos'], quantidade_atendimentos=data.get('quantidade_atendimentos', 1))
+            finally:
+                request.audit_suppress = False
+
+            if deleted:
+                self._log_group_change(request, 'DELETE', group_id, object_repr)
+                return Response({"message": "Grupo removido com sucesso."})
+
+            self._log_group_change(request, 'UPDATE', group_id, object_repr)
             return Response({"message": "OK"})

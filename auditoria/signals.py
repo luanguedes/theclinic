@@ -80,8 +80,15 @@ def _log_change(action, instance, before=None, after=None, diff=None):
     )
 
 
+def _is_audit_suppressed():
+    request = get_current_request()
+    return bool(getattr(request, 'audit_suppress', False))
+
+
 def _pre_save(sender, instance, **kwargs):
     if sender._meta.app_label in _EXCLUDE_APPS:
+        return
+    if _is_audit_suppressed():
         return
     if not instance.pk:
         return
@@ -94,6 +101,8 @@ def _pre_save(sender, instance, **kwargs):
 
 def _post_save(sender, instance, created, **kwargs):
     if sender._meta.app_label in _EXCLUDE_APPS:
+        return
+    if _is_audit_suppressed():
         return
     after = _serialize_instance(instance)
     if created:
@@ -109,6 +118,8 @@ def _post_save(sender, instance, created, **kwargs):
 
 def _post_delete(sender, instance, **kwargs):
     if sender._meta.app_label in _EXCLUDE_APPS:
+        return
+    if _is_audit_suppressed():
         return
     before = _serialize_instance(instance)
     _log_change('DELETE', instance, before=before, after=None, diff=None)
