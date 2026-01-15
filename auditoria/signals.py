@@ -1,4 +1,5 @@
 from django.apps import apps
+from decimal import Decimal
 import uuid
 from django.db.models.signals import pre_save, post_save, post_delete
 from .models import AuditLog
@@ -24,6 +25,8 @@ def _serialize_instance(instance):
             value = None
 
         if isinstance(value, uuid.UUID):
+            value = str(value)
+        elif isinstance(value, Decimal):
             value = str(value)
         elif hasattr(value, 'isoformat'):
             value = value.isoformat()
