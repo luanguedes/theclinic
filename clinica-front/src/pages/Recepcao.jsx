@@ -66,8 +66,8 @@ export default function Recepcao() {
     // Carregamento Inicial
     useEffect(() => {
         if(api) {
-            api.get('profissionais/').then(res => setProfissionais(res.data.results || res.data)).catch(() => {});
-            api.get('configuracoes/convenios/').then(res => setConvenios(res.data.results || res.data)).catch(() => {});
+            api.get('profissionais/?nopage=true').then(res => setProfissionais(res.data.results || res.data)).catch(() => {});
+            api.get('configuracoes/convenios/?nopage=true').then(res => setConvenios(res.data.results || res.data)).catch(() => {});
         }
     }, [api]);
 

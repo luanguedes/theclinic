@@ -204,15 +204,15 @@ export default function MarcarConsulta() {
   useEffect(() => {
     if (api) {
         api.get('configuracoes/sistema/').then(res => setConfigSistema(res.data)).catch(() => {});
-        api.get('profissionais/').then(res => {
+        api.get('profissionais/?nopage=true').then(res => {
             const data = res.data.results || res.data;
             setProfissionais(Array.isArray(data) ? data.map(p => ({ id: p.id, label: p.nome })) : []);
         }).catch(() => {});
-        api.get('pacientes/lista/').then(res => {
+        api.get('pacientes/lista/?nopage=true').then(res => {
             const data = res.data.results || res.data;
             setPacientes(Array.isArray(data) ? data.map(p => ({ id: p.id, label: `${p.nome} - ${p.cpf}`, prioridade: p.prioridade })) : []);
         }).catch(() => {});
-        api.get('configuracoes/convenios/').then(res => {
+        api.get('configuracoes/convenios/?nopage=true').then(res => {
             const data = res.data.results || res.data;
             setConvenios(Array.isArray(data) ? data.map(c => ({ id: c.id, label: c.nome })) : []);
         }).catch(() => {});

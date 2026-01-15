@@ -92,7 +92,7 @@ export default function CadastroOperador() {
 
   useEffect(() => {
     if (api) {
-        api.get('profissionais/').then(res => {
+        api.get('profissionais/?nopage=true').then(res => {
             const lista = res.data.results || res.data;
             setProfissionais(lista.map(p => ({ id: p.id, label: `${p.nome} (CPF: ${p.cpf})` })));
         }).catch(() => notify.error("Erro ao carregar lista de profissionais para vínculo."));

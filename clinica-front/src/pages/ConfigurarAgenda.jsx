@@ -132,6 +132,8 @@ export default function ConfigurarAgenda() {
 
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   
   const [profissionaisFilter, setProfissionaisFilter] = useState([]);
   const [especialidadesFilter, setEspecialidadesFilter] = useState([]);
@@ -187,30 +189,30 @@ export default function ConfigurarAgenda() {
             setEspecialidadesFilter(res.data.especialidades);
         }).catch(() => {});
         
-        api.get('configuracoes/convenios/').then(res => {
+        api.get('configuracoes/convenios/?nopage=true').then(res => {
             const data = res.data.results || res.data;
             const options = data.map(c => ({ id: c.id, label: c.nome }));
             setConveniosFilter([{ id: 'sem_convenio', label: 'Particular (Sem Convênio)' }, ...options]);
             setAllConvenios(data.map(c => ({ id: c.id, nome: c.nome })));
         }).catch(() => {});
-        
-        loadData();
     }
   }, [api, statusFilter]);
 
-  useEffect(() => { if(api) loadData(); }, [activeFilters]);
+  useEffect(() => { if(api) loadData(); }, [api, activeFilters, statusFilter, page]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append('status', statusFilter);
+      params.append('page', page);
       activeFilters.forEach(f => {
           const key = f.type === 'texto' ? 'search' : f.type;
           if (f.value) params.append(key, f.value);
       });
       const response = await api.get(`agendas/config/?${params.toString()}`);
-      setConfigs(response.data.results || response.data);
+      setConfigs(response.data.results || []);
+      setTotalPages(response.data.num_pages || Math.max(1, Math.ceil((response.data.count || 0) / (response.data.page_size || 1))));
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
@@ -228,10 +230,14 @@ export default function ConfigurarAgenda() {
       const cleanFilters = activeFilters.filter(f => f.type !== filterType);
       setActiveFilters([...cleanFilters, newFilter]);
       setFilterValue('');
+      setPage(1);
   };
 
-  const removeFilter = (id) => setActiveFilters(activeFilters.filter(f => f.id !== id));
-  const clearAllFilters = () => { setActiveFilters([]); setFilterValue(''); };
+  const removeFilter = (id) => {
+      setActiveFilters(activeFilters.filter(f => f.id !== id));
+      setPage(1);
+  };
+  const clearAllFilters = () => { setActiveFilters([]); setFilterValue(''); setPage(1); };
   const handleKeyDown = (e) => { if (e.key === 'Enter') addFilter(); };
 
   const renderDynamicInput = () => {
@@ -366,7 +372,7 @@ export default function ConfigurarAgenda() {
             </div>
             <div className="w-full lg:w-56 h-12 relative">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-600 pointer-events-none z-10"><Filter size={18} /></div>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full h-full pl-10 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 appearance-none cursor-pointer hover:border-purple-300 transition-colors">
+                <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="w-full h-full pl-10 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 appearance-none cursor-pointer hover:border-purple-300 transition-colors">
                     <option value="ativos">Apenas Ativos</option><option value="encerrados">Apenas Encerrados</option><option value="todos">Mostrar Todos</option>
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><ChevronDown size={14} /></div>
@@ -409,6 +415,28 @@ export default function ConfigurarAgenda() {
                 </table>
             </div>
         </div>
+
+        {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+                <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                >
+                    Anterior
+                </button>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Pagina {page} de {totalPages}
+                </span>
+                <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                >
+                    Proxima
+                </button>
+            </div>
+        )}
 
         {/* MODAL DE EDIÇÃO AVANÇADA (MOTOR DE CÁLCULO PRESERVADO) */}
         {isModalOpen && editingItem && (

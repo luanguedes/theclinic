@@ -157,11 +157,11 @@ export default function CriarAgenda() {
 
   useEffect(() => {
     if (api) {
-        api.get('profissionais/').then(res => {
+        api.get('profissionais/?nopage=true').then(res => {
             const data = res.data.results || res.data;
             setProfissionaisOptions(data.map(p => ({ id: p.id, label: p.nome })));
         });
-        api.get('configuracoes/convenios/').then(res => {
+        api.get('configuracoes/convenios/?nopage=true').then(res => {
             const data = res.data.results || res.data;
             setConveniosOptions(data.map(c => ({ id: c.id, label: c.nome })));
         });

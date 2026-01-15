@@ -13,16 +13,22 @@ export default function Profissionais() {
     const [profissionais, setProfissionais] = useState([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
 
     useEffect(() => {
         if (api) fetchProfissionais();
-    }, [api]);
+    }, [api, page, search]);
 
     const fetchProfissionais = async () => {
         setLoading(true);
         try {
-            const { data } = await api.get('profissionais/');
-            setProfissionais(Array.isArray(data) ? data : data.results);
+            const params = new URLSearchParams();
+            params.append('page', page);
+            if (search) params.append('search', search);
+            const { data } = await api.get(`profissionais/?${params.toString()}`);
+            setProfissionais(data.results || []);
+            setTotalPages(data.num_pages || Math.max(1, Math.ceil((data.count || 0) / (data.page_size || 1))));
         } catch (error) {
             notify.error("Erro ao carregar profissionais.");
         } finally {
@@ -40,8 +46,6 @@ export default function Profissionais() {
             } catch (e) { notify.error("Erro ao excluir."); }
         }
     };
-
-    const filtered = profissionais.filter(p => p.nome.toLowerCase().includes(search.toLowerCase()));
 
     // Função para formatar o registro com base na sua MODEL
     const formatarRegistro = (profissional) => {
@@ -79,14 +83,14 @@ export default function Profissionais() {
                         <input 
                             placeholder="Buscar médico por nome..." 
                             value={search} 
-                            onChange={e => setSearch(e.target.value)} 
+                            onChange={e => { setSearch(e.target.value); setPage(1); }} 
                             className="w-full pl-12 bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-blue-100"
                         />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filtered.map(p => (
+                    {profissionais.map(p => (
                         <div key={p.id} className="bg-white dark:bg-slate-800 rounded-[24px] p-6 shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-xl transition-all group relative overflow-hidden">
                             <div className="relative z-10">
                                 <div className="flex items-start justify-between mb-4">
@@ -122,6 +126,27 @@ export default function Profissionais() {
                         </div>
                     ))}
                 </div>
+                {totalPages > 1 && (
+                    <div className="mt-8 flex items-center justify-between">
+                        <button
+                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                            disabled={page <= 1}
+                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Anterior
+                        </button>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Pagina {page} de {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={page >= totalPages}
+                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Proxima
+                        </button>
+                    </div>
+                )}
             </div>
         </Layout>
     );

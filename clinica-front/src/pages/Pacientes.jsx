@@ -106,7 +106,7 @@ export default function Pacientes() {
     try {
       const { data } = await api.get(`pacientes/?page=${page}&search=${search}`);
       setPacientes(data.results || []);
-      setTotalPages(Math.ceil(data.count / 15));
+      setTotalPages(data.num_pages || Math.max(1, Math.ceil((data.count || 0) / (data.page_size || 1))));
     } catch (error) {
       notify.error("Erro ao carregar lista de pacientes.");
     } finally { setLoading(false); }

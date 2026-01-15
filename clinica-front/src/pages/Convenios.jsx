@@ -13,6 +13,8 @@ export default function Convenios() {
   const [convenios, setConvenios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -23,13 +25,17 @@ export default function Convenios() {
 
   useEffect(() => {
     if (api) loadData();
-  }, [api, search]);
+  }, [api, search, page]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await api.get(`configuracoes/convenios/?search=${search}`);
-      setConvenios(res.data.results || res.data);
+      const params = new URLSearchParams();
+      params.append('page', page);
+      if (search) params.append('search', search);
+      const res = await api.get(`configuracoes/convenios/?${params.toString()}`);
+      setConvenios(res.data.results || []);
+      setTotalPages(res.data.num_pages || Math.max(1, Math.ceil((res.data.count || 0) / (res.data.page_size || 1))));
     } catch (e) {
       notify.error("Erro ao carregar lista de convênios.");
       setConvenios([]);
@@ -124,7 +130,7 @@ export default function Convenios() {
             <input 
                 placeholder="Pesquisar convênio pelo nome..." 
                 value={search} 
-                onChange={e => setSearch(e.target.value)} 
+                onChange={e => { setSearch(e.target.value); setPage(1); }} 
                 className="w-full pl-10 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3 outline-none dark:text-white transition-colors focus:border-blue-500"
             />
         </div>
@@ -170,6 +176,27 @@ export default function Convenios() {
                 </tbody>
             </table>
         </div>
+        {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-between">
+                <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                >
+                    Anterior
+                </button>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Pagina {page} de {totalPages}
+                </span>
+                <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                >
+                    Proxima
+                </button>
+            </div>
+        )}
 
         {modalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">

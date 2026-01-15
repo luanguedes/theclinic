@@ -48,8 +48,8 @@ export default function Bloqueios() {
         setFetching(true);
         try {
             const [resBloq, resProf, resConfig] = await Promise.all([
-                api.get('bloqueios/'),
-                api.get('profissionais/'),
+                api.get('bloqueios/?nopage=true'),
+                api.get('profissionais/?nopage=true'),
                 api.get('configuracoes/sistema/')
             ]);
             setBloqueios(Array.isArray(resBloq.data.results || resBloq.data) ? (resBloq.data.results || resBloq.data) : []);

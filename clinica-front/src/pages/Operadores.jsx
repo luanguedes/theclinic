@@ -13,16 +13,22 @@ export default function Operadores() {
     const [operadores, setOperadores] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
     
     useEffect(() => {
         if (api) fetchOperadores();
-    }, [api]);
+    }, [api, page, searchTerm]);
 
     const fetchOperadores = async () => {
         setLoading(true);
         try {
-            const { data } = await api.get('operadores/');
-            setOperadores(Array.isArray(data) ? data : data.results);
+            const params = new URLSearchParams();
+            params.append('page', page);
+            if (searchTerm) params.append('search', searchTerm);
+            const { data } = await api.get(`operadores/?${params.toString()}`);
+            setOperadores(data.results || []);
+            setTotalPages(data.num_pages || Math.max(1, Math.ceil((data.count || 0) / (data.page_size || 1))));
         } catch (error) {
             notify.error("Erro ao carregar operadores.");
         } finally {
@@ -40,11 +46,6 @@ export default function Operadores() {
             } catch (e) { notify.error("Erro ao excluir."); }
         }
     };
-
-    const filtered = operadores.filter(op => 
-        op.username.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        op.first_name?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
     return (
         <Layout>
@@ -67,7 +68,7 @@ export default function Operadores() {
                         <input 
                             placeholder="Buscar por nome ou usuário..." 
                             value={searchTerm} 
-                            onChange={e => setSearchTerm(e.target.value)} 
+                            onChange={e => { setSearchTerm(e.target.value); setPage(1); }} 
                             className="w-full pl-12 bg-slate-50 dark:bg-slate-900 border-none rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-blue-100"
                         />
                     </div>
@@ -76,7 +77,7 @@ export default function Operadores() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {loading ? (
                         <div className="col-span-full py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40}/></div>
-                    ) : filtered.map(op => (
+                    ) : operadores.map(op => (
                         <div key={op.id} className="bg-white dark:bg-slate-800 rounded-[24px] p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative group hover:shadow-lg transition-all">
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-3">
@@ -118,6 +119,27 @@ export default function Operadores() {
                         </div>
                     ))}
                 </div>
+                {totalPages > 1 && (
+                    <div className="mt-8 flex items-center justify-between">
+                        <button
+                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                            disabled={page <= 1}
+                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Anterior
+                        </button>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Pagina {page} de {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={page >= totalPages}
+                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Proxima
+                        </button>
+                    </div>
+                )}
             </div>
         </Layout>
     );

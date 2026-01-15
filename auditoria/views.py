@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
-from rest_framework.pagination import PageNumberPagination
+from clinica_core.pagination import ConfigurablePageNumberPagination
 from django.db.models import Q
 from .models import AuditLog
 from .serializers import AuditLogSerializer
@@ -64,8 +64,10 @@ class AuditLogListView(APIView):
                 Q(model_name__icontains=search)
             )
 
-        paginator = PageNumberPagination()
-        paginator.page_size = int(request.query_params.get('page_size', 20))
+        paginator = ConfigurablePageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
+        if page is None:
+            serializer = AuditLogSerializer(qs, many=True)
+            return Response(serializer.data)
         serializer = AuditLogSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)

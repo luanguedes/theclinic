@@ -11,19 +11,25 @@ export default function Especialidades() {
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
     
     // Removida descrição, mantido apenas nome
     const [form, setForm] = useState({ nome: '' });
     const [editingId, setEditingId] = useState(null);
 
-    useEffect(() => { if (api) fetchItems(); }, [api]);
+    useEffect(() => { if (api) fetchItems(); }, [api, page, search]);
 
     const fetchItems = async () => {
         setLoading(true);
         try {
             // CORREÇÃO DE ROTA: Removido 'configuracoes/'
-            const { data } = await api.get('especialidades/');
-            setItems(Array.isArray(data) ? data : data.results);
+            const params = new URLSearchParams();
+            params.append('page', page);
+            if (search) params.append('search', search);
+            const { data } = await api.get(`especialidades/?${params.toString()}`);
+            setItems(data.results || []);
+            setTotalPages(data.num_pages || Math.max(1, Math.ceil((data.count || 0) / (data.page_size || 1))));
         } catch { notify.error("Erro ao carregar especialidades."); } 
         finally { setLoading(false); }
     };
@@ -63,11 +69,11 @@ export default function Especialidades() {
 
                 <div className="bg-white dark:bg-slate-800 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <div className="p-4 border-b dark:border-slate-700 bg-slate-50/50">
-                        <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Pesquisar..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-500 text-sm font-bold"/></div>
+                        <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Pesquisar..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="w-full pl-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-500 text-sm font-bold"/></div>
                     </div>
                     <div className="divide-y divide-slate-100 dark:divide-slate-700">
                         {loading ? <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-pink-600"/></div> : 
-                        items.filter(i => i.nome.toLowerCase().includes(search.toLowerCase())).map(item => (
+                        items.map(item => (
                             <div key={item.id} className="p-6 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 bg-pink-50 text-pink-600 rounded-xl"><Activity size={20}/></div>
@@ -78,6 +84,27 @@ export default function Especialidades() {
                         ))}
                     </div>
                 </div>
+                {totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-between">
+                        <button
+                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                            disabled={page <= 1}
+                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Anterior
+                        </button>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Pagina {page} de {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={page >= totalPages}
+                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Proxima
+                        </button>
+                    </div>
+                )}
 
                 {modalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">

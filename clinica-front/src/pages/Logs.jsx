@@ -339,10 +339,12 @@ const formatSummary = (log) => {
 export default function Logs() {
   const { api } = useAuth();
   const { notify } = useNotification();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchNonce, setSearchNonce] = useState(0);
 
   const [operatorOptions, setOperatorOptions] = useState([]);
 
@@ -354,7 +356,7 @@ export default function Logs() {
 
   useEffect(() => {
     if (!api) return;
-    api.get('operadores/')
+    api.get('operadores/?nopage=true')
       .then((res) => {
         const data = res.data.results || res.data;
         setOperatorOptions(data.map((op) => ({ id: op.id, label: op.first_name || op.username })));
@@ -363,8 +365,9 @@ export default function Logs() {
   }, [api]);
 
   useEffect(() => {
+    if (!hasSearched) return;
     loadData();
-  }, [api, activeFilters, page]);
+  }, [api, activeFilters, page, hasSearched, searchNonce]);
 
   const loadData = async () => {
     if (!api) return;
@@ -372,7 +375,6 @@ export default function Logs() {
     try {
       const params = new URLSearchParams();
       params.append('page', page);
-      params.append('page_size', 20);
       activeFilters.forEach((f) => {
         if (!f.value) return;
         if (f.type === 'texto') params.append('search', f.value);
@@ -382,7 +384,7 @@ export default function Logs() {
       const res = await api.get(`auditoria/logs/?${params.toString()}`);
       setLogs(res.data.results || []);
       const count = res.data.count || 0;
-      setTotalPages(Math.max(1, Math.ceil(count / 20)));
+      setTotalPages(res.data.num_pages || Math.max(1, Math.ceil(count / (res.data.page_size || 1))));
     } catch (error) {
       notify?.error?.('Erro ao carregar logs.');
     } finally {
@@ -405,6 +407,8 @@ export default function Logs() {
     setActiveFilters([...cleanFilters, newFilter]);
     setFilterValue('');
     setPage(1);
+    setHasSearched(true);
+    setSearchNonce((value) => value + 1);
   };
 
   const removeFilter = (id) => setActiveFilters(activeFilters.filter((f) => f.id !== id));
@@ -416,6 +420,16 @@ export default function Logs() {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') addFilter();
+  };
+
+  const handleSearch = () => {
+    if (filterValue) {
+      addFilter();
+      return;
+    }
+    setHasSearched(true);
+    setPage(1);
+    setSearchNonce((value) => value + 1);
   };
 
   const filterTypeOptions = [
@@ -504,7 +518,7 @@ export default function Logs() {
             </div>
             <div className="flex-1 h-11 relative">
               {renderDynamicInput()}
-              <button onClick={addFilter} className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2 rounded-xl shadow-lg hover:bg-blue-700 transition">
+              <button onClick={handleSearch} className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-2 rounded-xl shadow-lg hover:bg-blue-700 transition">
                 <Search size={14} />
               </button>
             </div>
@@ -540,7 +554,13 @@ export default function Logs() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                {loading ? (
+                {!hasSearched ? (
+                  <tr>
+                    <td colSpan="7" className="p-10 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">
+                      Clique na lupa para carregar os logs.
+                    </td>
+                  </tr>
+                ) : loading ? (
                   <tr>
                     <td colSpan="7" className="p-10 text-center">
                       <Loader2 className="animate-spin mx-auto text-blue-600 mb-2" size={32} />
