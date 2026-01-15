@@ -1,4 +1,5 @@
 from django.apps import apps
+import uuid
 from django.db.models.signals import pre_save, post_save, post_delete
 from .models import AuditLog
 from .utils import get_current_request, get_current_user
@@ -22,7 +23,9 @@ def _serialize_instance(instance):
         except Exception:
             value = None
 
-        if hasattr(value, 'isoformat'):
+        if isinstance(value, uuid.UUID):
+            value = str(value)
+        elif hasattr(value, 'isoformat'):
             value = value.isoformat()
         elif isinstance(value, (bytes, bytearray)):
             value = None
