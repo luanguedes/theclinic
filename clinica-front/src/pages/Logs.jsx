@@ -114,10 +114,17 @@ const actionLabelMap = {
 const modelLabelMap = {
   'agendas.agendaconfig': 'Configuracao de Horarios',
   'agendamento.agendamento': 'Agendamentos',
+  'agendamento.bloqueioagenda': 'Bloqueios de Agenda',
   'pacientes.paciente': 'Pacientes',
   'profissionais.profissional': 'Profissionais',
+  'profissionais.especialidade': 'Especialidades',
+  'profissionais.profissionalespecialidade': 'Vinculos Profissional/Especialidade',
   'configuracoes.convenio': 'Convenios',
-  'usuarios.operador': 'Operadores'
+  'configuracoes.dadosclinica': 'Dados da Clinica',
+  'configuracoes.configuracaosistema': 'Configuracoes do Sistema',
+  'usuarios.operador': 'Operadores',
+  'usuarios.privilegio': 'Privilegios',
+  'financeiro.fatura': 'Faturas'
 };
 
 const fieldLabelsByModel = {
@@ -135,6 +142,148 @@ const fieldLabelsByModel = {
     tipo: 'Tipo',
     valor: 'Valor',
     situacao: 'Situacao'
+  },
+  'agendamento.agendamento': {
+    profissional: 'Profissional',
+    especialidade: 'Especialidade',
+    paciente: 'Paciente',
+    convenio: 'Convenio',
+    enviar_whatsapp: 'Enviar WhatsApp',
+    data: 'Data',
+    horario: 'Horario',
+    is_encaixe: 'Encaixe',
+    horario_chegada: 'Chegada',
+    inicio_atendimento: 'Inicio Atendimento',
+    fim_atendimento: 'Fim Atendimento',
+    valor: 'Valor',
+    forma_pagamento: 'Forma de Pagamento',
+    pago: 'Pago',
+    observacoes: 'Observacoes',
+    status: 'Status',
+    lembrete_enviado: 'Lembrete Enviado',
+    bloqueio_origem: 'Bloqueio Origem'
+  },
+  'agendamento.bloqueioagenda': {
+    profissional: 'Profissional',
+    data_inicio: 'Data Inicio',
+    data_fim: 'Data Fim',
+    hora_inicio: 'Hora Inicio',
+    hora_fim: 'Hora Fim',
+    motivo: 'Motivo',
+    observacao: 'Observacao',
+    tipo: 'Tipo',
+    recorrente: 'Recorrente'
+  },
+  'pacientes.paciente': {
+    nome: 'Nome',
+    nome_mae: 'Nome da Mae',
+    sexo: 'Sexo',
+    prioridade: 'Prioridade',
+    cpf: 'CPF',
+    data_nascimento: 'Data de Nascimento',
+    telefone: 'Telefone',
+    cep: 'CEP',
+    logradouro: 'Logradouro',
+    numero: 'Numero',
+    complemento: 'Complemento',
+    bairro: 'Bairro',
+    cidade: 'Cidade',
+    estado: 'Estado',
+    aceite_lgpd: 'Aceite LGPD',
+    historico_medico: 'Historico Medico',
+    criado_em: 'Criado Em',
+    atualizado_em: 'Atualizado Em'
+  },
+  'profissionais.profissional': {
+    nome: 'Nome',
+    cpf: 'CPF',
+    data_nascimento: 'Data de Nascimento',
+    created_at: 'Criado Em'
+  },
+  'profissionais.especialidade': {
+    nome: 'Nome'
+  },
+  'profissionais.profissionalespecialidade': {
+    profissional: 'Profissional',
+    especialidade: 'Especialidade',
+    sigla_conselho: 'Sigla Conselho',
+    registro_conselho: 'Registro Conselho',
+    uf_conselho: 'UF Conselho'
+  },
+  'configuracoes.convenio': {
+    nome: 'Nome',
+    percentual_desconto: 'Percentual de Desconto',
+    ativo: 'Ativo'
+  },
+  'configuracoes.dadosclinica': {
+    nome_fantasia: 'Nome Fantasia',
+    razao_social: 'Razao Social',
+    cnpj: 'CNPJ',
+    telefone: 'Telefone',
+    email: 'Email',
+    logo: 'Logo',
+    logradouro: 'Logradouro',
+    numero: 'Numero',
+    complemento: 'Complemento',
+    bairro: 'Bairro',
+    cidade: 'Cidade',
+    estado: 'Estado',
+    cep: 'CEP'
+  },
+  'configuracoes.configuracaosistema': {
+    itens_por_pagina: 'Itens por Pagina',
+    modo_manutencao: 'Modo Manutencao',
+    max_tentativas_login: 'Max. Tentativas Login',
+    tempo_bloqueio_minutos: 'Tempo Bloqueio (min)',
+    tempo_sessao_minutos: 'Tempo Sessao (min)',
+    janela_agendamento_meses: 'Janela de Agendamento (meses)',
+    enviar_whatsapp_global: 'WhatsApp Global',
+    enviar_wpp_confirmacao: 'WhatsApp Confirmacao',
+    enviar_wpp_bloqueio: 'WhatsApp Bloqueio',
+    enviar_wpp_lembrete: 'WhatsApp Lembrete',
+    horario_disparo_lembrete: 'Horario Disparo Lembrete',
+    data_ultima_execucao_lembrete: 'Ultima Execucao Lembrete'
+  },
+  'usuarios.operador': {
+    username: 'Usuario',
+    first_name: 'Nome',
+    last_name: 'Sobrenome',
+    email: 'Email',
+    telefone: 'Telefone',
+    profissional: 'Profissional Vinculado',
+    acesso_agendamento: 'Acesso Agendamento',
+    acesso_atendimento: 'Acesso Atendimento',
+    acesso_faturamento: 'Acesso Faturamento',
+    acesso_cadastros: 'Acesso Cadastros',
+    acesso_configuracoes: 'Acesso Configuracoes',
+    acesso_whatsapp: 'Acesso WhatsApp',
+    force_password_change: 'Forcar Troca de Senha',
+    theme_preference: 'Tema',
+    is_active: 'Ativo',
+    is_staff: 'Equipe',
+    is_superuser: 'Administrador',
+    last_login: 'Ultimo Login',
+    date_joined: 'Criado Em'
+  },
+  'usuarios.privilegio': {
+    path: 'Path',
+    label: 'Label',
+    module_key: 'Chave do Modulo',
+    module_label: 'Modulo',
+    module_order: 'Ordem do Modulo',
+    item_order: 'Ordem do Item',
+    active: 'Ativo'
+  },
+  'financeiro.fatura': {
+    agendamento: 'Agendamento',
+    valor: 'Valor',
+    desconto: 'Desconto',
+    forma_pagamento: 'Forma de Pagamento',
+    pago: 'Pago',
+    data_vencimento: 'Data de Vencimento',
+    data_pagamento: 'Data de Pagamento',
+    criado_em: 'Criado Em',
+    atualizado_em: 'Atualizado Em'
   }
 };
 
@@ -153,26 +302,30 @@ const getModelLabel = (log) => {
 
 const getActionLabel = (action) => actionLabelMap[action] || action || 'Acao';
 
+const formatValue = (value) => {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Nao';
+  if (Array.isArray(value)) return value.length ? value.join(', ') : '-';
+  return String(value);
+};
+
 const mapFields = (obj, modelKey) => {
-  if (!obj || typeof obj !== 'object') return obj;
+  if (!obj || typeof obj !== 'object') return [];
   const labels = fieldLabelsByModel[modelKey] || {};
-  const mapped = {};
-  Object.entries(obj).forEach(([key, value]) => {
-    const label = labels[key] || key.replace(/_/g, ' ');
-    mapped[label] = value;
-  });
-  return mapped;
+  return Object.entries(obj).map(([key, value]) => ({
+    label: labels[key] || key.replace(/_/g, ' '),
+    value: formatValue(value)
+  }));
 };
 
 const mapDiff = (diff, modelKey) => {
-  if (!diff || typeof diff !== 'object') return diff;
+  if (!diff || typeof diff !== 'object') return [];
   const labels = fieldLabelsByModel[modelKey] || {};
-  const mapped = {};
-  Object.entries(diff).forEach(([key, value]) => {
-    const label = labels[key] || key.replace(/_/g, ' ');
-    mapped[label] = { antes: value?.before, depois: value?.after };
-  });
-  return mapped;
+  return Object.entries(diff).map(([key, value]) => ({
+    label: labels[key] || key.replace(/_/g, ' '),
+    before: formatValue(value?.before),
+    after: formatValue(value?.after)
+  }));
 };
 
 const formatSummary = (log) => {
@@ -313,6 +466,9 @@ export default function Logs() {
   const thClass = 'px-5 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest';
   const tdClass = 'px-5 py-4 text-sm text-slate-700 dark:text-slate-300';
   const detailModelKey = detailLog ? getModelKey(detailLog) : '';
+  const detailBefore = detailLog ? mapFields(detailLog.before, detailModelKey) : [];
+  const detailAfter = detailLog ? mapFields(detailLog.after, detailModelKey) : [];
+  const detailDiff = detailLog ? mapDiff(detailLog.diff, detailModelKey) : [];
 
   return (
     <Layout>
@@ -471,22 +627,56 @@ export default function Logs() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Antes</p>
-                    <pre className="text-[10px] text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap">
-                      {detailLog.before ? JSON.stringify(mapFields(detailLog.before, detailModelKey), null, 2) : 'Sem dados'}
-                    </pre>
+                    {detailBefore.length === 0 ? (
+                      <p className="text-xs text-slate-400 mt-2">Sem dados</p>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        {detailBefore.map((item) => (
+                          <div key={item.label} className="flex items-start justify-between gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200 text-right">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depois</p>
-                    <pre className="text-[10px] text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap">
-                      {detailLog.after ? JSON.stringify(mapFields(detailLog.after, detailModelKey), null, 2) : 'Sem dados'}
-                    </pre>
+                    {detailAfter.length === 0 ? (
+                      <p className="text-xs text-slate-400 mt-2">Sem dados</p>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        {detailAfter.map((item) => (
+                          <div key={item.label} className="flex items-start justify-between gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200 text-right">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Diff</p>
-                  <pre className="text-[10px] text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap">
-                    {detailLog.diff ? JSON.stringify(mapDiff(detailLog.diff, detailModelKey), null, 2) : 'Sem diff'}
-                  </pre>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alteracoes</p>
+                  {detailDiff.length === 0 ? (
+                    <p className="text-xs text-slate-400 mt-2">Sem alteracoes</p>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {detailDiff.map((item) => (
+                        <div key={item.label} className="flex flex-col gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</div>
+                          <div className="flex items-center justify-between gap-3 text-xs">
+                            <span className="text-slate-400">Antes</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-200">{item.before}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 text-xs">
+                            <span className="text-slate-400">Depois</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-200">{item.after}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

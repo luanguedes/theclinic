@@ -68,9 +68,24 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = self._normalize_create_payload(request.data)
-        serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        group_id = data.get('group_id')
+        is_first_in_group = False
+        if group_id:
+            is_first_in_group = not AgendaConfig.objects.filter(group_id=group_id).exists()
+
+        request.audit_suppress = True
+        try:
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+        finally:
+            request.audit_suppress = False
+
+        if group_id and is_first_in_group:
+            instance = serializer.instance
+            object_repr = f'{instance.profissional} - {instance.especialidade}'
+            self._log_group_change(request, 'CREATE', group_id, object_repr)
+
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
