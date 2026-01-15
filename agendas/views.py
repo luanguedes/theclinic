@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.apps import apps
 from django.utils import timezone
+import uuid
 from .models import AgendaConfig
 from .serializers import AgendaConfigSerializer
 
@@ -12,6 +13,35 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
     serializer_class = AgendaConfigSerializer
     permission_classes = [permissions.IsAuthenticated]
     queryset = AgendaConfig.objects.all().order_by('dia_semana', 'hora_inicio')
+
+    def _normalize_create_payload(self, data):
+        # DRF accepts dict or QueryDict; normalize values for common "null"/string cases.
+        normalized = data.copy()
+
+        def is_blank(val):
+            return val is None or str(val).strip() in ['', 'null', 'undefined', 'None']
+
+        if is_blank(normalized.get('convenio')):
+            normalized['convenio'] = None
+
+        group_id = normalized.get('group_id')
+        if is_blank(group_id):
+            normalized['group_id'] = uuid.uuid4()
+        else:
+            try:
+                normalized['group_id'] = uuid.UUID(str(group_id))
+            except ValueError:
+                normalized['group_id'] = uuid.uuid4()
+
+        return normalized
+
+    def create(self, request, *args, **kwargs):
+        data = self._normalize_create_payload(request.data)
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def get_queryset(self):
         queryset = super().get_queryset()
