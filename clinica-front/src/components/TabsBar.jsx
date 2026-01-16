@@ -13,7 +13,7 @@ export default function TabsBar() {
     closeTab(path);
     if (isActive) {
       const next = tabs[idx - 1] || tabs[idx + 1];
-      navigate(next ? next.path : '/dashboard');
+      navigate(next ? (next.lastPath || next.path) : '/dashboard');
     }
   };
 
@@ -39,7 +39,7 @@ export default function TabsBar() {
                 ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/30'
                 : 'bg-white/60 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
-            onClick={() => navigate(tab.path)}
+            onClick={() => navigate(tab.lastPath || tab.path)}
             title={tab.title}
             style={{ zIndex: z }}
           >
