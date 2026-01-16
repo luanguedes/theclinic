@@ -1,44 +1,19 @@
-import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useUnsavedChangesRegistry } from '../context/UnsavedChangesContext';
 
 const DEFAULT_MESSAGE = 'Existem alteracoes nao salvas. Deseja sair sem salvar?';
 
 export default function useUnsavedChanges(isDirty, message = DEFAULT_MESSAGE) {
-  const navigate = useNavigate();
   const location = useLocation();
-  const lastLocationRef = useRef(location);
-  const revertingRef = useRef(false);
+  const registry = useUnsavedChangesRegistry();
 
   useEffect(() => {
-    if (!isDirty) {
-      lastLocationRef.current = location;
-      return;
-    }
-
-    if (revertingRef.current) {
-      revertingRef.current = false;
-      lastLocationRef.current = location;
-      return;
-    }
-
-    const last = lastLocationRef.current;
-    const changed = (
-      location.pathname !== last.pathname ||
-      location.search !== last.search ||
-      location.hash !== last.hash
-    );
-
-    if (!changed) return;
-
-    const shouldLeave = window.confirm(message);
-    if (shouldLeave) {
-      lastLocationRef.current = location;
-      return;
-    }
-
-    revertingRef.current = true;
-    navigate(`${last.pathname}${last.search}${last.hash}`, { replace: true });
-  }, [isDirty, location, message, navigate]);
+    if (!registry) return;
+    const key = `${location.pathname}${location.search}${location.hash}`;
+    registry.setDirty(key, isDirty, message);
+    return () => registry.setDirty(key, false);
+  }, [isDirty, location.pathname, location.search, location.hash, message, registry]);
 
   useEffect(() => {
     if (!isDirty) return;
