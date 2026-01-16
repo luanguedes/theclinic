@@ -32,11 +32,8 @@ class Command(BaseCommand):
             self.stdout.write(f"Aguardando... Hor??rio agendado: {horario_agendado.strftime('%H:%M')}")
             return
 
-        # 3. VERIFICAÇÃO DE DUPLICIDADE (O BLOQUEIO)
-        # Se já passou do horário, mas o campo 'data_ultima_execucao' já é HOJE,
-        # significa que o trabalho do dia já foi feito.
-        if config.data_ultima_execucao_lembrete == hoje:
-            self.stdout.write("Trabalho de hoje já concluído. Voltarei amanhã!")
+        if not config.enviar_whatsapp_global or not config.enviar_wpp_lembrete:
+            self.stdout.write("Disparo automatico desativado nas configuracoes.")
             return
 
         # 4. DISPARO
@@ -49,6 +46,10 @@ class Command(BaseCommand):
             lembrete_enviado=False
         )
 
+        if config.data_ultima_execucao_lembrete == hoje and not pendentes.exists():
+            self.stdout.write("Trabalho de hoje ja concluido e sem pendentes.")
+            return
+
         enviados = 0
         for ag in pendentes:
             if enviar_lembrete_24h(ag):
@@ -57,7 +58,8 @@ class Command(BaseCommand):
                 enviados += 1
         
         # CRÍTICO: Marca que hoje está pago!
-        config.data_ultima_execucao_lembrete = hoje
-        config.save()
+        if enviados > 0:
+            config.data_ultima_execucao_lembrete = hoje
+            config.save()
 
         self.stdout.write(self.style.SUCCESS(f"✅ Sucesso: {enviados} lembretes enviados."))
