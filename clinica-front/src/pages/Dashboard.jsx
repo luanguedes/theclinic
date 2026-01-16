@@ -264,7 +264,7 @@ export default function Dashboard() {
                                     <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                                 </button>
                                 <Link to="/recepcao" className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-xs font-black uppercase tracking-widest px-5 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-all shadow-sm flex items-center gap-2">
-                                    RECEP??O <ChevronRight size={14}/>
+                                    RECEPÇÃO <ChevronRight size={14}/>
                                 </Link>
                             </div>
                         </div>
