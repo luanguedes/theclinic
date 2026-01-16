@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser 
-from datetime import timedelta, date
+from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
 import requests
@@ -81,7 +81,7 @@ class ConfiguracaoSistemaView(APIView):
         serializer = ConfiguracaoSistemaSerializer(config)
         
         # Datas
-        hoje = date.today()
+        hoje = timezone.localdate()
         amanha = hoje + timedelta(days=1)
         
         # --- ESTATISTICAS DE HOJE ---
@@ -126,7 +126,7 @@ class ConfiguracaoSistemaView(APIView):
 
         try:
             config = ConfiguracaoSistema.load()
-            hoje = date.today()
+            hoje = timezone.localdate()
             amanha = hoje + timedelta(days=1)
             
             # Busca agendamentos de AMANHA que sao 'agendado' e ainda nao enviados
