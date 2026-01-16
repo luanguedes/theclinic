@@ -33,8 +33,21 @@ export default function Dashboard() {
     const isFinanceiro = user?.acesso_faturamento || isSuperUser;
 
     // --- FILTROS ---
-    const hoje = new Date().toISOString().split('T')[0];
-    const mesAtual = new Date().toISOString().slice(0, 7);
+    const getLocalISODate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const getLocalYearMonth = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}`;
+    };
+
+    const hoje = getLocalISODate(new Date());
+    const mesAtual = getLocalYearMonth(new Date());
 
     const [filtroDia, setFiltroDia] = useState(hoje);
     const [filtroMes, setFiltroMes] = useState(mesAtual);
