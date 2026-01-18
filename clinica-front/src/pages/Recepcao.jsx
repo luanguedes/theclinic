@@ -336,6 +336,13 @@ export default function Recepcao() {
                                                 <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${getStatusColor(item.status)}`}>
                                                     {item.status.replace('_', ' ')}
                                                 </span>
+                                                {item.triagem_realizada && (
+                                                    <div className="mt-2">
+                                                        <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30">
+                                                            Triagem Realizada
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-8 py-6 relative">
                                                 <div className="flex items-center gap-3">

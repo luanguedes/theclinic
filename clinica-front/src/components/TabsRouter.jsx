@@ -20,6 +20,7 @@ const Convenios = lazy(() => import('../pages/Convenios'));
 const DadosClinica = lazy(() => import('../pages/DadosClinica'));
 const MarcarConsulta = lazy(() => import('../pages/MarcarConsulta'));
 const Recepcao = lazy(() => import('../pages/Recepcao'));
+const Triagem = lazy(() => import('../pages/Triagem'));
 const Bloqueios = lazy(() => import('../pages/Bloqueios'));
 const Logs = lazy(() => import('../pages/Logs'));
 
@@ -46,6 +47,7 @@ const renderRoutes = (locationOverride) => (
     <Route path="/profissionais/:id" element={<PrivateRoute><ProfissionalForm /></PrivateRoute>} />
     <Route path="/especialidades" element={<PrivateRoute><Especialidades /></PrivateRoute>} />
     <Route path="/recepcao" element={<PrivateRoute><Recepcao /></PrivateRoute>} />
+    <Route path="/triagem" element={<PrivateRoute><Triagem /></PrivateRoute>} />
     <Route path="/agenda/marcar" element={<PrivateRoute><MarcarConsulta /></PrivateRoute>} />
     <Route path="/agenda/configurar" element={<PrivateRoute><ConfigurarAgenda /></PrivateRoute>} />
     <Route path="/agenda/configurar/nova" element={<PrivateRoute><CriarAgenda /></PrivateRoute>} />

@@ -209,7 +209,7 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
 
     # Filtros Avançados
     def get_queryset(self):
-        queryset = Agendamento.objects.all()
+        queryset = Agendamento.objects.all().select_related('triagem')
 
         # 🔥 QUALQUER ROTA COM PK (detail=True) IGNORA FILTROS DE LISTAGEM
         if self.kwargs.get('pk'):

@@ -41,6 +41,9 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     fatura_pago = serializers.SerializerMethodField()
     fatura_forma_pagamento = serializers.SerializerMethodField()
     detalhes_pdf = serializers.SerializerMethodField()
+    triagem_realizada = serializers.SerializerMethodField()
+    triagem_id = serializers.SerializerMethodField()
+    triagem_realizada_em = serializers.SerializerMethodField()
 
     class Meta:
         model = Agendamento
@@ -143,3 +146,17 @@ class AgendamentoSerializer(serializers.ModelSerializer):
             "clinica_bairro": f"{clinica.bairro} - {clinica.cidade}",
             "clinica_telefone": clinica.telefone
         }
+
+    def _get_triagem(self, obj):
+        return getattr(obj, 'triagem', None)
+
+    def get_triagem_realizada(self, obj):
+        return self._get_triagem(obj) is not None
+
+    def get_triagem_id(self, obj):
+        triagem = self._get_triagem(obj)
+        return triagem.id if triagem else None
+
+    def get_triagem_realizada_em(self, obj):
+        triagem = self._get_triagem(obj)
+        return triagem.criado_em if triagem else None
