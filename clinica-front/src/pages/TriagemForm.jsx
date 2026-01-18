@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+ï»¿import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -208,13 +208,13 @@ export default function TriagemForm() {
                     {agendamento?.nome_paciente}
                   </div>
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    {agendamento?.nome_profissional} • {agendamento?.nome_especialidade}
+                    {agendamento?.nome_profissional} â€¢ {agendamento?.nome_especialidade}
                   </div>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Atendimento</div>
                   <div className="text-sm font-black text-slate-700 dark:text-slate-200">
-                    {agendamento?.data} • {agendamento?.horario?.slice(0, 5)}
+                    {agendamento?.data} â€¢ {agendamento?.horario?.slice(0, 5)}
                   </div>
                 </div>
               </div>
