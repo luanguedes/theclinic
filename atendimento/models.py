@@ -42,6 +42,20 @@ def classificar_obesidade(imc):
     return 'Obesidade Grau III'
 
 
+def classificar_pressao(sistolica, diastolica):
+    if sistolica is None or diastolica is None:
+        return None
+    if sistolica >= 180 or diastolica >= 120:
+        return 'Crise Hipertensiva'
+    if sistolica >= 140 or diastolica >= 90:
+        return 'Hipertensao Grau 2'
+    if sistolica >= 130 or diastolica >= 80:
+        return 'Hipertensao Grau 1'
+    if 120 <= sistolica <= 129 and diastolica < 80:
+        return 'Pressao Elevada'
+    return 'Pressao Normal'
+
+
 class Triagem(models.Model):
     agendamento = models.OneToOneField(
         Agendamento,
@@ -75,6 +89,7 @@ class Triagem(models.Model):
     imc = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     classificacao_imc = models.CharField(max_length=40, blank=True)
     obesidade_grau = models.CharField(max_length=40, blank=True)
+    pressao_classificacao = models.CharField(max_length=40, blank=True)
 
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -84,6 +99,10 @@ class Triagem(models.Model):
         self.imc = imc
         self.classificacao_imc = classificar_imc(imc) or ''
         self.obesidade_grau = classificar_obesidade(imc) or ''
+        self.pressao_classificacao = classificar_pressao(
+            self.pressao_sistolica,
+            self.pressao_diastolica
+        ) or ''
 
     def save(self, *args, **kwargs):
         self.recalcular_indices()

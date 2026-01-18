@@ -40,6 +40,15 @@ const classificarObesidade = (imc) => {
   return 'Obesidade Grau III';
 };
 
+const classificarPressao = (sistolica, diastolica) => {
+  if (!sistolica || !diastolica) return '-';
+  if (sistolica >= 180 || diastolica >= 120) return 'Crise Hipertensiva';
+  if (sistolica >= 140 || diastolica >= 90) return 'Hipertensao Grau 2';
+  if (sistolica >= 130 || diastolica >= 80) return 'Hipertensao Grau 1';
+  if (sistolica >= 120 && sistolica <= 129 && diastolica < 80) return 'Pressao Elevada';
+  return 'Pressao Normal';
+};
+
 export default function TriagemForm() {
   const { agendamentoId } = useParams();
   const { api } = useAuth();
@@ -169,6 +178,12 @@ export default function TriagemForm() {
   const imc = useMemo(() => calcularImc(pesoNum, alturaNum), [pesoNum, alturaNum]);
   const classificacaoImc = classificarImc(imc);
   const obesidadeGrau = classificarObesidade(imc);
+  const pressaoClassificacao = useMemo(() => {
+    const sistolica = Number(triagemForm.pressao_sistolica);
+    const diastolica = Number(triagemForm.pressao_diastolica);
+    if (!sistolica || !diastolica) return '-';
+    return classificarPressao(sistolica, diastolica);
+  }, [triagemForm.pressao_sistolica, triagemForm.pressao_diastolica]);
 
   const inputClass = 'w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white transition-all font-bold';
   const labelClass = 'text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block';
@@ -378,7 +393,7 @@ export default function TriagemForm() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
               <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">IMC</div>
                 <div className="text-2xl font-black text-blue-600">{imc ?? '-'}</div>
@@ -390,6 +405,10 @@ export default function TriagemForm() {
               <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Obesidade</div>
                 <div className="text-sm font-black text-slate-700 dark:text-slate-200">{obesidadeGrau}</div>
+              </div>
+              <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Classificacao Pressao</div>
+                <div className="text-sm font-black text-slate-700 dark:text-slate-200">{pressaoClassificacao}</div>
               </div>
             </div>
 

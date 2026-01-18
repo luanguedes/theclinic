@@ -192,7 +192,7 @@ export default function Triagem() {
                       <td className="px-8 py-6">
                         {item.triagem_realizada ? (
                           <span className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30">
-                            Triagem Realizada
+                            Realizada
                           </span>
                         ) : (
                           <span className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700">

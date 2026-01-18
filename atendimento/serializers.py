@@ -13,6 +13,7 @@ class TriagemSerializer(serializers.ModelSerializer):
             'imc',
             'classificacao_imc',
             'obesidade_grau',
+            'pressao_classificacao',
             'realizado_por',
             'criado_em',
             'atualizado_em',
