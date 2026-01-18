@@ -57,11 +57,20 @@ class Triagem(models.Model):
 
     queixa_principal = models.CharField(max_length=255, blank=True)
     observacoes_gerais = models.TextField(blank=True)
+    alergias = models.TextField(blank=True)
+    medicacoes_em_uso = models.TextField(blank=True)
+    historico_relevante = models.TextField(blank=True)
+    historico_flags = models.JSONField(blank=True, null=True, default=dict)
 
     peso_kg = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     altura_cm = models.PositiveIntegerField(null=True, blank=True)
     pressao_sistolica = models.PositiveIntegerField(null=True, blank=True)
     pressao_diastolica = models.PositiveIntegerField(null=True, blank=True)
+    temperatura_c = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    frequencia_cardiaca = models.PositiveIntegerField(null=True, blank=True)
+    frequencia_respiratoria = models.PositiveIntegerField(null=True, blank=True)
+    saturacao = models.PositiveIntegerField(null=True, blank=True)
+    glicemia_capilar = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
 
     imc = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     classificacao_imc = models.CharField(max_length=40, blank=True)
