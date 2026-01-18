@@ -69,7 +69,7 @@ export default function TabsRouter() {
 
   const cachedPaths = publicOnly
     ? [currentPath]
-    : Array.from(new Set([currentPath, ...tabs.map((t) => t.path)]));
+    : Array.from(new Set([currentPath, ...tabs.map((t) => t.lastPath || t.path)]));
 
   return (
     <Suspense fallback={<PageLoader />}>

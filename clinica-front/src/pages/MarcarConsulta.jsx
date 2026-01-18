@@ -362,9 +362,29 @@ export default function MarcarConsulta() {
       }
   };
 
+  const mascaraCPF = (v) => v
+    .replace(/\D/g, '')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+    .slice(0, 14);
+
+  const mascaraTelefone = (v) => v
+    .replace(/\D/g, '')
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2')
+    .slice(0, 15);
+
+  const mascaraCEP = (v) => v
+    .replace(/\D/g, '')
+    .replace(/(\d{5})(\d)/, '$1-$2')
+    .slice(0, 9);
+
   const handlePacienteChange = (e) => { 
       let { name, value } = e.target; 
-      if (name === 'cpf') value = value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').slice(0, 14);
+      if (name === 'cpf') value = mascaraCPF(value);
+      if (name === 'telefone') value = mascaraTelefone(value);
+      if (name === 'cep') value = mascaraCEP(value);
       setNovoPaciente({ ...novoPaciente, [name]: value }); 
   };
 
@@ -375,7 +395,7 @@ export default function MarcarConsulta() {
     try {
       const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
       const data = await response.json();
-      if (!data.erro) setNovoPaciente(prev => ({ ...prev, logradouro: data.logradouro, bairro: data.bairro, city: data.localidade, estado: data.uf }));
+      if (!data.erro) setNovoPaciente(prev => ({ ...prev, logradouro: data.logradouro, bairro: data.bairro, cidade: data.localidade, estado: data.uf }));
     } finally { setLoadingCep(false); }
   };
 
@@ -621,7 +641,7 @@ export default function MarcarConsulta() {
                         <div className="col-span-2"><label className="font-bold block mb-1 uppercase text-slate-500">Número</label><input id="numero_paciente_modal" name="numero" value={novoPaciente.numero} onChange={handlePacienteChange} className={inputClass}/></div>
                         <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Complemento</label><input name="complemento" value={novoPaciente.complemento} onChange={handlePacienteChange} className={inputClass}/></div>
                         <div className="col-span-4"><label className="font-bold block mb-1 uppercase text-slate-500">Bairro</label><input name="bairro" value={novoPaciente.bairro} onChange={handlePacienteChange} className={inputClass}/></div>
-                        <div className="col-span-4"><label className="font-bold block mb-1 uppercase text-slate-500">Cidade</label><input name="city" value={novoPaciente.city} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-4"><label className="font-bold block mb-1 uppercase text-slate-500">Cidade</label><input name="cidade" value={novoPaciente.cidade} onChange={handlePacienteChange} className={inputClass}/></div>
                         <div className="col-span-2"><label className="font-bold block mb-1 uppercase text-slate-500">UF</label><input name="estado" value={novoPaciente.estado} onChange={handlePacienteChange} className={inputClass}/></div>
 
                         <div className="col-span-12 pt-6 border-t dark:border-slate-700 flex justify-end gap-4 mt-4">

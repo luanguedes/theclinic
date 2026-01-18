@@ -37,7 +37,9 @@ export function TabsProvider({ children }) {
     const tabPath = currentDef.path;
     setTabs((prev) => {
       const exists = prev.find((t) => t.path === tabPath);
-      if (exists) return prev;
+      if (exists) {
+        return prev.map((t) => t.path === tabPath ? { ...t, lastPath: currentPath } : t);
+      }
 
       if (prev.length >= MAX_TABS) {
         notify?.warning?.("Limite de abas atingido. Feche uma aba para abrir outra.");
@@ -48,12 +50,13 @@ export function TabsProvider({ children }) {
         path: tabPath,
         title: currentDef.title,
         icon: currentDef.icon,
-        pinned: false
+        pinned: false,
+        lastPath: currentPath
       }];
 
       return next;
     });
-  }, [currentPath, currentDef]);
+  }, [currentPath, currentDef, user, notify]);
 
   useEffect(() => {
     if (!storageKey) {
@@ -72,7 +75,8 @@ export function TabsProvider({ children }) {
             path: def?.path || t.path,
             title: t.title || def?.title || 'Página',
             icon: def?.icon,
-            pinned: true
+            pinned: true,
+            lastPath: def?.path || t.path
           };
         });
       setTabs(hydrated);

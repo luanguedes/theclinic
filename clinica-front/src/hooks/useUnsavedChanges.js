@@ -1,17 +1,19 @@
 import { useEffect } from 'react';
-import { unstable_useBlocker as useBlocker } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useUnsavedChangesRegistry } from '../context/UnsavedChangesContext';
 
 const DEFAULT_MESSAGE = 'Existem alteracoes nao salvas. Deseja sair sem salvar?';
 
 export default function useUnsavedChanges(isDirty, message = DEFAULT_MESSAGE) {
-  const blocker = useBlocker(isDirty);
+  const location = useLocation();
+  const registry = useUnsavedChangesRegistry();
 
   useEffect(() => {
-    if (blocker.state !== 'blocked') return;
-    const shouldLeave = window.confirm(message);
-    if (shouldLeave) blocker.proceed();
-    else blocker.reset();
-  }, [blocker, message]);
+    if (!registry) return;
+    const key = `${location.pathname}${location.search}${location.hash}`;
+    registry.setDirty(key, isDirty, message);
+    return () => registry.setDirty(key, false);
+  }, [isDirty, location.pathname, location.search, location.hash, message, registry]);
 
   useEffect(() => {
     if (!isDirty) return;

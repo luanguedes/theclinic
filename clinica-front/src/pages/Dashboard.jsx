@@ -6,7 +6,7 @@ import Layout from '../components/Layout';
 import { 
     Users, DollarSign, Activity, Clock, TrendingUp, 
     CalendarCheck, ChevronRight, Stethoscope,
-    Calendar, Lock, Eye, EyeOff, Loader2 
+    Calendar, Lock, Eye, EyeOff, Loader2, RefreshCw 
 } from 'lucide-react';
 
 // --- COMPONENTE DE BLOQUEIO VISUAL (Mantido) ---
@@ -33,8 +33,21 @@ export default function Dashboard() {
     const isFinanceiro = user?.acesso_faturamento || isSuperUser;
 
     // --- FILTROS ---
-    const hoje = new Date().toISOString().split('T')[0];
-    const mesAtual = new Date().toISOString().slice(0, 7);
+    const getLocalISODate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const getLocalYearMonth = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}`;
+    };
+
+    const hoje = getLocalISODate(new Date());
+    const mesAtual = getLocalYearMonth(new Date());
 
     const [filtroDia, setFiltroDia] = useState(hoje);
     const [filtroMes, setFiltroMes] = useState(mesAtual);
@@ -253,10 +266,20 @@ export default function Dashboard() {
                             <div>
                                 <h3 className="font-black text-xl text-slate-800 dark:text-white uppercase tracking-tighter">Agenda Diária</h3>
                                 <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Sincronizado agora</p>
+                            </div>                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={carregarDados}
+                                    disabled={loading}
+                                    className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-all shadow-sm disabled:opacity-60"
+                                    title="Atualizar"
+                                >
+                                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                                </button>
+                                <Link to="/recepcao" className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-xs font-black uppercase tracking-widest px-5 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-all shadow-sm flex items-center gap-2">
+                                    RECEPÇÃO <ChevronRight size={14}/>
+                                </Link>
                             </div>
-                            <Link to="/recepcao" className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-xs font-black uppercase tracking-widest px-5 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-all shadow-sm flex items-center gap-2">
-                                Painel Completo <ChevronRight size={14}/>
-                            </Link>
                         </div>
                         
                         <div className="flex-1 overflow-auto">
