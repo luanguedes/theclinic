@@ -24,6 +24,9 @@ const Triagem = lazy(() => import('../pages/Triagem'));
 const TriagemForm = lazy(() => import('../pages/TriagemForm'));
 const Bloqueios = lazy(() => import('../pages/Bloqueios'));
 const Logs = lazy(() => import('../pages/Logs'));
+const ExamesProcedimentos = lazy(() => import('../pages/ExamesProcedimentos'));
+const Medicamentos = lazy(() => import('../pages/Medicamentos'));
+const ImportacaoTabelas = lazy(() => import('../pages/ImportacaoTabelas'));
 
 const PageLoader = () => (
   <div className="flex flex-col items-center justify-center h-screen w-screen bg-slate-50 dark:bg-slate-950">
@@ -55,6 +58,9 @@ const renderRoutes = (locationOverride) => (
     <Route path="/agenda/configurar/nova" element={<PrivateRoute><CriarAgenda /></PrivateRoute>} />
     <Route path="/agenda/bloqueios" element={<PrivateRoute><Bloqueios /></PrivateRoute>} />
     <Route path="/convenios" element={<PrivateRoute><Convenios /></PrivateRoute>} />
+    <Route path="/exames-procedimentos" element={<PrivateRoute><ExamesProcedimentos /></PrivateRoute>} />
+    <Route path="/medicamentos" element={<PrivateRoute><Medicamentos /></PrivateRoute>} />
+    <Route path="/importacao-tabelas" element={<PrivateRoute><ImportacaoTabelas /></PrivateRoute>} />
     <Route path="/clinica" element={<PrivateRoute><DadosClinica /></PrivateRoute>} />
     <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
     <Route path="/logs" element={<PrivateRoute><Logs /></PrivateRoute>} />

@@ -1,4 +1,5 @@
 from rest_framework import viewsets, permissions, filters, status
+from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -10,11 +11,12 @@ import requests
 import base64
 
 # Imports dos Models
-from .models import Convenio, DadosClinica, ConfiguracaoSistema
+from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento
 from agendamento.models import Agendamento
 
 # Imports dos Serializers
-from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer
+from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer, MedicamentoSerializer
+from .importacao import importar_medicamentos
 
 # IMPORTANTE: Importar a funcao de disparo do WhatsApp
 try:
@@ -50,6 +52,81 @@ class ConvenioViewSet(viewsets.ModelViewSet):
             qs = qs.filter(ativo=ativo)
         return qs
 
+
+class MedicamentoViewSet(viewsets.ModelViewSet):
+    queryset = Medicamento.objects.all().order_by('nome')
+    serializer_class = MedicamentoSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['nome', 'principio_ativo', 'apresentacao', 'laboratorio', 'tarja', 'nome_busca']
+
+    def _parse_bool(self, value):
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in ['1', 'true', 'yes', 'sim']:
+            return True
+        if normalized in ['0', 'false', 'no', 'nao']:
+            return False
+        return None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+
+        situacao = self._parse_bool(params.get('situacao'))
+        if situacao is not None:
+            qs = qs.filter(situacao=situacao)
+
+        nome = params.get('nome')
+        if nome:
+            qs = qs.filter(nome__icontains=nome)
+
+        principio_ativo = params.get('principio_ativo')
+        if principio_ativo:
+            qs = qs.filter(principio_ativo__icontains=principio_ativo)
+
+        laboratorio = params.get('laboratorio')
+        if laboratorio:
+            qs = qs.filter(laboratorio__icontains=laboratorio)
+
+        tarja = params.get('tarja')
+        if tarja:
+            qs = qs.filter(tarja__icontains=tarja)
+
+        return qs
+
+    def _has_movimentacoes(self, medicamento):
+        for rel in medicamento._meta.related_objects:
+            accessor = rel.get_accessor_name()
+            try:
+                manager = getattr(medicamento, accessor)
+            except Exception:
+                continue
+            try:
+                if manager.exists():
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if self._has_movimentacoes(instance):
+            return Response(
+                {'error': 'Medicamento possui movimentacoes. Use a inativacao.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'])
+    def inativar(self, request, pk=None):
+        medicamento = self.get_object()
+        medicamento.situacao = False
+        medicamento.save(update_fields=['situacao'])
+        return Response({'status': 'inativado'})
+
 class DadosClinicaView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -72,6 +149,41 @@ class DadosClinicaView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ImportacaoTabelasView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        tipo = request.data.get('tipo')
+        arquivo = request.FILES.get('arquivo')
+
+        if not tipo:
+            return Response({'error': 'Tipo de importacao nao informado.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not arquivo:
+            return Response({'error': 'Arquivo nao informado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        handlers = {
+            'medicamentos': importar_medicamentos
+        }
+        handler = handlers.get(tipo)
+        if not handler:
+            return Response({'error': 'Tipo de importacao nao suportado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            resultado = handler(arquivo)
+        except Exception as exc:
+            return Response(
+                {'error': 'Falha ao processar importacao.', 'detalhe': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response({
+            'status': 'sucesso',
+            'tipo': tipo,
+            'resultado': resultado
+        })
 
 class ConfiguracaoSistemaView(APIView):
     permission_classes = [permissions.IsAdminUser] 

@@ -77,3 +77,19 @@ class ConfiguracaoSistema(models.Model):
     def load(cls):
         obj, created = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class Medicamento(models.Model):
+    nome = models.CharField(max_length=255)
+    principio_ativo = models.CharField(max_length=255)
+    apresentacao = models.CharField(max_length=255, blank=True)
+    laboratorio = models.CharField(max_length=255, blank=True)
+    tarja = models.CharField(max_length=100, blank=True, null=True)
+    nome_busca = models.TextField(blank=True)
+    situacao = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.nome
+
+    class Meta:
+        ordering = ['nome']

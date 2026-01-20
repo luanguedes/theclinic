@@ -39,6 +39,9 @@ const SISTEMA_ITEMS = [
   { to: '/profissionais', label: 'Profissionais', icon: Briefcase },
   { to: '/especialidades', label: 'Especialidades', icon: Heart },
   { to: '/convenios', label: 'Convenios', icon: ShieldCheck },
+  { to: '/exames-procedimentos', label: 'Exames/Procedimentos', icon: ClipboardList },
+  { to: '/medicamentos', label: 'Medicamentos', icon: ShieldCheck },
+  { to: '/importacao-tabelas', label: 'Importacao de Tabelas', icon: FileText },
   { to: '/clinica', label: 'Dados da Clinica', icon: Building2 },
   { to: '/logs', label: 'Logs de Acesso', icon: FileText }
 ];
