@@ -302,6 +302,7 @@ export default function Recepcao() {
                                 <tr>
                                     <th className="px-8 py-5">🕒 Hora / Espera</th>
                                     <th className="px-8 py-5">📍 Status</th>
+                                    <th className="px-8 py-5">Triagem</th>
                                     <th className="px-8 py-5">👤 Paciente</th>
                                     <th className="px-8 py-5">⭐ Prioridade</th>
                                     <th className="px-8 py-5">🩺 Profissional</th>
@@ -310,7 +311,7 @@ export default function Recepcao() {
                             </thead>
                             <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                                 {loading ? (
-                                    <tr><td colSpan="6" className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40}/></td></tr>
+                                    <tr><td colSpan="7" className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40}/></td></tr>
                                 ) : itensFiltrados.map((item) => {
                                     const atrasado = verificarAtraso(item.horario, item.status);
                                     const esperaMin = item.status === 'aguardando' ? calcularEspera(item.horario_chegada) : 0;
@@ -336,12 +337,14 @@ export default function Recepcao() {
                                                 <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${getStatusColor(item.status)}`}>
                                                     {item.status.replace('_', ' ')}
                                                 </span>
-                                                {item.triagem_realizada && (
-                                                    <div className="mt-2">
-                                                        <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30">
-                                                            Triagem Realizada
-                                                        </span>
-                                                    </div>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                {item.triagem_realizada ? (
+                                                    <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30">
+                                                        Realizada
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">-</span>
                                                 )}
                                             </td>
                                             <td className="px-8 py-6 relative">
