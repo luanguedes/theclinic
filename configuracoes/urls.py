@@ -7,12 +7,14 @@ from .views import (
     WhatsAppStatusView,
     WhatsAppQRCodeView,
     MedicamentoViewSet,
+    ExameViewSet,
     ImportacaoTabelasView,
 )
 
 router = DefaultRouter()
 router.register(r'convenios', ConvenioViewSet)
 router.register(r'medicamentos', MedicamentoViewSet)
+router.register(r'exames', ExameViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

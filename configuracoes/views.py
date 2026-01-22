@@ -11,12 +11,13 @@ import requests
 import base64
 
 # Imports dos Models
-from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento
+from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento, Exame
 from agendamento.models import Agendamento
 
 # Imports dos Serializers
-from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer, MedicamentoSerializer
+from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer, MedicamentoSerializer, ExameSerializer
 from .importacao import importar_medicamentos
+from .services.exames_import_service import importar_exames
 
 # IMPORTANTE: Importar a funcao de disparo do WhatsApp
 try:
@@ -127,6 +128,77 @@ class MedicamentoViewSet(viewsets.ModelViewSet):
         medicamento.save(update_fields=['situacao'])
         return Response({'status': 'inativado'})
 
+
+class ExameViewSet(viewsets.ModelViewSet):
+    queryset = Exame.objects.all().order_by('nome')
+    serializer_class = ExameSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['codigo_tuss', 'nome', 'tipo', 'search_text']
+
+    def _parse_bool(self, value):
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in ['1', 'true', 'yes', 'sim']:
+            return True
+        if normalized in ['0', 'false', 'no', 'nao']:
+            return False
+        return None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+
+        situacao = self._parse_bool(params.get('situacao'))
+        if situacao is not None:
+            qs = qs.filter(situacao=situacao)
+
+        codigo_tuss = params.get('codigo_tuss')
+        if codigo_tuss:
+            qs = qs.filter(codigo_tuss__icontains=codigo_tuss)
+
+        nome = params.get('nome')
+        if nome:
+            qs = qs.filter(nome__icontains=nome)
+
+        tipo = params.get('tipo')
+        if tipo:
+            qs = qs.filter(tipo__icontains=tipo)
+
+        return qs
+
+    def _has_movimentacoes(self, exame):
+        for rel in exame._meta.related_objects:
+            accessor = rel.get_accessor_name()
+            try:
+                manager = getattr(exame, accessor)
+            except Exception:
+                continue
+            try:
+                if manager.exists():
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if self._has_movimentacoes(instance):
+            return Response(
+                {'error': 'Exame possui movimentacoes. Use a inativacao.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'])
+    def inativar(self, request, pk=None):
+        exame = self.get_object()
+        exame.situacao = False
+        exame.save(update_fields=['situacao'])
+        return Response({'status': 'inativado'})
+
 class DadosClinicaView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -165,7 +237,8 @@ class ImportacaoTabelasView(APIView):
             return Response({'error': 'Arquivo nao informado.'}, status=status.HTTP_400_BAD_REQUEST)
 
         handlers = {
-            'medicamentos': importar_medicamentos
+            'medicamentos': importar_medicamentos,
+            'exames': importar_exames,
         }
         handler = handlers.get(tipo)
         if not handler:

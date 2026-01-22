@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento
+from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento, Exame
 
 class ConvenioSerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,4 +48,31 @@ class MedicamentoSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         if any(k in validated_data for k in ['nome', 'apresentacao', 'principio_ativo']):
             validated_data['nome_busca'] = self._build_nome_busca(validated_data)
+        return super().update(instance, validated_data)
+
+
+class ExameSerializer(serializers.ModelSerializer):
+    search_text = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Exame
+        fields = '__all__'
+
+    def _compose_search_text(self, nome, codigo):
+        if nome and codigo:
+            return f"{nome} ({codigo})"
+        return nome or codigo or ""
+
+    def _build_search_text(self, attrs):
+        nome = attrs.get('nome') if 'nome' in attrs else getattr(self.instance, 'nome', '')
+        codigo = attrs.get('codigo_tuss') if 'codigo_tuss' in attrs else getattr(self.instance, 'codigo_tuss', '')
+        return self._compose_search_text(nome or '', codigo or '')
+
+    def create(self, validated_data):
+        validated_data['search_text'] = self._build_search_text(validated_data)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if any(k in validated_data for k in ['nome', 'codigo_tuss']):
+            validated_data['search_text'] = self._build_search_text(validated_data)
         return super().update(instance, validated_data)

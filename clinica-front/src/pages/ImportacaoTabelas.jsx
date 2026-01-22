@@ -71,6 +71,7 @@ export default function ImportacaoTabelas() {
             >
               <option value="">Selecione...</option>
               <option value="medicamentos">Medicamentos</option>
+              <option value="exames">Exames (TUSS)</option>
             </select>
           </div>
 
