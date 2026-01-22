@@ -122,33 +122,51 @@ def importar_cids(arquivo):
     if not registros:
         raise ValueError('Arquivo de CIDs vazio ou ilegivel.')
 
+    codigos = [item.get('codigo') for item in registros if item.get('codigo')]
+    existentes = {
+        cid.codigo: cid
+        for cid in Cid.objects.filter(codigo__in=codigos)
+    }
+
+    novos = []
+    atualizaveis = []
     total_processados = 0
-    criados = 0
-    atualizados = 0
+
+    for item in registros:
+        codigo = item.get('codigo')
+        nome = item.get('nome')
+        search_text = item.get('search_text') or ''
+        if not codigo or not nome:
+            continue
+
+        total_processados += 1
+        existente = existentes.get(codigo)
+        if existente:
+            existente.nome = nome
+            existente.search_text = search_text
+            existente.situacao = True
+            atualizaveis.append(existente)
+        else:
+            novos.append(Cid(
+                codigo=codigo,
+                nome=nome,
+                search_text=search_text,
+                situacao=True
+            ))
 
     with transaction.atomic():
-        for item in registros:
-            codigo = item.get('codigo')
-            nome = item.get('nome')
-            search_text = item.get('search_text')
-            if not codigo or not nome:
-                continue
-            _, created = Cid.objects.update_or_create(
-                codigo=codigo,
-                defaults={
-                    'nome': nome,
-                    'search_text': search_text or '',
-                    'situacao': True
-                }
-            )
-            total_processados += 1
-            if created:
-                criados += 1
-            else:
-                atualizados += 1
+        if novos:
+            for i in range(0, len(novos), 5000):
+                Cid.objects.bulk_create(novos[i:i + 5000], ignore_conflicts=True)
+        if atualizaveis:
+            for i in range(0, len(atualizaveis), 5000):
+                Cid.objects.bulk_update(
+                    atualizaveis[i:i + 5000],
+                    ['nome', 'search_text', 'situacao']
+                )
 
     return {
         'total_processados': total_processados,
-        'criados': criados,
-        'atualizados': atualizados
+        'criados': len(novos),
+        'atualizados': len(atualizaveis)
     }
