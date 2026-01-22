@@ -33,18 +33,23 @@ const AGENDA_ITEMS = [
   { to: '/agenda/bloqueios', label: 'Bloqueios e Feriados', icon: CalendarX }
 ];
 
-const SISTEMA_ITEMS = [
+const CADASTROS_ITEMS = [
   { to: '/pacientes', label: 'Pacientes', icon: Users },
-  { to: '/operadores', label: 'Operadores', icon: ShieldCheck },
   { to: '/profissionais', label: 'Profissionais', icon: Briefcase },
   { to: '/especialidades', label: 'Especialidades', icon: Heart },
   { to: '/convenios', label: 'Convenios', icon: ShieldCheck },
   { to: '/exames-procedimentos', label: 'Exames/Procedimentos', icon: ClipboardList },
-  { to: '/medicamentos', label: 'Medicamentos', icon: ShieldCheck },
+  { to: '/medicamentos', label: 'Medicamentos', icon: ShieldCheck }
+];
+
+const SISTEMA_ITEMS = [
+  { to: '/operadores', label: 'Operadores', icon: ShieldCheck },
   { to: '/importacao-tabelas', label: 'Importacao de Tabelas', icon: FileText },
   { to: '/clinica', label: 'Dados da Clinica', icon: Building2 },
   { to: '/logs', label: 'Logs de Acesso', icon: FileText }
 ];
+
+const CADASTROS_PRIVILEGE_ITEMS = [...CADASTROS_ITEMS];
 
 const SISTEMA_PRIVILEGE_ITEMS = [
   ...SISTEMA_ITEMS.filter((item) => item.to !== '/logs'),
@@ -55,7 +60,8 @@ const fallbackModuleAccess = (user, moduleKey) => {
   if (!user) return false;
   if (moduleKey === 'agenda') return !!user.acesso_agendamento;
   if (moduleKey === 'atendimento') return !!user.acesso_atendimento;
-  if (moduleKey === 'sistema') return !!user.acesso_cadastros;
+  if (moduleKey === 'cadastros') return !!user.acesso_cadastros;
+  if (moduleKey === 'sistema') return !!user.acesso_configuracoes;
   return false;
 };
 
@@ -95,6 +101,13 @@ export const MENU_ITEMS = [
     items: AGENDA_ITEMS
   },
   {
+    key: 'cadastros',
+    label: 'Cadastros',
+    icon: Users,
+    access: (u) => hasModuleAccess(u, 'cadastros', CADASTROS_ITEMS),
+    items: CADASTROS_ITEMS
+  },
+  {
     key: 'sistema',
     label: 'Sistema',
     icon: Settings,
@@ -111,5 +124,6 @@ export const getPrivilegeModules = () => ([
   { key: 'dashboard', label: 'Dashboard', items: [DASHBOARD_ITEM] },
   { key: 'atendimento', label: 'Atendimento', items: ATENDIMENTO_ITEMS },
   { key: 'agenda', label: 'Agenda', items: AGENDA_ITEMS },
+  { key: 'cadastros', label: 'Cadastros', items: CADASTROS_PRIVILEGE_ITEMS },
   { key: 'sistema', label: 'Sistema', items: SISTEMA_PRIVILEGE_ITEMS }
 ]);

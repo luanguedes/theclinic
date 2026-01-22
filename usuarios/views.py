@@ -94,7 +94,8 @@ class MeView(APIView):
                 module_map = {
                     'agenda': getattr(user, 'acesso_agendamento', False),
                     'atendimento': getattr(user, 'acesso_atendimento', False),
-                    'sistema': getattr(user, 'acesso_cadastros', False)
+                    'cadastros': getattr(user, 'acesso_cadastros', False),
+                    'sistema': getattr(user, 'acesso_configuracoes', False),
                 }
                 fallback_modules = [k for k, v in module_map.items() if v]
                 if fallback_modules:

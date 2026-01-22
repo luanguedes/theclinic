@@ -200,7 +200,7 @@ export default function CadastroOperador() {
       if (privilegeModules.length > 0) {
         dadosParaEnviar.acesso_agendamento = computeModuleAccess('agenda');
         dadosParaEnviar.acesso_atendimento = computeModuleAccess('atendimento');
-        dadosParaEnviar.acesso_cadastros = computeModuleAccess('sistema');
+        dadosParaEnviar.acesso_cadastros = computeModuleAccess('cadastros');
       }
       
       if (!dadosParaEnviar.password) delete dadosParaEnviar.password;
