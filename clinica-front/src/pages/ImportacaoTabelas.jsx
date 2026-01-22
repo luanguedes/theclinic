@@ -35,7 +35,10 @@ export default function ImportacaoTabelas() {
 
     setLoading(true);
     try {
-      await api.post('configuracoes/importacao/tabelas/', formData, {
+      const endpoint = tipo === 'cids'
+        ? 'configuracoes/cids/importar/'
+        : 'configuracoes/importacao/tabelas/';
+      await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       notify.success("Importacao concluida com sucesso.");
@@ -72,6 +75,7 @@ export default function ImportacaoTabelas() {
               <option value="">Selecione...</option>
               <option value="medicamentos">Medicamentos</option>
               <option value="exames">Exames (TUSS)</option>
+              <option value="cids">CIDs</option>
             </select>
           </div>
 

@@ -11,13 +11,14 @@ import requests
 import base64
 
 # Imports dos Models
-from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento, Exame
+from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento, Exame, Cid
 from agendamento.models import Agendamento
 
 # Imports dos Serializers
-from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer, MedicamentoSerializer, ExameSerializer
+from .serializers import ConvenioSerializer, DadosClinicaSerializer, ConfiguracaoSistemaSerializer, MedicamentoSerializer, ExameSerializer, CidSerializer
 from .importacao import importar_medicamentos
 from .services.exames_import_service import importar_exames
+from .services.cids_import_service import importar_cids
 
 # IMPORTANTE: Importar a funcao de disparo do WhatsApp
 try:
@@ -199,6 +200,58 @@ class ExameViewSet(viewsets.ModelViewSet):
         exame.save(update_fields=['situacao'])
         return Response({'status': 'inativado'})
 
+
+class CidViewSet(viewsets.ModelViewSet):
+    queryset = Cid.objects.all().order_by('codigo')
+    serializer_class = CidSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['codigo', 'nome', 'search_text']
+
+    def _parse_bool(self, value):
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in ['1', 'true', 'yes', 'sim']:
+            return True
+        if normalized in ['0', 'false', 'no', 'nao']:
+            return False
+        return None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+
+        situacao = self._parse_bool(params.get('situacao'))
+        if situacao is not None:
+            qs = qs.filter(situacao=situacao)
+        else:
+            qs = qs.filter(situacao=True)
+
+        codigo = params.get('codigo')
+        if codigo:
+            qs = qs.filter(codigo__icontains=codigo)
+
+        nome = params.get('nome')
+        if nome:
+            qs = qs.filter(nome__icontains=nome)
+
+        return qs
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'error': 'CID nao pode ser excluido. Use a inativacao.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    @action(detail=True, methods=['post'])
+    def inativar(self, request, pk=None):
+        cid = self.get_object()
+        cid.situacao = False
+        cid.save(update_fields=['situacao'])
+        return Response({'status': 'inativado'})
+
 class DadosClinicaView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -239,6 +292,7 @@ class ImportacaoTabelasView(APIView):
         handlers = {
             'medicamentos': importar_medicamentos,
             'exames': importar_exames,
+            'cids': importar_cids,
         }
         handler = handlers.get(tipo)
         if not handler:
@@ -255,6 +309,30 @@ class ImportacaoTabelasView(APIView):
         return Response({
             'status': 'sucesso',
             'tipo': tipo,
+            'resultado': resultado
+        })
+
+
+class ImportacaoCidsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        arquivo = request.FILES.get('arquivo')
+        if not arquivo:
+            return Response({'error': 'Arquivo nao informado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            resultado = importar_cids(arquivo)
+        except Exception as exc:
+            return Response(
+                {'error': 'Falha ao processar importacao de CIDs.', 'detalhe': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response({
+            'status': 'sucesso',
+            'tipo': 'cids',
             'resultado': resultado
         })
 

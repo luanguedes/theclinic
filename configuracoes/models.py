@@ -114,3 +114,16 @@ class Exame(models.Model):
 
     class Meta:
         ordering = ['nome']
+
+
+class Cid(models.Model):
+    codigo = models.CharField(max_length=10, unique=True, db_index=True)
+    nome = models.CharField(max_length=500)
+    search_text = models.CharField(max_length=600, db_index=True)
+    situacao = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.codigo} - {self.nome}"
+
+    class Meta:
+        ordering = ['codigo']

@@ -39,7 +39,8 @@ const CADASTROS_ITEMS = [
   { to: '/especialidades', label: 'Especialidades', icon: Heart },
   { to: '/convenios', label: 'Convenios', icon: ShieldCheck },
   { to: '/exames-procedimentos', label: 'Exames/Procedimentos', icon: ClipboardList },
-  { to: '/medicamentos', label: 'Medicamentos', icon: ShieldCheck }
+  { to: '/medicamentos', label: 'Medicamentos', icon: ShieldCheck },
+  { to: '/cids', label: 'CIDs', icon: FileText }
 ];
 
 const SISTEMA_ITEMS = [

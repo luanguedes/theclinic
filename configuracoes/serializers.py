@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento, Exame
+from .models import Convenio, DadosClinica, ConfiguracaoSistema, Medicamento, Exame, Cid
 
 class ConvenioSerializer(serializers.ModelSerializer):
     class Meta:
@@ -75,4 +75,43 @@ class ExameSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         if any(k in validated_data for k in ['nome', 'codigo_tuss']):
             validated_data['search_text'] = self._build_search_text(validated_data)
+        return super().update(instance, validated_data)
+
+
+class CidSerializer(serializers.ModelSerializer):
+    search_text = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Cid
+        fields = '__all__'
+
+    def _compose_search_text(self, codigo, nome, codigo_puro=None):
+        partes = [p for p in [codigo, codigo_puro, nome] if p]
+        return " ".join(partes).strip()
+
+    def _build_search_text(self, attrs):
+        codigo = attrs.get('codigo') if 'codigo' in attrs else getattr(self.instance, 'codigo', '')
+        nome = attrs.get('nome') if 'nome' in attrs else getattr(self.instance, 'nome', '')
+        codigo_puro = None
+        if 'codigo_puro' in attrs:
+            codigo_puro = attrs.get('codigo_puro')
+        return self._compose_search_text(codigo or '', nome or '', codigo_puro or None)
+
+    def create(self, validated_data):
+        codigo_puro = validated_data.pop('codigo_puro', None)
+        validated_data['search_text'] = self._compose_search_text(
+            validated_data.get('codigo'),
+            validated_data.get('nome'),
+            codigo_puro
+        )
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if any(k in validated_data for k in ['codigo', 'nome']):
+            codigo_puro = validated_data.pop('codigo_puro', None)
+            validated_data['search_text'] = self._compose_search_text(
+                validated_data.get('codigo', instance.codigo),
+                validated_data.get('nome', instance.nome),
+                codigo_puro
+            )
         return super().update(instance, validated_data)

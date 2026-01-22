@@ -8,13 +8,16 @@ from .views import (
     WhatsAppQRCodeView,
     MedicamentoViewSet,
     ExameViewSet,
+    CidViewSet,
     ImportacaoTabelasView,
+    ImportacaoCidsView,
 )
 
 router = DefaultRouter()
 router.register(r'convenios', ConvenioViewSet)
 router.register(r'medicamentos', MedicamentoViewSet)
 router.register(r'exames', ExameViewSet)
+router.register(r'cids', CidViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -28,4 +31,5 @@ urlpatterns = [
     path('sistema/whatsapp_status/', WhatsAppStatusView.as_view(), name='whatsapp-status'),
     path('sistema/whatsapp_qrcode/', WhatsAppQRCodeView.as_view(), name='whatsapp-qrcode'),
     path('importacao/tabelas/', ImportacaoTabelasView.as_view(), name='importacao-tabelas'),
+    path('cids/importar/', ImportacaoCidsView.as_view(), name='importacao-cids'),
 ]
