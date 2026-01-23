@@ -40,6 +40,8 @@ export default function ImportacaoTabelas() {
     try {
       const endpoint = tipo === 'cids'
         ? 'configuracoes/cids/importar/'
+        : tipo === 'especialidades_cbo'
+        ? 'especialidades/importar_cbo/'
         : 'configuracoes/importacao/tabelas/';
       await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -79,6 +81,7 @@ export default function ImportacaoTabelas() {
               <option value="medicamentos">Medicamentos</option>
               <option value="exames">Exames (TUSS)</option>
               <option value="cids">CIDs</option>
+              <option value="especialidades_cbo">Especialidades (CBO)</option>
             </select>
           </div>
 

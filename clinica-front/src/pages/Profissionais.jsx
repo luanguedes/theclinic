@@ -79,15 +79,22 @@ export default function Profissionais() {
     const filterTypeOptions = [
         { value: 'texto', label: 'Busca Geral' },
         { value: 'cpf', label: 'CPF' },
-        { value: 'especialidade_id', label: 'Especialidade' }
+        { value: 'especialidade_id', label: 'Especialidade (CBO)' }
     ];
+
+    const getEspecialidadeLabel = (especialidade) => {
+        if (!especialidade) return '';
+        return especialidade.codigo_visual
+            ? `${especialidade.nome} (${especialidade.codigo_visual})`
+            : especialidade.nome;
+    };
 
     const addFilter = () => {
         if (!filterValue) return;
         const typeLabel = filterTypeOptions.find((o) => o.value === filterType)?.label || 'Filtro';
         let display = filterValue;
         if (filterType === 'especialidade_id') {
-            display = especialidadesFilter.find((o) => String(o.id) === String(filterValue))?.nome || filterValue;
+            display = getEspecialidadeLabel(especialidadesFilter.find((o) => String(o.id) === String(filterValue))) || filterValue;
         }
         const newFilter = { id: Date.now(), type: filterType, value: filterValue, display: `${typeLabel}: ${display}` };
         const cleanFilters = activeFilters.filter((f) => f.type !== filterType);
@@ -118,7 +125,7 @@ export default function Profissionais() {
                 <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={commonClass}>
                     <option value="">Selecione...</option>
                     {especialidadesFilter.map((opt) => (
-                        <option key={opt.id} value={opt.id}>{opt.nome}</option>
+                        <option key={opt.id} value={opt.id}>{getEspecialidadeLabel(opt)}</option>
                     ))}
                 </select>
             );
@@ -216,8 +223,11 @@ export default function Profissionais() {
                                         <Briefcase size={14} className="text-blue-500"/>
                                         <span className="truncate">
                                             {p.especialidades && p.especialidades.length > 0 
-                                                ? p.especialidades.map(e => e.nome_especialidade).join(', ') 
-                                                : 'Sem Especialidade'}
+                                                ? p.especialidades.map(e => {
+                                                    const code = e.codigo_visual_especialidade || e.codigo_especialidade;
+                                                    return code ? `${e.nome_especialidade} (${code})` : e.nome_especialidade;
+                                                }).join(', ') 
+                                                : 'Sem Especialidade (CBO)'}
                                         </span>
                                     </div>
                                 </div>

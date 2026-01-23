@@ -224,7 +224,10 @@ export default function MarcarConsulta() {
     if (profissionalId) {
         api.get(`profissionais/${profissionalId}/`).then(res => {
             if (res.data && Array.isArray(res.data.especialidades)) {
-                const specs = res.data.especialidades.map(v => ({ id: v.especialidade_leitura || v.especialidade_id, label: v.nome_especialidade }));
+                const specs = res.data.especialidades.map(v => {
+                    const code = v.codigo_visual_especialidade || v.codigo_especialidade;
+                    return { id: v.especialidade_leitura || v.especialidade_id, label: code ? `${v.nome_especialidade} (${code})` : v.nome_especialidade };
+                });
                 setEspecialidades(specs);
                 if(specs.length === 1) setEspecialidadeId(specs[0].id);
                 else setEspecialidadeId('');
@@ -436,7 +439,7 @@ export default function MarcarConsulta() {
                     <Filter size={16}/> Filtros
                 </div>
                 <div className="flex-1 w-full"><SearchableSelect icon={User} options={profissionais} value={profissionalId} onChange={setProfissionalId} placeholder="SELECIONE O PROFISSIONAL..." /></div>
-                <div className="flex-1 w-full"><SearchableSelect icon={Stethoscope} options={especialidades} value={especialidadeId} onChange={setEspecialidadeId} placeholder="ESPECIALIDADE..." disabled={!profissionalId} /></div>
+                <div className="flex-1 w-full"><SearchableSelect icon={Stethoscope} options={especialidades} value={especialidadeId} onChange={setEspecialidadeId} placeholder="ESPECIALIDADE (CBO)..." disabled={!profissionalId} /></div>
             </div>
         </div>
 

@@ -167,7 +167,7 @@ export const generateAppointmentReceipt = async (agendamento) => {
 
     drawField("Profissional", agendamento.nome_profissional, marginLeft, y);
     y += 8.5;
-    drawField("Especialidade", agendamento.nome_especialidade, marginLeft, y);
+    drawField("Especialidade (CBO)", agendamento.nome_especialidade, marginLeft, y);
     drawField("Registro Profissional", pdfData.profissional_registro, marginLeft + 90, y);
     y += 8.5;
     drawField("Unidade de Atendimento", pdfData.clinica_nome || "CONSULTORIO CENTRAL", marginLeft, y);

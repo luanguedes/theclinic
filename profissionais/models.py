@@ -1,7 +1,11 @@
 from django.db import models
 
 class Especialidade(models.Model):
-    nome = models.CharField(max_length=100, unique=True)
+    codigo = models.CharField(max_length=10, blank=True, null=True, unique=True, db_index=True)
+    codigo_visual = models.CharField(max_length=15, blank=True)
+    nome = models.CharField(max_length=255)
+    search_text = models.CharField(max_length=300, db_index=True, blank=True)
+    status = models.BooleanField(default=True)
 
     def __str__(self):
         return self.nome

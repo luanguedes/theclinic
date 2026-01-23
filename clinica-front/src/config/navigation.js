@@ -36,7 +36,7 @@ const AGENDA_ITEMS = [
 const CADASTROS_ITEMS = [
   { to: '/pacientes', label: 'Pacientes', icon: Users },
   { to: '/profissionais', label: 'Profissionais', icon: Briefcase },
-  { to: '/especialidades', label: 'Especialidades', icon: Heart },
+  { to: '/especialidades', label: 'Especialidades (CBO)', icon: Heart },
   { to: '/convenios', label: 'Convenios', icon: ShieldCheck },
   { to: '/exames-procedimentos', label: 'Exames/Procedimentos', icon: ClipboardList },
   { to: '/medicamentos', label: 'Medicamentos', icon: ShieldCheck },

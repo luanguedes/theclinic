@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
-import { Search, Plus, Heart, Edit, Trash2, Save, X, Loader2, Activity, Filter, ChevronDown } from 'lucide-react';
+import { Search, Plus, Heart, Edit, X, Loader2, Activity, Filter, ChevronDown } from 'lucide-react';
 
 export default function Especialidades() {
     const { api } = useAuth();
@@ -15,9 +15,13 @@ export default function Especialidades() {
     const [filterType, setFilterType] = useState('texto');
     const [filterValue, setFilterValue] = useState('');
     const [activeFilters, setActiveFilters] = useState([]);
-    
-    // Removida descrição, mantido apenas nome
-    const [form, setForm] = useState({ nome: '' });
+
+    const [form, setForm] = useState({
+        codigo: '',
+        codigo_visual: '',
+        nome: '',
+        status: true
+    });
     const [editingId, setEditingId] = useState(null);
 
     useEffect(() => { if (api) fetchItems(); }, [api, page, activeFilters]);
@@ -25,7 +29,6 @@ export default function Especialidades() {
     const fetchItems = async () => {
         setLoading(true);
         try {
-            // CORREÇÃO DE ROTA: Removido 'configuracoes/'
             const params = new URLSearchParams();
             params.append('page', page);
             activeFilters.forEach((f) => {
@@ -36,41 +39,55 @@ export default function Especialidades() {
             const { data } = await api.get(`especialidades/?${params.toString()}`);
             setItems(data.results || []);
             setTotalPages(data.num_pages || Math.max(1, Math.ceil((data.count || 0) / (data.page_size || 1))));
-        } catch { notify.error("Erro ao carregar especialidades."); } 
+        } catch { notify.error("Erro ao carregar especialidades."); }
         finally { setLoading(false); }
     };
 
     const handleSave = async (e) => {
         e.preventDefault();
         try {
+            const payload = { ...form };
+            if (!payload.codigo && payload.codigo_visual) {
+                payload.codigo = payload.codigo_visual.replace(/[^0-9]/g, '');
+            }
             if (editingId) {
-                await api.put(`especialidades/${editingId}/`, form);
+                await api.put(`especialidades/${editingId}/`, payload);
                 notify.success("Atualizado!");
             } else {
-                await api.post('especialidades/', form);
+                await api.post('especialidades/', payload);
                 notify.success("Criado!");
             }
-            setModalOpen(false); 
+            setModalOpen(false);
             fetchItems();
         } catch { notify.error("Erro ao salvar."); }
     };
 
-    const handleDelete = async (id) => {
-        if (await confirmDialog("Excluir especialidade?", "Exclusão", "Sim", "Não", "danger")) {
-            try { await api.delete(`especialidades/${id}/`); notify.success("Removido."); fetchItems(); } 
-            catch { notify.error("Erro ao excluir."); }
+    const handleInativar = async (id) => {
+        if (await confirmDialog("Inativar especialidade?", "Inativar", "Sim", "Cancelar", "warning")) {
+            try { await api.post(`especialidades/${id}/inativar/`); notify.success("Inativada."); fetchItems(); }
+            catch { notify.error("Erro ao inativar."); }
         }
     };
 
     const filterTypeOptions = [
         { value: 'texto', label: 'Busca Geral' },
-        { value: 'id', label: 'Codigo' }
+        { value: 'codigo', label: 'Codigo CBO' },
+        { value: 'status', label: 'Status' }
+    ];
+
+    const statusOptions = [
+        { value: 'true', label: 'Ativo' },
+        { value: 'false', label: 'Inativo' }
     ];
 
     const addFilter = () => {
         if (!filterValue) return;
         const typeLabel = filterTypeOptions.find((o) => o.value === filterType)?.label || 'Filtro';
-        const newFilter = { id: Date.now(), type: filterType, value: filterValue, display: `${typeLabel}: ${filterValue}` };
+        let display = filterValue;
+        if (filterType === 'status') {
+            display = statusOptions.find((o) => o.value === filterValue)?.label || filterValue;
+        }
+        const newFilter = { id: Date.now(), type: filterType, value: filterValue, display: `${typeLabel}: ${display}` };
         const cleanFilters = activeFilters.filter((f) => f.type !== filterType);
         setActiveFilters([...cleanFilters, newFilter]);
         setFilterValue('');
@@ -94,6 +111,16 @@ export default function Especialidades() {
 
     const renderDynamicInput = () => {
         const commonClass = "w-full h-11 pl-3 pr-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm font-bold";
+        if (filterType === 'status') {
+            return (
+                <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={commonClass}>
+                    <option value="">Selecione...</option>
+                    {statusOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+            );
+        }
         return (
             <input
                 placeholder="Digite para buscar..."
@@ -110,10 +137,10 @@ export default function Especialidades() {
             <div className="max-w-4xl mx-auto pb-20">
                 <div className="flex justify-between items-center mb-8">
                     <div>
-                        <h1 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-2"><Heart className="text-pink-600"/> Especialidades</h1>
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Áreas de atuação da clínica</p>
+                        <h1 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-2"><Heart className="text-pink-600"/> Especialidades (CBO)</h1>
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Cadastros oficiais da CBO-S</p>
                     </div>
-                    <button onClick={() => { setForm({nome:''}); setEditingId(null); setModalOpen(true); }} className="bg-pink-600 hover:bg-pink-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg flex items-center gap-2 active:scale-95 transition-all"><Plus size={18}/> Nova</button>
+                    <button onClick={() => { setForm({ codigo: '', codigo_visual: '', nome: '', status: true }); setEditingId(null); setModalOpen(true); }} className="bg-pink-600 hover:bg-pink-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg flex items-center gap-2 active:scale-95 transition-all"><Plus size={18}/> Nova</button>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -156,14 +183,25 @@ export default function Especialidades() {
                         )}
                     </div>
                     <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {loading ? <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-pink-600"/></div> : 
+                        {loading ? <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-pink-600"/></div> :
                         items.map(item => (
                             <div key={item.id} className="p-6 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 bg-pink-50 text-pink-600 rounded-xl"><Activity size={20}/></div>
-                                    <div><h3 className="font-black text-slate-800 dark:text-white uppercase text-sm">{item.nome}</h3></div>
+                                    <div>
+                                        <h3 className="font-black text-slate-800 dark:text-white uppercase text-sm">{item.nome}</h3>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{item.codigo_visual || item.codigo || 'Sem codigo'}</p>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2"><button onClick={() => { setForm({ nome: item.nome }); setEditingId(item.id); setModalOpen(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16}/></button><button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div>
+                                <div className="flex items-center gap-3">
+                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${item.status ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                        {item.status ? 'Ativo' : 'Inativo'}
+                                    </span>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => { setForm({ codigo: item.codigo || '', codigo_visual: item.codigo_visual || '', nome: item.nome || '', status: item.status ?? true }); setEditingId(item.id); setModalOpen(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16}/></button>
+                                        <button onClick={() => handleInativar(item.id)} className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg" disabled={!item.status}><X size={16}/></button>
+                                    </div>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -193,9 +231,12 @@ export default function Especialidades() {
                 {modalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
                         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-                            <div className="bg-pink-600 p-6 flex justify-between items-center text-white"><h3 className="font-black uppercase">{editingId ? 'Editar' : 'Nova'} Especialidade</h3><button onClick={() => setModalOpen(false)}><X/></button></div>
+                            <div className="bg-pink-600 p-6 flex justify-between items-center text-white"><h3 className="font-black uppercase">{editingId ? 'Editar' : 'Nova'} Especialidade (CBO)</h3><button onClick={() => setModalOpen(false)}><X/></button></div>
                             <form onSubmit={handleSave} className="p-6 space-y-4">
-                                <div><label className="text-xs font-bold text-slate-500 uppercase">Nome da Especialidade</label><input value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} className="w-full bg-slate-50 border rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-pink-500" required autoFocus/></div>
+                                <div><label className="text-xs font-bold text-slate-500 uppercase">Codigo CBO (Visual)</label><input value={form.codigo_visual} onChange={e => setForm({...form, codigo_visual: e.target.value})} className="w-full bg-slate-50 border rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-pink-500" placeholder="Ex: 2251-25"/></div>
+                                <div><label className="text-xs font-bold text-slate-500 uppercase">Codigo CBO (Limpo)</label><input value={form.codigo} onChange={e => setForm({...form, codigo: e.target.value})} className="w-full bg-slate-50 border rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-pink-500" placeholder="Ex: 225125"/></div>
+                                <div><label className="text-xs font-bold text-slate-500 uppercase">Nome da Especialidade (CBO)</label><input value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} className="w-full bg-slate-50 border rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-pink-500" required autoFocus/></div>
+                                <div><label className="text-xs font-bold text-slate-500 uppercase">Status</label><select value={form.status ? 'true' : 'false'} onChange={e => setForm({...form, status: e.target.value === 'true'})} className="w-full bg-slate-50 border rounded-xl p-3 font-bold outline-none focus:ring-2 focus:ring-pink-500"><option value="true">Ativo</option><option value="false">Inativo</option></select></div>
                                 <button type="submit" className="w-full bg-pink-600 hover:bg-pink-700 text-white py-3 rounded-xl font-black uppercase text-xs shadow-lg active:scale-95 transition-all">Salvar</button>
                             </form>
                         </div>

@@ -166,7 +166,7 @@ export default function ConfigurarAgenda() {
       { value: 'data_final', label: 'Data Final' },
       { value: 'data_especifica', label: 'Data Específica' },
       { value: 'profissional_id', label: 'Profissional' },
-      { value: 'especialidade_id', label: 'Especialidade' },
+      { value: 'especialidade_id', label: 'Especialidade (CBO)' },
       { value: 'convenio_id', label: 'Convênio' },
       { value: 'dia_filtro', label: 'Dia da Semana' },
   ];
@@ -248,7 +248,7 @@ export default function ConfigurarAgenda() {
           case 'dia_filtro':
               return <select value={filterValue} onChange={e => setFilterValue(e.target.value)} className={`${commonClass} cursor-pointer`}><option value="">Selecione...</option>{diasMap.map(dia => <option key={dia.id} value={dia.id}>{dia.full}</option>)}</select>;
           case 'profissional_id': return <FilterSearchableSelect placeholder="Digite o Profissional..." options={profissionaisFilter} value={filterValue} onChange={setFilterValue} onEnter={addFilter} />;
-          case 'especialidade_id': return <FilterSearchableSelect placeholder="Digite a Especialidade..." options={especialidadesFilter} value={filterValue} onChange={setFilterValue} onEnter={addFilter} />;
+          case 'especialidade_id': return <FilterSearchableSelect placeholder="Digite a Especialidade (CBO)..." options={especialidadesFilter} value={filterValue} onChange={setFilterValue} onEnter={addFilter} />;
           case 'convenio_id': return <FilterSearchableSelect placeholder="Digite o Convênio..." options={conveniosFilter} value={filterValue} onChange={setFilterValue} onEnter={addFilter} />;
           default: return <input placeholder="Digite para buscar..." value={filterValue} onChange={e => setFilterValue(e.target.value)} className={commonClass} onKeyDown={handleKeyDown}/>;
       }

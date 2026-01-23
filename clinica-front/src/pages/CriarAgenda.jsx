@@ -225,10 +225,13 @@ export default function CriarAgenda() {
     if (profissionalId && api) {
       api.get(`profissionais/${profissionalId}/`).then(res => {
         if (res.data.especialidades) {
-            const specs = res.data.especialidades.map(vinculo => ({
-                id: vinculo.especialidade_leitura || vinculo.especialidade_id || vinculo.especialidade, 
-                label: vinculo.nome_especialidade
-            }));
+            const specs = res.data.especialidades.map(vinculo => {
+                const code = vinculo.codigo_visual_especialidade || vinculo.codigo_especialidade;
+                return {
+                    id: vinculo.especialidade_leitura || vinculo.especialidade_id || vinculo.especialidade,
+                    label: code ? `${vinculo.nome_especialidade} (${code})` : vinculo.nome_especialidade
+                };
+            });
             setEspecialidadesOptions(specs);
             if(specs.length === 1) setEspecialidadeId(specs[0].id);
         }
@@ -319,7 +322,7 @@ export default function CriarAgenda() {
 
   const handleAddRule = () => {
     if (!profissionalId) return notify.warning('Selecione o Profissional.');
-    if (!especialidadeId) return notify.warning('Selecione a Especialidade.');
+    if (!especialidadeId) return notify.warning('Selecione a Especialidade (CBO).');
     if (diasSelecionados.length === 0) return notify.warning('Selecione ao menos um dia da semana.');
     if (dataInicioVigencia < hoje && !editingRuleId) return notify.warning('A data de início não pode ser retroativa.');
     
@@ -428,7 +431,7 @@ export default function CriarAgenda() {
 
         <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
             <SearchableSelect label="1. Profissional Responsável" placeholder="Buscar médico..." options={profissionaisOptions} value={profissionalId} onChange={setProfissionalId} />
-            <SearchableSelect label="2. Especialidade do Atendimento" placeholder="Selecione a área..." options={especialidadesOptions} value={especialidadeId} onChange={setEspecialidadeId} disabled={!profissionalId} />
+            <SearchableSelect label="2. Especialidade (CBO) do Atendimento" placeholder="Selecione a especialidade (CBO)..." options={especialidadesOptions} value={especialidadeId} onChange={setEspecialidadeId} disabled={!profissionalId} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">

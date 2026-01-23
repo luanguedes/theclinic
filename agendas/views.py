@@ -204,11 +204,24 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
              qs = qs.filter(Q(situacao=True) | Q(situacao__isnull=True), data_fim__gte=hoje)
         
         profissionais = qs.values('profissional__id', 'profissional__nome').distinct()
-        especialidades = qs.values('especialidade__id', 'especialidade__nome').distinct()
+        especialidades = qs.values(
+            'especialidade__id',
+            'especialidade__nome',
+            'especialidade__codigo_visual',
+            'especialidade__codigo'
+        ).distinct()
         
         return Response({
             'profissionais': [{'id': p['profissional__id'], 'label': p['profissional__nome']} for p in profissionais],
-            'especialidades': [{'id': e['especialidade__id'], 'label': e['especialidade__nome']} for e in especialidades]
+            'especialidades': [
+                {
+                    'id': e['especialidade__id'],
+                    'label': f\"{e['especialidade__nome']} ({e['especialidade__codigo_visual'] or e['especialidade__codigo']})\"
+                    if (e['especialidade__codigo_visual'] or e['especialidade__codigo'])
+                    else e['especialidade__nome']
+                }
+                for e in especialidades
+            ]
         })
 
     def list(self, request, *args, **kwargs):

@@ -167,8 +167,8 @@ export default function ProfissionalForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.data_nascimento > hoje) return notify.warning("Data de nascimento inválida.");
-    if (items.length === 0) return notify.warning("Vincule ao menos uma especialidade.");
-    if (items.some(i => !i.especialidade_id)) return notify.warning("Selecione a especialidade em todas as linhas.");
+    if (items.length === 0) return notify.warning("Vincule ao menos uma especialidade (CBO).");
+    if (items.some(i => !i.especialidade_id)) return notify.warning("Selecione a especialidade (CBO) em todas as linhas.");
 
     setLoading(true);
     const cpfLimpo = formData.cpf.replace(/\D/g, ''); 
@@ -218,15 +218,15 @@ export default function ProfissionalForm() {
             <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700">
                 <div className="flex justify-between items-center mb-6 border-b pb-2 dark:border-slate-700">
                     <h2 className="font-black text-sm uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2"><BriefcaseMedical size={18} className="text-pink-600"/> Vínculos e Conselhos</h2>
-                    <button type="button" onClick={handleAddItem} className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-1 hover:bg-blue-50 px-4 py-2 rounded-xl transition-colors bg-blue-50"><Plus size={16}/> Adicionar Especialidade</button>
+                    <button type="button" onClick={handleAddItem} className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-1 hover:bg-blue-50 px-4 py-2 rounded-xl transition-colors bg-blue-50"><Plus size={16}/> Adicionar Especialidade (CBO)</button>
                 </div>
 
-                {items.length === 0 && <div className="text-center py-12 px-4 text-slate-400 border-2 border-dashed rounded-2xl bg-slate-50/50"><Award size={32} className="mx-auto mb-2 opacity-50"/><span className="font-bold text-xs uppercase">Nenhuma especialidade vinculada</span></div>}
+                {items.length === 0 && <div className="text-center py-12 px-4 text-slate-400 border-2 border-dashed rounded-2xl bg-slate-50/50"><Award size={32} className="mx-auto mb-2 opacity-50"/><span className="font-bold text-xs uppercase">Nenhuma especialidade (CBO) vinculada</span></div>}
 
                 <div className="space-y-4">
                     {items.map((item, index) => (
                         <div key={index} className="flex flex-col md:flex-row gap-4 items-end bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in slide-in-from-top-2 duration-300">
-                            <div className="flex-[2] w-full min-w-[200px]"><label className={subLabelClass}>Especialidade</label><SearchableSelect options={listaEspecialidades.map(e => ({ id: e.id, label: e.nome }))} value={item.especialidade_id} onChange={(val) => handleItemChange(index, 'especialidade_id', val)} placeholder="Selecione..." required={true} /></div>
+                            <div className="flex-[2] w-full min-w-[200px]"><label className={subLabelClass}>Especialidade (CBO)</label><SearchableSelect options={listaEspecialidades.map(e => ({ id: e.id, label: e.codigo_visual ? `${e.nome} (${e.codigo_visual})` : e.nome }))} value={item.especialidade_id} onChange={(val) => handleItemChange(index, 'especialidade_id', val)} placeholder="Selecione..." required={true} /></div>
                             <div className="flex-1 w-full min-w-[100px]"><label className={subLabelClass}>Conselho</label><input required value={item.sigla_conselho} onChange={e=>handleItemChange(index, 'sigla_conselho', e.target.value)} className={inputClass} placeholder="CRM/CRO" style={{textTransform: 'uppercase'}}/></div>
                             <div className="flex-1 w-full min-w-[120px]"><label className={subLabelClass}>Nº Registro</label><input required value={item.registro_conselho} onChange={e=>handleItemChange(index, 'registro_conselho', e.target.value)} className={inputClass} placeholder="000000"/></div>
                             <div className="w-full md:w-24"><label className={subLabelClass}>UF</label><input required value={item.uf_conselho} onChange={e=>handleItemChange(index, 'uf_conselho', e.target.value)} className={inputClass} placeholder="UF" maxLength={2} style={{textTransform: 'uppercase'}}/></div>

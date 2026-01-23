@@ -452,11 +452,15 @@ export default function Recepcao() {
                                                 {formCheckin.profissional ? 'Selecione...' : 'Selecione um profissional primeiro'}
                                             </option>
 
-                                            {especialidadesFiltradas.map(e => (
-                                                <option key={e.id} value={e.id}>
-                                                    {e.nome}
-                                                </option>
-                                            ))}
+                                            {especialidadesFiltradas.map(e => {
+                                                const code = e.codigo_visual || e.codigo;
+                                                const label = code ? `${e.nome} (${code})` : e.nome;
+                                                return (
+                                                    <option key={e.id} value={e.id}>
+                                                        {label}
+                                                    </option>
+                                                );
+                                            })}
                                         </select>
                                         <div className="md:col-span-2"><label className={labelClass}>Plano / Convênio</label><div className="relative"><ShieldCheck className="absolute left-3 top-3.5 text-slate-400" size={16}/><select value={formCheckin.convenio} onChange={e => setFormCheckin({...formCheckin, convenio: e.target.value})} className={`${inputClass} pl-10`}><option value="">Particular (Sem convênio)</option>{convenios.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div></div>
                                     </div>

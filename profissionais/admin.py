@@ -9,8 +9,9 @@ class ProfissionalEspecialidadeInline(admin.TabularInline):
 
 @admin.register(Especialidade)
 class EspecialidadeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nome')
-    search_fields = ('nome',)
+    list_display = ('id', 'codigo', 'codigo_visual', 'nome', 'status')
+    search_fields = ('codigo', 'codigo_visual', 'nome', 'search_text')
+    list_filter = ('status',)
 
 @admin.register(Profissional)
 class ProfissionalAdmin(admin.ModelAdmin):
