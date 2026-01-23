@@ -2,8 +2,8 @@ import pandas as pd
 
 
 def _ler_csv_flexivel(arquivo):
-    encodings = ['latin1', 'utf-8', 'cp1252']
-    separadores = [';', ',']
+    encodings = ['latin1', 'utf-8-sig', 'utf-8', 'cp1252']
+    separadores = [';', ',', '\t']
 
     for enc in encodings:
         for sep in separadores:
@@ -15,12 +15,20 @@ def _ler_csv_flexivel(arquivo):
                     return pd.read_csv(arquivo, sep=sep, encoding=enc, dtype=str)
             except Exception:
                 continue
+        try:
+            arquivo.seek(0)
+            df_test = pd.read_csv(arquivo, sep=None, engine='python', encoding=enc, nrows=5, dtype=str)
+            if len(df_test.columns) >= 2:
+                arquivo.seek(0)
+                return pd.read_csv(arquivo, sep=None, engine='python', encoding=enc, dtype=str)
+        except Exception:
+            continue
     return None
 
 
 def processar_cbo(arquivo):
     df = _ler_csv_flexivel(arquivo)
-    if df is None or df.empty:
+    if df is None or df.empty or len(df.columns) < 2:
         return []
 
     col_codigo = df.columns[0]

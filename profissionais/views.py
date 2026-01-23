@@ -114,6 +114,11 @@ class CboImportView(APIView):
 
         try:
             registros = processar_cbo(arquivo)
+            if not registros:
+                return Response(
+                    {'error': 'Nenhum registro CBO encontrado no arquivo.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             resultado = importar_cbo(registros)
         except Exception as exc:
             return Response(
