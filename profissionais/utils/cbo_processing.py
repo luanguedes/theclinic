@@ -2,25 +2,53 @@ import pandas as pd
 
 
 def _ler_csv_flexivel(arquivo):
-    encodings = ['latin1', 'utf-8-sig', 'utf-8', 'cp1252']
+    encodings = ['utf-8-sig', 'utf-8', 'cp1252', 'latin1']
     separadores = [';', ',', '\t']
 
     for enc in encodings:
         for sep in separadores:
             try:
                 arquivo.seek(0)
-                df_test = pd.read_csv(arquivo, sep=sep, encoding=enc, nrows=5, dtype=str)
+                df_test = pd.read_csv(
+                    arquivo,
+                    sep=sep,
+                    encoding=enc,
+                    nrows=5,
+                    dtype=str,
+                    encoding_errors='strict'
+                )
                 if len(df_test.columns) >= 2:
                     arquivo.seek(0)
-                    return pd.read_csv(arquivo, sep=sep, encoding=enc, dtype=str)
+                    return pd.read_csv(
+                        arquivo,
+                        sep=sep,
+                        encoding=enc,
+                        dtype=str,
+                        encoding_errors='strict'
+                    )
             except Exception:
                 continue
         try:
             arquivo.seek(0)
-            df_test = pd.read_csv(arquivo, sep=None, engine='python', encoding=enc, nrows=5, dtype=str)
+            df_test = pd.read_csv(
+                arquivo,
+                sep=None,
+                engine='python',
+                encoding=enc,
+                nrows=5,
+                dtype=str,
+                encoding_errors='strict'
+            )
             if len(df_test.columns) >= 2:
                 arquivo.seek(0)
-                return pd.read_csv(arquivo, sep=None, engine='python', encoding=enc, dtype=str)
+                return pd.read_csv(
+                    arquivo,
+                    sep=None,
+                    engine='python',
+                    encoding=enc,
+                    dtype=str,
+                    encoding_errors='strict'
+                )
         except Exception:
             continue
     return None
