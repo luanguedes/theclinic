@@ -216,9 +216,11 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
             'especialidades': [
                 {
                     'id': e['especialidade__id'],
-                    'label': f\"{e['especialidade__nome']} ({e['especialidade__codigo_visual'] or e['especialidade__codigo']})\"
-                    if (e['especialidade__codigo_visual'] or e['especialidade__codigo'])
-                    else e['especialidade__nome']
+                    'label': (
+                        f"{e['especialidade__nome']} ({e['especialidade__codigo_visual'] or e['especialidade__codigo']})"
+                        if (e['especialidade__codigo_visual'] or e['especialidade__codigo'])
+                        else e['especialidade__nome']
+                    )
                 }
                 for e in especialidades
             ]
