@@ -172,12 +172,19 @@ def process_webhook_event(payload, instance_name):
         return 0
 
     created_count = 0
+    root_sender = payload.get('sender') if isinstance(payload, dict) else None
+    root_data = payload.get('data') if isinstance(payload, dict) else None
     for item in messages:
         if not isinstance(item, dict):
             continue
 
         key = item.get('key', {}) if isinstance(item.get('key'), dict) else {}
         remote_jid = _normalize_wa_id(key.get('remoteJid') or item.get('remoteJid') or item.get('from'))
+        sender_override = item.get('sender') or root_sender
+        if not sender_override and isinstance(root_data, dict):
+            sender_override = root_data.get('sender')
+        if remote_jid.endswith('@lid') and sender_override:
+            remote_jid = _normalize_wa_id(sender_override)
         if not remote_jid:
             continue
 

@@ -77,6 +77,16 @@ class WhatsappConversaViewSet(viewsets.ReadOnlyModelViewSet):
         conversa.save(update_fields=['unread_count'])
         return Response(serializer.data)
 
+    @action(detail=True, methods=['delete'])
+    def apagar(self, request, pk=None):
+        if not _has_whatsapp_access(request.user):
+            return Response({'error': 'Sem permissao.'}, status=status.HTTP_403_FORBIDDEN)
+
+        conversa = self.get_object()
+        conversa.mensagens.all().delete()
+        conversa.delete()
+        return Response({'status': 'deleted'})
+
     @action(detail=True, methods=['post'])
     def enviar(self, request, pk=None):
         if not _has_whatsapp_access(request.user):

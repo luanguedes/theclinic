@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { MessageCircle, Search, Send, X, Loader2, Image as ImageIcon, Plus, Phone } from 'lucide-react';
+import { MessageCircle, Search, Send, X, Loader2, Image as ImageIcon, Plus, Phone, Trash2 } from 'lucide-react';
 
 const EMPTY_STATE = {
   selectedId: null,
@@ -31,6 +31,7 @@ export default function WhatsappChatDrawer({ open, onClose }) {
   const [novoChatOpen, setNovoChatOpen] = useState(false);
   const [novoChatForm, setNovoChatForm] = useState({ telefone: '', nome: '' });
   const [novoChatLoading, setNovoChatLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const canAccess = useMemo(() => !!(user?.is_superuser || user?.acesso_whatsapp), [user]);
 
@@ -70,6 +71,21 @@ export default function WhatsappChatDrawer({ open, onClose }) {
       notify?.error?.('Erro ao carregar mensagens.');
     } finally {
       setLoadingMsgs(false);
+    }
+  };
+
+  const handleDeleteConversa = async (conversaId) => {
+    if (!api || !conversaId) return;
+    try {
+      await api.delete(`whatsapp/conversas/${conversaId}/apagar/`);
+      setConversas((prev) => prev.filter((c) => c.id !== conversaId));
+      if (state.selectedId === conversaId) {
+        setState((prev) => ({ ...prev, selectedId: null }));
+        setMensagens([]);
+      }
+      notify?.success?.('Conversa removida da tela.');
+    } catch (error) {
+      notify?.error?.('Nao foi possivel remover a conversa.');
     }
   };
 
@@ -181,9 +197,18 @@ export default function WhatsappChatDrawer({ open, onClose }) {
                   onClick={() => handleSelectConversa(c.id)}
                   className={`w-full text-left px-4 py-3 border-b border-slate-50 dark:border-slate-800 transition-all ${state.selectedId === c.id ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}
                 >
-                  <p className="text-[11px] font-black uppercase text-slate-700 dark:text-slate-100 truncate">
-                    {c.contato?.nome || c.contato?.wa_id || 'Sem nome'}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-black uppercase text-slate-700 dark:text-slate-100 truncate">
+                      {c.contato?.nome || c.contato?.wa_id || 'Sem nome'}
+                    </p>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50"
+                      title="Remover conversa"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                   <p className="text-[10px] font-bold text-slate-400 truncate">{c.last_message_text || 'Sem mensagens'}</p>
                   {c.unread_count > 0 && (
                     <span className="inline-flex mt-1 text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full">
@@ -306,6 +331,37 @@ export default function WhatsappChatDrawer({ open, onClose }) {
                 className="px-5 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-40"
               >
                 {novoChatLoading ? <Loader2 size={14} className="animate-spin" /> : 'Criar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    {deleteTarget && (
+      <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
+          <div className="px-5 py-4 bg-rose-600 text-white flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-widest">Remover conversa</span>
+            <button onClick={() => setDeleteTarget(null)} className="p-1 rounded-full hover:bg-white/10">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="p-5 space-y-4">
+            <p className="text-xs text-slate-600 dark:text-slate-200">
+              Deseja remover a conversa com <span className="font-black">{deleteTarget?.contato?.nome || deleteTarget?.contato?.wa_id}</span> apenas da tela?
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { handleDeleteConversa(deleteTarget.id); setDeleteTarget(null); }}
+                className="px-5 py-2 rounded-xl bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-rose-700"
+              >
+                Remover
               </button>
             </div>
           </div>
