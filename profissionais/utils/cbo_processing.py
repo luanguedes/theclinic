@@ -1,52 +1,66 @@
+﻿import io
+
 import pandas as pd
+
+
+def _read_csv_safe(buffer, **kwargs):
+    try:
+        return pd.read_csv(buffer, **kwargs)
+    except TypeError:
+        kwargs.pop('encoding_errors', None)
+        return pd.read_csv(buffer, **kwargs)
 
 
 def _ler_csv_flexivel(arquivo):
     encodings = ['utf-8-sig', 'utf-8', 'cp1252', 'latin1']
     separadores = [';', ',', '\t']
 
+    dados = arquivo.read()
+    if not dados:
+        return None
+
     for enc in encodings:
         for sep in separadores:
             try:
-                arquivo.seek(0)
-                df_test = pd.read_csv(
-                    arquivo,
+                df_test = _read_csv_safe(
+                    io.BytesIO(dados),
                     sep=sep,
                     encoding=enc,
                     nrows=5,
                     dtype=str,
+                    keep_default_na=False,
                     encoding_errors='strict'
                 )
                 if len(df_test.columns) >= 2:
-                    arquivo.seek(0)
-                    return pd.read_csv(
-                        arquivo,
+                    return _read_csv_safe(
+                        io.BytesIO(dados),
                         sep=sep,
                         encoding=enc,
                         dtype=str,
+                        keep_default_na=False,
                         encoding_errors='strict'
                     )
             except Exception:
                 continue
         try:
-            arquivo.seek(0)
-            df_test = pd.read_csv(
-                arquivo,
+            df_test = _read_csv_safe(
+                io.BytesIO(dados),
                 sep=None,
                 engine='python',
                 encoding=enc,
                 nrows=5,
                 dtype=str,
+                keep_default_na=False,
                 encoding_errors='strict'
             )
             if len(df_test.columns) >= 2:
-                arquivo.seek(0)
-                return pd.read_csv(
-                    arquivo,
+                return _read_csv_safe(
+                    io.BytesIO(dados),
                     sep=None,
                     engine='python',
                     encoding=enc,
                     dtype=str,
+                    keep_default_na=False,
                     encoding_errors='strict'
                 )
         except Exception:
@@ -67,14 +81,11 @@ def processar_cbo(arquivo):
         cod_original = str(row[col_codigo]).strip()
         nome = str(row[col_nome]).strip()
 
-        if not cod_original or cod_original.lower() == 'nan':
+        if not cod_original:
             continue
 
-        cod_limpo = cod_original.replace('-', '').replace('.', '')
-        nome_formatado = nome.title()
-        nome_formatado = nome_formatado.replace(' Clinico', ' Clínico')
-        nome_formatado = nome_formatado.replace(' Medico', ' Médico')
-        nome_formatado = nome_formatado.replace(' Tecnico', ' Técnico')
+        cod_limpo = cod_original.replace('-', '').replace('.', '').strip()
+        nome_formatado = nome
 
         lista_final.append({
             'codigo': cod_limpo,
