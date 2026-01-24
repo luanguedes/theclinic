@@ -36,10 +36,14 @@ def _extract_messages(payload):
     data = payload.get('data')
     if isinstance(data, dict) and isinstance(data.get('messages'), list):
         return data.get('messages')
+    if isinstance(data, dict) and (data.get('key') or data.get('message')):
+        return [data]
     if isinstance(data, list):
         return data
     if isinstance(payload.get('messages'), list):
         return payload.get('messages')
+    if payload.get('key') or payload.get('message'):
+        return [payload]
     return []
 
 
@@ -145,7 +149,8 @@ def _get_or_create_conversa(instance_name, wa_id, nome=''):
 
 
 def process_webhook_event(payload, instance_name):
-    event_type = _get_event_type(payload)
+    raw_event = _get_event_type(payload)
+    event_type = raw_event.upper().replace('.', '_') if raw_event else ''
     if event_type == 'MESSAGES_UPDATE':
         return _process_message_updates(payload, instance_name)
 
