@@ -75,6 +75,8 @@ REST_FRAMEWORK = {
     )
 }
 
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
 
 ROOT_URLCONF = 'clinica_core.urls'
 
