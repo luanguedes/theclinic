@@ -25,6 +25,7 @@ urlpatterns = [
 
     #  routers "puros" primeiro
     path('api/', include('profissionais.urls')),
+    path('api/', include('whatsapp.urls')),
 
     #  depois agendamento
     path('api/', include('agendamento.urls')),

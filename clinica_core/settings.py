@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'auditoria',
     'financeiro',
     'atendimento',
+    'whatsapp',
 ]
 
 MIDDLEWARE = [
