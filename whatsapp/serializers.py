@@ -31,3 +31,8 @@ class WhatsappMensagemSerializer(serializers.ModelSerializer):
 
 class WhatsappSendMessageSerializer(serializers.Serializer):
     texto = serializers.CharField()
+
+
+class WhatsappStartChatSerializer(serializers.Serializer):
+    telefone = serializers.CharField()
+    nome = serializers.CharField(required=False, allow_blank=True)

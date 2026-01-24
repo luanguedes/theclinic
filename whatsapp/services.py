@@ -71,6 +71,19 @@ def _extract_phone(wa_id):
     return re.sub(r'\D', '', raw)
 
 
+def normalize_phone(phone):
+    if not phone:
+        return ''
+    digits = re.sub(r'\D', '', str(phone))
+    if not digits:
+        return ''
+    if digits.startswith('55'):
+        return digits
+    if len(digits) <= 11:
+        return f"55{digits}"
+    return digits
+
+
 def _extract_message_text(message):
     if not isinstance(message, dict):
         return ''
@@ -128,7 +141,7 @@ def _status_from_payload(value):
     return mapping.get(normalized, '')
 
 
-def _get_or_create_conversa(instance_name, wa_id, nome=''):
+def get_or_create_conversa(instance_name, wa_id, nome=''):
     contato, _ = WhatsappContato.objects.get_or_create(
         instance_name=instance_name,
         wa_id=wa_id,
@@ -186,7 +199,7 @@ def process_webhook_event(payload, instance_name):
         sent_at = _parse_timestamp(item.get('messageTimestamp') or item.get('timestamp')) or timezone.now()
 
         with transaction.atomic():
-            conversa = _get_or_create_conversa(instance_name, remote_jid, push_name)
+            conversa = get_or_create_conversa(instance_name, remote_jid, push_name)
 
             exists = WhatsappMensagem.objects.filter(conversa=conversa, message_id=message_id).exists() if message_id else False
             if exists:

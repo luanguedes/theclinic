@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { MessageCircle, Search, Send, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { MessageCircle, Search, Send, X, Loader2, Image as ImageIcon, Plus, Phone } from 'lucide-react';
 
 const EMPTY_STATE = {
   selectedId: null,
@@ -28,6 +28,9 @@ export default function WhatsappChatDrawer({ open, onClose }) {
   const [conversas, setConversas] = useState([]);
   const [mensagens, setMensagens] = useState([]);
   const [state, setState] = useState(EMPTY_STATE);
+  const [novoChatOpen, setNovoChatOpen] = useState(false);
+  const [novoChatForm, setNovoChatForm] = useState({ telefone: '', nome: '' });
+  const [novoChatLoading, setNovoChatLoading] = useState(false);
 
   const canAccess = useMemo(() => !!(user?.is_superuser || user?.acesso_whatsapp), [user]);
 
@@ -100,10 +103,36 @@ export default function WhatsappChatDrawer({ open, onClose }) {
     }
   };
 
+  const handleNovoChat = async () => {
+    if (!api || !novoChatForm.telefone.trim()) return;
+    setNovoChatLoading(true);
+    try {
+      const res = await api.post('whatsapp/conversas/novo_chat/', {
+        telefone: novoChatForm.telefone,
+        nome: novoChatForm.nome
+      });
+      const conversa = res.data;
+      setConversas((prev) => {
+        const exists = prev.some((c) => c.id === conversa.id);
+        return exists ? prev : [conversa, ...prev];
+      });
+      setState((prev) => ({ ...prev, selectedId: conversa.id }));
+      setNovoChatForm({ telefone: '', nome: '' });
+      setNovoChatOpen(false);
+      await loadMensagens(conversa.id);
+    } catch (error) {
+      const message = error?.response?.data?.error || 'Nao foi possivel criar o chat.';
+      notify?.error?.(message);
+    } finally {
+      setNovoChatLoading(false);
+    }
+  };
+
   if (!open || !canAccess) return null;
 
   return (
-    <div className="fixed top-0 right-0 h-screen w-full sm:w-[420px] lg:w-[460px] z-[110]">
+    <>
+      <div className="fixed top-0 right-0 h-screen w-full sm:w-[420px] lg:w-[460px] z-[110]">
       <div className="h-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col">
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
           <div className="flex items-center gap-3">
@@ -119,7 +148,15 @@ export default function WhatsappChatDrawer({ open, onClose }) {
         </div>
 
         <div className="p-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="relative">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setNovoChatOpen(true)}
+              className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 transition-all"
+              title="Novo chat"
+            >
+              <Plus size={16} />
+            </button>
+            <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={state.search}
@@ -127,6 +164,7 @@ export default function WhatsappChatDrawer({ open, onClose }) {
               placeholder="Buscar conversa..."
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200"
             />
+          </div>
           </div>
         </div>
 
@@ -224,5 +262,56 @@ export default function WhatsappChatDrawer({ open, onClose }) {
         </div>
       </div>
     </div>
+    {novoChatOpen && (
+      <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
+          <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Phone size={16} className="text-emerald-400" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Novo Chat</span>
+            </div>
+            <button onClick={() => setNovoChatOpen(false)} className="p-1 rounded-full hover:bg-white/10">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="p-5 space-y-4">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Telefone (com DDD)</label>
+              <input
+                value={novoChatForm.telefone}
+                onChange={(e) => setNovoChatForm((prev) => ({ ...prev, telefone: e.target.value }))}
+                className="w-full mt-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                placeholder="(11) 99999-9999"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nome (opcional)</label>
+              <input
+                value={novoChatForm.nome}
+                onChange={(e) => setNovoChatForm((prev) => ({ ...prev, nome: e.target.value }))}
+                className="w-full mt-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                placeholder="Nome do contato"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setNovoChatOpen(false)}
+                className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleNovoChat}
+                disabled={novoChatLoading || !novoChatForm.telefone.trim()}
+                className="px-5 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-40"
+              >
+                {novoChatLoading ? <Loader2 size={14} className="animate-spin" /> : 'Criar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
