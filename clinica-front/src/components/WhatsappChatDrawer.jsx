@@ -283,6 +283,12 @@ export default function WhatsappChatDrawer({ open, onClose, onUnreadChange }) {
                 <input
                   value={state.texto}
                   onChange={(e) => setState((prev) => ({ ...prev, texto: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
                   placeholder="Digite sua mensagem..."
                   className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200"
                 />

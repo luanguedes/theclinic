@@ -141,18 +141,23 @@ def _status_from_payload(value):
     return mapping.get(normalized, '')
 
 
-def get_or_create_conversa(instance_name, wa_id, nome=''):
+def get_or_create_conversa(instance_name, wa_id, nome='', telefone=''):
     contato, _ = WhatsappContato.objects.get_or_create(
         instance_name=instance_name,
         wa_id=wa_id,
         defaults={
             'nome': nome or '',
-            'telefone': _extract_phone(wa_id),
+            'telefone': telefone or _extract_phone(wa_id),
         }
     )
     if nome and contato.nome != nome:
         contato.nome = nome
         contato.save(update_fields=['nome'])
+    if telefone:
+        telefone_norm = normalize_phone(telefone)
+        if telefone_norm and contato.telefone != telefone_norm:
+            contato.telefone = telefone_norm
+            contato.save(update_fields=['telefone'])
 
     conversa, _ = WhatsappConversa.objects.get_or_create(
         instance_name=instance_name,
@@ -183,8 +188,9 @@ def process_webhook_event(payload, instance_name):
         sender_override = item.get('sender') or root_sender
         if not sender_override and isinstance(root_data, dict):
             sender_override = root_data.get('sender')
+        telefone_override = ''
         if remote_jid.endswith('@lid') and sender_override:
-            remote_jid = _normalize_wa_id(sender_override)
+            telefone_override = sender_override
         if not remote_jid:
             continue
 
@@ -206,7 +212,7 @@ def process_webhook_event(payload, instance_name):
         sent_at = _parse_timestamp(item.get('messageTimestamp') or item.get('timestamp')) or timezone.now()
 
         with transaction.atomic():
-            conversa = get_or_create_conversa(instance_name, remote_jid, push_name)
+            conversa = get_or_create_conversa(instance_name, remote_jid, push_name, telefone_override)
 
             exists = WhatsappMensagem.objects.filter(conversa=conversa, message_id=message_id).exists() if message_id else False
             if exists:
@@ -279,7 +285,7 @@ def send_text_message(conversa, texto):
         'apikey': settings.EVOLUTION_API_KEY,
         'Content-Type': 'application/json'
     }
-    numero = normalize_phone(conversa.contato.wa_id.split('@')[0])
+    numero = normalize_phone(conversa.contato.telefone or conversa.contato.wa_id.split('@')[0])
     payload = {
         'number': numero,
         'textMessage': {'text': texto},
