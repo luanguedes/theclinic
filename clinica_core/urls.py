@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view()),
     path('api/me/', MeView.as_view()),
     path('api/webhooks/whatsapp/<str:instance_name>/', EvolutionWebhookView.as_view()),
+    path('api/webhooks/whatsapp/<str:instance_name>', EvolutionWebhookView.as_view()),
 
     path('api/pacientes/', include('pacientes.urls')),
     path('api/operadores/', include('usuarios.urls')),
