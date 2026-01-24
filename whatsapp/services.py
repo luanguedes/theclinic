@@ -176,6 +176,7 @@ def process_webhook_event(payload, instance_name):
     if not messages:
         return 0
 
+    owner_number = normalize_phone(getattr(settings, 'EVOLUTION_OWNER_NUMBER', ''))
     created_count = 0
     root_sender = payload.get('sender') if isinstance(payload, dict) else None
     root_data = payload.get('data') if isinstance(payload, dict) else None
@@ -184,17 +185,19 @@ def process_webhook_event(payload, instance_name):
             continue
 
         key = item.get('key', {}) if isinstance(item.get('key'), dict) else {}
+        from_me = bool(key.get('fromMe') or item.get('fromMe'))
         remote_jid = _normalize_wa_id(key.get('remoteJid') or item.get('remoteJid') or item.get('from'))
         sender_override = item.get('sender') or root_sender
         if not sender_override and isinstance(root_data, dict):
             sender_override = root_data.get('sender')
         telefone_override = ''
-        if remote_jid.endswith('@lid') and sender_override:
-            telefone_override = sender_override
+        if remote_jid.endswith('@lid') and sender_override and not from_me:
+            telefone_override = normalize_phone(sender_override)
+            if owner_number and telefone_override == owner_number:
+                telefone_override = ''
         if not remote_jid:
             continue
 
-        from_me = bool(key.get('fromMe') or item.get('fromMe'))
         direction = 'out' if from_me else 'in'
         message_id = key.get('id') or item.get('id') or ''
 

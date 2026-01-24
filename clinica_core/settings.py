@@ -196,6 +196,7 @@ SIMPLE_JWT = {
 EVOLUTION_API_URL = "https://theclinic-api.up.railway.app"
 EVOLUTION_API_KEY = "Luan@4957"
 EVOLUTION_INSTANCE_NAME = "zap_turbo"
+EVOLUTION_OWNER_NUMBER = "5515981780655"
 
 
 
