@@ -58,6 +58,47 @@ def _extract_updates(payload):
     return []
 
 
+def _extract_event_items(payload):
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+    data = payload.get('data')
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return [data]
+    return []
+
+
+def _extract_contact_jid(item):
+    if not isinstance(item, dict):
+        return ''
+    for key in ['jid', 'id', 'remoteJid', 'wa_id', 'waId', 'contactJid']:
+        value = item.get(key)
+        if value:
+            return str(value)
+    return ''
+
+
+def _extract_contact_name(item):
+    if not isinstance(item, dict):
+        return ''
+    return item.get('name') or item.get('notify') or item.get('pushName') or item.get('verifiedName') or ''
+
+
+def _extract_contact_number(item, jid):
+    if not isinstance(item, dict):
+        return ''
+    for key in ['number', 'phone', 'phoneNumber', 'whatsappNumber']:
+        value = item.get(key)
+        if value:
+            return str(value)
+    if jid and jid.endswith('@s.whatsapp.net'):
+        return jid.split('@')[0]
+    return ''
+
+
 def _normalize_wa_id(remote_jid):
     if not remote_jid:
         return ''
@@ -171,6 +212,10 @@ def process_webhook_event(payload, instance_name):
     event_type = raw_event.upper().replace('.', '_') if raw_event else ''
     if event_type == 'MESSAGES_UPDATE':
         return _process_message_updates(payload, instance_name)
+    if event_type in ['CONTACTS_UPSERT', 'CONTACTS_SET']:
+        return _process_contacts_upsert(payload, instance_name)
+    if event_type in ['CHATS_UPSERT', 'CHATS_SET']:
+        return _process_chats_upsert(payload, instance_name)
 
     messages = _extract_messages(payload)
     if not messages:
@@ -244,6 +289,66 @@ def process_webhook_event(payload, instance_name):
             created_count += 1
 
     return created_count
+
+
+def _upsert_contact(instance_name, jid, nome, numero):
+    telefone = normalize_phone(numero)
+    wa_id = ''
+    if jid and jid.endswith('@s.whatsapp.net'):
+        wa_id = jid
+        telefone = normalize_phone(jid.split('@')[0])
+    elif telefone:
+        wa_id = f"{telefone}@s.whatsapp.net"
+    else:
+        return 0
+
+    contato, _ = WhatsappContato.objects.get_or_create(
+        instance_name=instance_name,
+        wa_id=wa_id,
+        defaults={
+            'nome': nome or '',
+            'telefone': telefone or '',
+        }
+    )
+
+    updated_fields = []
+    if nome and contato.nome != nome:
+        contato.nome = nome
+        updated_fields.append('nome')
+    if telefone and contato.telefone != telefone:
+        contato.telefone = telefone
+        updated_fields.append('telefone')
+
+    if updated_fields:
+        contato.save(update_fields=updated_fields)
+
+    return 1
+
+
+def _process_contacts_upsert(payload, instance_name):
+    items = _extract_event_items(payload)
+    if not items:
+        return 0
+    updated = 0
+    for item in items:
+        jid = _extract_contact_jid(item)
+        nome = _extract_contact_name(item)
+        numero = _extract_contact_number(item, jid)
+        updated += _upsert_contact(instance_name, jid, nome, numero)
+    return updated
+
+
+def _process_chats_upsert(payload, instance_name):
+    items = _extract_event_items(payload)
+    if not items:
+        return 0
+    updated = 0
+    for item in items:
+        jid = _extract_contact_jid(item)
+        nome = _extract_contact_name(item)
+        numero = _extract_contact_number(item, jid)
+        updated += _upsert_contact(instance_name, jid, nome, numero)
+    return updated
 
 
 def _process_message_updates(payload, instance_name):
