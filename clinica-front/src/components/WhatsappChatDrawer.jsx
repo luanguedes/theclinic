@@ -19,7 +19,7 @@ const formatHour = (value) => {
   }
 };
 
-export default function WhatsappChatDrawer({ open, onClose }) {
+export default function WhatsappChatDrawer({ open, onClose, onUnreadChange }) {
   const { api, user } = useAuth();
   const { notify } = useNotification();
   const [loading, setLoading] = useState(false);
@@ -40,9 +40,9 @@ export default function WhatsappChatDrawer({ open, onClose }) {
     [conversas, state.selectedId]
   );
 
-  const loadConversas = async () => {
+  const loadConversas = async (silent = false) => {
     if (!api || !canAccess) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (state.search) params.append('search', state.search);
@@ -50,19 +50,23 @@ export default function WhatsappChatDrawer({ open, onClose }) {
       const res = await api.get(`whatsapp/conversas/?${params.toString()}`);
       const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
       setConversas(data);
+      if (onUnreadChange) {
+        const totalUnread = data.reduce((acc, item) => acc + (item.unread_count || 0), 0);
+        onUnreadChange(totalUnread);
+      }
       if (!state.selectedId && data.length > 0) {
         setState((prev) => ({ ...prev, selectedId: data[0].id }));
       }
     } catch (error) {
       notify?.error?.('Erro ao carregar conversas.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  const loadMensagens = async (conversaId) => {
+  const loadMensagens = async (conversaId, silent = false) => {
     if (!api || !conversaId) return;
-    setLoadingMsgs(true);
+    if (!silent) setLoadingMsgs(true);
     try {
       const res = await api.get(`whatsapp/conversas/${conversaId}/mensagens/?nopage=true`);
       const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
@@ -70,7 +74,7 @@ export default function WhatsappChatDrawer({ open, onClose }) {
     } catch (error) {
       notify?.error?.('Erro ao carregar mensagens.');
     } finally {
-      setLoadingMsgs(false);
+      if (!silent) setLoadingMsgs(false);
     }
   };
 
@@ -98,6 +102,17 @@ export default function WhatsappChatDrawer({ open, onClose }) {
     if (!open || !state.selectedId) return;
     loadMensagens(state.selectedId);
   }, [open, state.selectedId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const intervalId = setInterval(() => {
+      loadConversas(true);
+      if (state.selectedId) {
+        loadMensagens(state.selectedId, true);
+      }
+    }, 5000);
+    return () => clearInterval(intervalId);
+  }, [open, state.selectedId, state.search]);
 
   const handleSelectConversa = (id) => {
     setState((prev) => ({ ...prev, selectedId: id }));

@@ -22,6 +22,7 @@ export default function Navbar() {
   const [whatsappStatus, setWhatsappStatus] = useState({ loading: true, connected: null, state: 'carregando', error: null });
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [whatsappUnread, setWhatsappUnread] = useState(0);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrImage, setQrImage] = useState('');
   const [qrError, setQrError] = useState('');
@@ -51,6 +52,27 @@ export default function Navbar() {
     if ((user?.is_superuser || user?.acesso_whatsapp) && api) {
       loadWhatsappStatus();
     }
+  }, [user?.is_superuser, user?.acesso_whatsapp, api]);
+
+  useEffect(() => {
+    if (!(user?.is_superuser || user?.acesso_whatsapp) || !api) return;
+    let active = true;
+    const fetchUnread = async () => {
+      try {
+        const res = await api.get('whatsapp/conversas/?nopage=true');
+        const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+        const totalUnread = data.reduce((acc, item) => acc + (item.unread_count || 0), 0);
+        if (active) setWhatsappUnread(totalUnread);
+      } catch (error) {
+        if (active) setWhatsappUnread(0);
+      }
+    };
+    fetchUnread();
+    const intervalId = setInterval(fetchUnread, 5000);
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
   }, [user?.is_superuser, user?.acesso_whatsapp, api]);
 
   useEffect(() => {
@@ -230,6 +252,11 @@ export default function Navbar() {
                   <div className="relative">
                     <MessageCircle size={16} />
                     <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-white ${getWhatsappBadge().className}`}></span>
+                    {whatsappUnread > 0 && (
+                      <span className="absolute -bottom-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
+                        {whatsappUnread > 99 ? '99+' : whatsappUnread}
+                      </span>
+                    )}
                   </div>
                   <span className="text-[9px] font-black uppercase tracking-widest">
                     {getWhatsappBadge().label}
@@ -470,7 +497,11 @@ export default function Navbar() {
           </div>
         </div>
       )}
-      <WhatsappChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
+      <WhatsappChatDrawer
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        onUnreadChange={setWhatsappUnread}
+      />
     </nav>
   );
 }

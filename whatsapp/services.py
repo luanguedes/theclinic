@@ -279,8 +279,9 @@ def send_text_message(conversa, texto):
         'apikey': settings.EVOLUTION_API_KEY,
         'Content-Type': 'application/json'
     }
+    numero = normalize_phone(conversa.contato.wa_id.split('@')[0])
     payload = {
-        'number': conversa.contato.wa_id.split('@')[0],
+        'number': numero,
         'textMessage': {'text': texto},
         'options': {'delay': 800, 'linkPreview': False}
     }
