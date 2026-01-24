@@ -302,6 +302,16 @@ def _upsert_contact(instance_name, jid, nome, numero):
     else:
         return 0
 
+    contato = None
+    if telefone:
+        contato = WhatsappContato.objects.filter(
+            instance_name=instance_name,
+            telefone=telefone
+        ).first()
+        if contato and contato.wa_id.endswith('@lid') and contato.wa_id != wa_id:
+            contato.wa_id = wa_id
+            contato.save(update_fields=['wa_id'])
+
     contato, _ = WhatsappContato.objects.get_or_create(
         instance_name=instance_name,
         wa_id=wa_id,
