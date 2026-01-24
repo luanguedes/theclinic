@@ -245,7 +245,7 @@ export default function Navbar() {
             <>
               <div className="relative group">
                 <button
-                  onClick={() => setChatOpen(true)}
+                  onClick={() => setChatOpen((prev) => !prev)}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-emerald-600 hover:text-white transition-all"
                   title="Conexao WhatsApp"
                 >

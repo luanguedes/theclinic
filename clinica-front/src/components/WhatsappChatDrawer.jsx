@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { MessageCircle, Search, Send, X, Loader2, Image as ImageIcon, Plus, Phone, Trash2 } from 'lucide-react';
+import { MessageCircle, Search, Send, X, Loader2, Image as ImageIcon, Plus, Phone, Trash2, RefreshCcw } from 'lucide-react';
 
 const EMPTY_STATE = {
   selectedId: null,
@@ -159,11 +159,18 @@ export default function WhatsappChatDrawer({ open, onClose, onUnreadChange }) {
     }
   };
 
+  const handleRefresh = async () => {
+    await loadConversas();
+    if (state.selectedId) {
+      await loadMensagens(state.selectedId);
+    }
+  };
+
   if (!open || !canAccess) return null;
 
   return (
     <>
-      <div className="fixed top-0 right-0 h-screen w-full sm:w-[420px] lg:w-[460px] z-[110]">
+      <div className="fixed top-16 right-0 h-[calc(100vh-4rem)] w-full sm:w-[420px] lg:w-[460px] z-[110]">
       <div className="h-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col">
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
           <div className="flex items-center gap-3">
@@ -173,9 +180,18 @@ export default function WhatsappChatDrawer({ open, onClose, onUnreadChange }) {
               <p className="text-[11px] font-bold text-emerald-200">Atendimento em tempo real</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              className="p-2 rounded-full hover:bg-white/10"
+              title="Recarregar conversas"
+            >
+              <RefreshCcw size={16} />
+            </button>
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="p-4 border-b border-slate-100 dark:border-slate-800">
