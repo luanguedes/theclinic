@@ -39,3 +39,17 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f'{self.action} {self.app_label}.{self.model_name} {self.object_id}'
+
+
+class WebhookEvent(models.Model):
+    provider = models.CharField(max_length=50, db_index=True)
+    instance_name = models.CharField(max_length=100, db_index=True)
+    event_type = models.CharField(max_length=100, blank=True, default='')
+    payload = models.JSONField(null=True, blank=True)
+    received_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-received_at']
+
+    def __str__(self):
+        return f'{self.provider}:{self.instance_name}:{self.event_type}'

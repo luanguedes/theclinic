@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 from usuarios.views import MeView
+from clinica_core.webhooks import EvolutionWebhookView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -14,6 +15,7 @@ urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view()),
     path('api/token/refresh/', TokenRefreshView.as_view()),
     path('api/me/', MeView.as_view()),
+    path('api/webhooks/whatsapp/<str:instance_name>/', EvolutionWebhookView.as_view()),
 
     path('api/pacientes/', include('pacientes.urls')),
     path('api/operadores/', include('usuarios.urls')),
