@@ -267,8 +267,6 @@ export default function Navbar() {
               )}
             </>
           )}
-            </>
-          )}
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"></div>
 
