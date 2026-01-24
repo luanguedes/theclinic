@@ -171,7 +171,7 @@ export default function MarcarConsulta() {
   const [loadingPaciente, setLoadingPaciente] = useState(false);
   
   const formInicialPaciente = { 
-    nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '', 
+    nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '', email: '', 
     cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', prioridade: ''
   };
   const [novoPaciente, setNovoPaciente] = useState(formInicialPaciente);
@@ -634,7 +634,8 @@ export default function MarcarConsulta() {
                         </div>
                         <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Nascimento</label><input type="date" name="data_nascimento" value={novoPaciente.data_nascimento} onChange={handlePacienteChange} className={inputClass} required max={hojeIso}/></div>
                         <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Sexo</label><select name="sexo" value={novoPaciente.sexo} onChange={handlePacienteChange} className={inputClass}><option value="">Selecione...</option><option value="Feminino">Feminino</option><option value="Masculino">Masculino</option></select></div>
-                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Celular</label><input name="telefone" value={novoPaciente.telefone} onChange={handlePacienteChange} className={inputClass}/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Celular</label><input name="telefone" value={novoPaciente.telefone} onChange={handlePacienteChange} className={inputClass} required/></div>
+                        <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">E-mail</label><input type="email" name="email" value={novoPaciente.email} onChange={handlePacienteChange} className={inputClass}/></div>
                         <div className="col-span-3"><label className="font-bold block mb-1 uppercase text-slate-500">Nome da Mãe</label><input name="nome_mae" value={novoPaciente.nome_mae} onChange={handlePacienteChange} className={inputClass}/></div>
 
                         {/* ENDEREÇO */}

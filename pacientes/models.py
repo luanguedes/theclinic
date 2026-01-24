@@ -34,6 +34,7 @@ class Paciente(models.Model):
     cpf = models.CharField(max_length=14, unique=True)
     data_nascimento = models.DateField()
     telefone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True, null=True)
     
     # Endereço
     cep = models.CharField(max_length=20, blank=True, null=True)

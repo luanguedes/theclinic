@@ -28,6 +28,7 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     # Campos de leitura simples
     nome_paciente = serializers.CharField(source='paciente.nome', read_only=True)
     telefone_paciente = serializers.CharField(source='paciente.telefone', read_only=True)
+    paciente_email = serializers.CharField(source='paciente.email', read_only=True)
     nome_profissional = serializers.CharField(source='profissional.nome', read_only=True)
     nome_especialidade = serializers.CharField(source='especialidade.nome', read_only=True)
     
@@ -131,6 +132,7 @@ class AgendamentoSerializer(serializers.ModelSerializer):
         return {
             "clinica_logo": logo_url,
             "paciente_cpf": obj.paciente.cpf,
+            "paciente_email": obj.paciente.email,
             "paciente_nascimento": obj.paciente.data_nascimento,
             "paciente_sexo": obj.paciente.sexo,
             "paciente_mae": obj.paciente.nome_mae,

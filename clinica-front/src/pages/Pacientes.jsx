@@ -35,7 +35,7 @@ export default function Pacientes() {
   const [activeFilters, setActiveFilters] = useState([]);
 
   const formInicial = {
-    nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '',
+    nome: '', nome_mae: '', sexo: '', cpf: '', data_nascimento: '', telefone: '', email: '',
     cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
     prioridade: '', aceite_lgpd: false 
   };
@@ -360,7 +360,8 @@ export default function Pacientes() {
                         </div>
                       </td>
                       <td className="px-8 py-6 text-slate-600 dark:text-slate-300 font-medium">
-                        {p.telefone || '---'}
+                        <div>{p.telefone || '---'}</div>
+                        <div className="text-[10px] font-bold text-slate-400 mt-1">{p.email || '---'}</div>
                       </td>
                       <td className="px-8 py-6 text-right">
                         {/* CORREÇÃO: Botões de ação sempre visíveis, removido opacity-0 */}
@@ -410,7 +411,8 @@ export default function Pacientes() {
 
                 <div className="md:col-span-3"><label className={labelClass}>Nascimento</label><input type="date" name="data_nascimento" value={form.data_nascimento} onChange={handleChange} max={hoje} className={inputClass} required /></div>
                 <div className="md:col-span-3"><label className={labelClass}>Sexo</label><select name="sexo" value={form.sexo} onChange={handleChange} className={inputClass}><option value="">Selecione...</option><option value="Feminino">Feminino</option><option value="Masculino">Masculino</option><option value="Outro">Outro</option></select></div>
-                <div className="md:col-span-3"><label className={labelClass}>Telefone / WhatsApp</label><input name="telefone" value={form.telefone} onChange={handleChange} className={inputClass} placeholder="(00) 00000-0000"/></div>
+                <div className="md:col-span-3"><label className={labelClass}>Telefone / WhatsApp</label><input name="telefone" value={form.telefone} onChange={handleChange} className={inputClass} placeholder="(00) 00000-0000" required/></div>
+                <div className="md:col-span-3"><label className={labelClass}>E-mail</label><input type="email" name="email" value={form.email} onChange={handleChange} className={inputClass} placeholder="nome@dominio.com"/></div>
                 <div className="md:col-span-3"><label className={labelClass}>Nome da Mãe</label><input name="nome_mae" value={form.nome_mae} onChange={handleChange} className={inputClass} /></div>
 
                 <div className="md:col-span-12 border-b dark:border-slate-700 pb-3 mb-2 font-black text-slate-400 uppercase text-[10px] tracking-[0.2em] flex items-center gap-2 mt-6"><MapPin size={16}/> Localização Residencial</div>

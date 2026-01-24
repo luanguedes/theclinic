@@ -494,6 +494,7 @@ export default function Recepcao() {
                                 <div className="md:col-span-3"><label className={labelClass}>CPF</label><input name="cpf" value={pacienteParaEditar.cpf} onChange={handlePacienteChange} className={inputClass} required /></div>
                                 <div className="md:col-span-3"><label className={labelClass}>Telefone</label><input name="telefone" value={pacienteParaEditar.telefone} onChange={handlePacienteChange} className={inputClass} required /></div>
                                 
+                                <div className="md:col-span-3"><label className={labelClass}>E-mail</label><input type="email" name="email" value={pacienteParaEditar.email || ''} onChange={handlePacienteChange} className={inputClass} /></div>
                                 <div className="md:col-span-3"><label className={labelClass}>Data Nascimento</label><input type="date" name="data_nascimento" value={pacienteParaEditar.data_nascimento} onChange={handlePacienteChange} className={inputClass} required /></div>
                                 <div className="md:col-span-3"><label className={labelClass}>Sexo</label>
                                     <select name="sexo" value={pacienteParaEditar.sexo || ''} onChange={handlePacienteChange} className={inputClass}>
