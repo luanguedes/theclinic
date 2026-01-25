@@ -264,12 +264,23 @@ def process_webhook_event(payload, instance_name):
         sender_override = item.get('sender') or root_sender
         if not sender_override and isinstance(root_data, dict):
             sender_override = root_data.get('sender')
+
+        message_payload = item.get('message') if isinstance(item.get('message'), dict) else {}
+        context_info = {}
+        if isinstance(message_payload.get('messageContextInfo'), dict):
+            context_info = message_payload.get('messageContextInfo')
+        elif isinstance(message_payload.get('contextInfo'), dict):
+            context_info = message_payload.get('contextInfo')
+
         telefone_override = ''
         if remote_jid.endswith('@lid'):
             lid_number = remote_jid.split('@')[0]
             telefone_override = _pick_phone_override(
                 [
                     sender_override,
+                    context_info.get('participant'),
+                    context_info.get('participantJid'),
+                    context_info.get('participantId'),
                     key.get('participant'),
                     item.get('participant'),
                     item.get('participantJid'),
@@ -284,8 +295,6 @@ def process_webhook_event(payload, instance_name):
 
         direction = 'out' if from_me else 'in'
         message_id = key.get('id') or item.get('id') or ''
-
-        message_payload = item.get('message') if isinstance(item.get('message'), dict) else {}
         push_name = item.get('pushName') or item.get('name') or ''
 
         text = _extract_message_text(message_payload)

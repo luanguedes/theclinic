@@ -11,9 +11,19 @@ export function NotificationProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const normalizeMessage = (message) => {
+    if (typeof message === 'string') return message;
+    if (message instanceof Error) return message.message || 'Erro inesperado.';
+    try {
+      return JSON.stringify(message);
+    } catch {
+      return 'Erro inesperado.';
+    }
+  };
+
   const addToast = useCallback((message, type = 'info') => {
     const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message: normalizeMessage(message), type }]);
     
     setTimeout(() => {
       removeToast(id);
