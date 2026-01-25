@@ -93,7 +93,10 @@ def _extract_contact_number(item, jid):
     for key in ['number', 'phone', 'phoneNumber', 'whatsappNumber']:
         value = item.get(key)
         if value:
-            return str(value)
+            number = str(value)
+            if jid and jid.endswith('@lid') and number == jid.split('@')[0]:
+                return ''
+            return number
     if jid and jid.endswith('@s.whatsapp.net'):
         return jid.split('@')[0]
     return ''
@@ -107,6 +110,8 @@ def _normalize_wa_id(remote_jid):
 
 def _extract_phone(wa_id):
     if not wa_id:
+        return ''
+    if wa_id.endswith('@lid'):
         return ''
     raw = wa_id.split('@')[0]
     return re.sub(r'\D', '', raw)
