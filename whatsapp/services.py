@@ -90,13 +90,22 @@ def _extract_contact_name(item):
 def _extract_contact_number(item, jid):
     if not isinstance(item, dict):
         return ''
+    lid_number = ''
+    if jid and jid.endswith('@lid'):
+        lid_number = jid.split('@')[0]
     for key in ['number', 'phone', 'phoneNumber', 'whatsappNumber']:
         value = item.get(key)
         if value:
             number = str(value)
-            if jid and jid.endswith('@lid') and number == jid.split('@')[0]:
+            if lid_number and number == lid_number:
                 return ''
             return number
+    for key in ['sender', 'participant', 'participantJid', 'participantId', 'author']:
+        value = item.get(key)
+        if value:
+            number = normalize_phone(value)
+            if number and number != lid_number:
+                return number
     if jid and jid.endswith('@s.whatsapp.net'):
         return jid.split('@')[0]
     return ''
@@ -115,6 +124,21 @@ def _extract_phone(wa_id):
         return ''
     raw = wa_id.split('@')[0]
     return re.sub(r'\D', '', raw)
+
+
+def _pick_phone_override(candidates, lid_number, owner_number):
+    for value in candidates:
+        if not value:
+            continue
+        number = normalize_phone(value)
+        if not number:
+            continue
+        if lid_number and number == lid_number:
+            continue
+        if owner_number and number == owner_number:
+            continue
+        return number
+    return ''
 
 
 def normalize_phone(phone):
@@ -241,10 +265,20 @@ def process_webhook_event(payload, instance_name):
         if not sender_override and isinstance(root_data, dict):
             sender_override = root_data.get('sender')
         telefone_override = ''
-        if remote_jid.endswith('@lid') and sender_override and not from_me:
-            telefone_override = normalize_phone(sender_override)
-            if owner_number and telefone_override == owner_number:
-                telefone_override = ''
+        if remote_jid.endswith('@lid'):
+            lid_number = remote_jid.split('@')[0]
+            telefone_override = _pick_phone_override(
+                [
+                    sender_override,
+                    key.get('participant'),
+                    item.get('participant'),
+                    item.get('participantJid'),
+                    item.get('participantId'),
+                    item.get('author'),
+                ],
+                lid_number,
+                owner_number if not from_me else ''
+            )
         if not remote_jid:
             continue
 
