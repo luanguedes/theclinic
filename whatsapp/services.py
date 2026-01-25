@@ -141,6 +141,42 @@ def _pick_phone_override(candidates, lid_number, owner_number):
     return ''
 
 
+def _resolve_contact_from_lid(instance_name, lid):
+    if not lid or not lid.endswith('@lid'):
+        return {}
+    url = f"{settings.EVOLUTION_API_URL}/chat/findContacts/{instance_name}"
+    headers = {
+        'apikey': settings.EVOLUTION_API_KEY,
+        'Content-Type': 'application/json'
+    }
+    payload = {'where': {'id': lid}}
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=8)
+        if response.status_code not in [200, 201]:
+            return {}
+        data = response.json()
+    except Exception:
+        return {}
+
+    if isinstance(data, list) and data:
+        contact = data[0] if isinstance(data[0], dict) else {}
+    elif isinstance(data, dict):
+        contact = data.get('contact') or data.get('data') or data
+        if isinstance(contact, list):
+            contact = contact[0] if contact else {}
+    else:
+        contact = {}
+
+    if not isinstance(contact, dict):
+        return {}
+
+    return {
+        'jid': contact.get('jid') or contact.get('id') or '',
+        'name': contact.get('name') or contact.get('notify') or contact.get('pushName') or '',
+        'number': contact.get('number') or contact.get('phone') or contact.get('phoneNumber') or ''
+    }
+
+
 def normalize_phone(phone):
     if not phone:
         return ''
@@ -290,6 +326,14 @@ def process_webhook_event(payload, instance_name):
                 lid_number,
                 owner_number if not from_me else ''
             )
+            if not telefone_override and not from_me:
+                resolved = _resolve_contact_from_lid(instance_name, remote_jid)
+                if resolved.get('jid'):
+                    remote_jid = resolved['jid']
+                if resolved.get('number'):
+                    telefone_override = normalize_phone(resolved['number'])
+                if resolved.get('name') and not push_name:
+                    push_name = resolved['name']
         if not remote_jid:
             continue
 
