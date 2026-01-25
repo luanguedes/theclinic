@@ -100,11 +100,12 @@ export default function Navbar() {
     try {
       const res = await api.get('configuracoes/sistema/whatsapp_status/');
       const data = res.data || {};
+      const errorMsg = typeof data.error === 'string' ? data.error : (data.error ? JSON.stringify(data.error) : null);
       setWhatsappStatus({
         loading: false,
         connected: data.connected,
         state: data.state || 'desconhecido',
-        error: data.error || null
+        error: errorMsg
       });
     } catch (error) {
       setWhatsappStatus({
@@ -127,7 +128,7 @@ export default function Navbar() {
       setQrImage(dataUri);
     } catch (error) {
       const rawMessage = error?.response?.data?.error || 'Erro ao carregar QR Code.';
-      const message = typeof rawMessage === 'string' ? rawMessage : 'Erro ao carregar QR Code.';
+      const message = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage);
       setQrError(message);
       notify?.error?.(message);
     } finally {
