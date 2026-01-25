@@ -534,8 +534,7 @@ class WhatsAppStatusView(APIView):
             headers["apikey"] = api_key
 
         endpoints = [
-            f"{base_url}/instance/connectionState/{instance}",
-            f"{base_url}/instance/status/{instance}"
+            f"{base_url}/instance/connectionState/{instance}"
         ]
 
         last_error = None
@@ -547,7 +546,7 @@ class WhatsAppStatusView(APIView):
                 continue
 
             if response.status_code not in [200, 201]:
-                last_error = {'url': url, 'status_code': response.status_code, 'body': response.text}
+                last_error = f"{url} -> {response.status_code}: {response.text}"
                 continue
 
             try:
