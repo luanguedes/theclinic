@@ -36,7 +36,6 @@ class PacienteAtendimentoListView(generics.ListAPIView):
             and (
                 getattr(user, 'is_superuser', False)
                 or getattr(user, 'profissional_id', None)
-                or getattr(user, 'acesso_atendimento', False)
             )
         )
 

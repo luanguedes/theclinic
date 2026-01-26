@@ -5,8 +5,9 @@ import Layout from '../../components/Layout';
 import { Search, CheckCircle2, Clock, Loader2, Stethoscope } from 'lucide-react';
 
 export default function AtendimentoConsultas() {
-  const { api } = useAuth();
+  const { api, user } = useAuth();
   const { notify } = useNotification();
+  const hasProfissional = !!user?.profissional_id || !!user?.is_superuser;
 
   const [loading, setLoading] = useState(false);
   const [startingId, setStartingId] = useState(null);
@@ -22,8 +23,8 @@ export default function AtendimentoConsultas() {
   }, []);
 
   useEffect(() => {
-    if (api) carregarLista();
-  }, [api, dataFiltro, apenasTriados]);
+    if (api && hasProfissional) carregarLista();
+  }, [api, dataFiltro, apenasTriados, hasProfissional]);
 
   const carregarLista = async () => {
     setLoading(true);
@@ -87,6 +88,14 @@ export default function AtendimentoConsultas() {
           </div>
         </div>
 
+        {!hasProfissional ? (
+          <div className="bg-white dark:bg-slate-800 p-10 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 mb-8 text-center">
+            <div className="text-xs font-black text-slate-400 uppercase tracking-widest">Acesso Restrito</div>
+            <p className="text-slate-600 dark:text-slate-300 text-sm font-bold mt-2">
+              Vincule um profissional ao operador para visualizar as consultas.
+            </p>
+          </div>
+        ) : (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-[24px] shadow-sm border border-slate-200 dark:border-slate-700 mb-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div>
             <label className={labelClass}>Data</label>
@@ -112,7 +121,9 @@ export default function AtendimentoConsultas() {
             </button>
           </div>
         </div>
+        )}
 
+        {hasProfissional && (
         <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-700 min-h-[400px]">
           <div className="overflow-visible">
             <table className="w-full text-left">
@@ -183,6 +194,7 @@ export default function AtendimentoConsultas() {
             </table>
           </div>
         </div>
+        )}
       </div>
     </Layout>
   );
