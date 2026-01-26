@@ -2,6 +2,9 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
 from django.db import models
 from agendamento.models import Agendamento
+from pacientes.models import Paciente
+from profissionais.models import Profissional
+from configuracoes.models import Cid
 
 
 def calcular_imc(peso_kg, altura_cm):
@@ -110,3 +113,63 @@ class Triagem(models.Model):
 
     def __str__(self):
         return f"Triagem {self.agendamento_id}"
+
+
+class AtendimentoMedico(models.Model):
+    agendamento = models.OneToOneField(
+        Agendamento,
+        on_delete=models.CASCADE,
+        related_name='atendimento_medico'
+    )
+    paciente = models.ForeignKey(
+        Paciente,
+        on_delete=models.CASCADE,
+        related_name='atendimentos_medicos'
+    )
+    profissional = models.ForeignKey(
+        Profissional,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='atendimentos_medicos'
+    )
+
+    queixa_principal = models.TextField(blank=True)
+    historia_doenca_atual = models.TextField(blank=True)
+    antecedentes_pessoais = models.TextField(blank=True)
+    antecedentes_familiares = models.TextField(blank=True)
+    alergias_referidas = models.TextField(blank=True)
+    medicacoes_em_uso = models.TextField(blank=True)
+    habitos_vida = models.TextField(blank=True)
+
+    exame_fisico = models.TextField(blank=True)
+    plano_terapeutico = models.TextField(blank=True)
+    orientacoes = models.TextField(blank=True)
+    encaminhamento = models.TextField(blank=True)
+    observacoes_gerais = models.TextField(blank=True)
+    atestado = models.TextField(blank=True)
+
+    prescricao_medicamentos = models.JSONField(blank=True, null=True, default=list)
+    exames_solicitados = models.JSONField(blank=True, null=True, default=list)
+
+    cid_principal = models.ForeignKey(
+        Cid,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='atendimentos_principais'
+    )
+    cid_secundario = models.ForeignKey(
+        Cid,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='atendimentos_secundarios'
+    )
+    diagnostico_descricao = models.TextField(blank=True)
+
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Atendimento {self.agendamento_id}"

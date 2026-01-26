@@ -32,9 +32,19 @@ class Paciente(models.Model):
     )
     
     cpf = models.CharField(max_length=14, unique=True)
+    rg = models.CharField(max_length=20, blank=True, null=True)
+    cns = models.CharField(max_length=20, blank=True, null=True)
     data_nascimento = models.DateField()
     telefone = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True, null=True)
+    nome_social = models.CharField(max_length=255, blank=True, null=True)
+    estado_civil = models.CharField(max_length=40, blank=True, null=True)
+    naturalidade = models.CharField(max_length=100, blank=True, null=True)
+    uf_nascimento = models.CharField(max_length=2, blank=True, null=True)
+    responsavel_nome = models.CharField(max_length=255, blank=True, null=True)
+    responsavel_telefone = models.CharField(max_length=20, blank=True, null=True)
+    contato_emergencia_nome = models.CharField(max_length=255, blank=True, null=True)
+    contato_emergencia_telefone = models.CharField(max_length=20, blank=True, null=True)
     
     # Endereço
     cep = models.CharField(max_length=20, blank=True, null=True)

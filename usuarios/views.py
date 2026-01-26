@@ -107,9 +107,6 @@ class MeView(APIView):
                         list(Privilegio.objects.filter(active=True, path='/configuracoes').values_list('path', flat=True))
                     )
 
-        if prof_id:
-            allowed_routes.extend(['/prontuarios', '/triagem'])
-
         allowed_routes = sorted(set(allowed_routes))
 
         data = {

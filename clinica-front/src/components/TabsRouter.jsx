@@ -22,6 +22,8 @@ const MarcarConsulta = lazy(() => import('../pages/MarcarConsulta'));
 const Recepcao = lazy(() => import('../pages/Recepcao'));
 const Triagem = lazy(() => import('../pages/Triagem'));
 const TriagemForm = lazy(() => import('../pages/TriagemForm'));
+const AtendimentoConsultas = lazy(() => import('../pages/Atendimento/AtendimentoConsultas'));
+const AtendimentoConsultaForm = lazy(() => import('../pages/Atendimento/AtendimentoConsultaForm'));
 const Bloqueios = lazy(() => import('../pages/Bloqueios'));
 const Logs = lazy(() => import('../pages/Logs'));
 const ExamesProcedimentos = lazy(() => import('../pages/ExamesProcedimentos'));
@@ -54,6 +56,8 @@ const renderRoutes = (locationOverride) => (
     <Route path="/recepcao" element={<PrivateRoute><Recepcao /></PrivateRoute>} />
     <Route path="/triagem" element={<PrivateRoute><Triagem /></PrivateRoute>} />
     <Route path="/triagem/:agendamentoId" element={<PrivateRoute><TriagemForm /></PrivateRoute>} />
+    <Route path="/atendimento-consultas" element={<PrivateRoute><AtendimentoConsultas /></PrivateRoute>} />
+    <Route path="/atendimento-consultas/:agendamentoId" element={<PrivateRoute><AtendimentoConsultaForm /></PrivateRoute>} />
     <Route path="/agenda/marcar" element={<PrivateRoute><MarcarConsulta /></PrivateRoute>} />
     <Route path="/agenda/configurar" element={<PrivateRoute><ConfigurarAgenda /></PrivateRoute>} />
     <Route path="/agenda/configurar/nova" element={<PrivateRoute><CriarAgenda /></PrivateRoute>} />

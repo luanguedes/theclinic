@@ -23,7 +23,8 @@ export const DASHBOARD_ITEM = {
 
 const ATENDIMENTO_ITEMS = [
   { to: '/prontuarios', label: 'Prontuarios', icon: ClipboardList },
-  { to: '/triagem', label: 'Triagem', icon: Bell }
+  { to: '/triagem', label: 'Triagem', icon: Bell },
+  { to: '/atendimento-consultas', label: 'Consultas', icon: Stethoscope }
 ];
 
 const AGENDA_ITEMS = [

@@ -1,5 +1,8 @@
 from rest_framework import generics, permissions, filters
 from rest_framework_simplejwt.authentication import JWTAuthentication # <--- IMPORTANTE
+from django.utils import timezone
+from agendamento.models import Agendamento
+from agendamento.serializers import AgendamentoSerializer
 from .models import Paciente
 from .serializers import PacienteSerializer
 
@@ -10,6 +13,55 @@ class PacienteListCreateView(generics.ListCreateAPIView):
     # --- BLINDAGEM DE SEGURANÇA ---
     authentication_classes = [JWTAuthentication] # Força aceitar o Token
     permission_classes = [permissions.IsAuthenticated]
+
+
+class PacienteAtendimentoListView(generics.ListAPIView):
+    serializer_class = AgendamentoSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _parse_bool(self, value):
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in ['1', 'true', 'yes', 'sim']:
+            return True
+        if normalized in ['0', 'false', 'no', 'nao']:
+            return False
+        return None
+
+    def _has_atendimento_access(self, user):
+        return bool(
+            user
+            and (
+                getattr(user, 'is_superuser', False)
+                or getattr(user, 'profissional_id', None)
+                or getattr(user, 'acesso_atendimento', False)
+            )
+        )
+
+    def get_queryset(self):
+        if not self._has_atendimento_access(self.request.user):
+            return Agendamento.objects.none()
+
+        qs = Agendamento.objects.all().select_related(
+            'paciente', 'profissional', 'especialidade', 'triagem'
+        ).filter(status=Agendamento.Status.AGUARDANDO)
+
+        data = self.request.query_params.get('data')
+        if data:
+            qs = qs.filter(data=data)
+        else:
+            qs = qs.filter(data=timezone.localdate())
+
+        if self.request.user.profissional_id:
+            qs = qs.filter(profissional_id=self.request.user.profissional_id)
+
+        apenas_triados = self._parse_bool(self.request.query_params.get('apenas_triados'))
+        if apenas_triados is True:
+            qs = qs.filter(triagem__isnull=False)
+
+        return qs.order_by('horario')
     
     filter_backends = [filters.SearchFilter]
     search_fields = ['nome', 'cpf', 'telefone', 'cidade']

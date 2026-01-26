@@ -347,7 +347,7 @@ export default function Dashboard() {
                                     Pacientes em espera
                                 </p>
                                 <button 
-                                    onClick={() => navigate('/triagem')}
+                                    onClick={() => navigate('/atendimento-consultas')}
                                     disabled={!isProfissional}
                                     className="w-full bg-white text-slate-900 font-black uppercase text-xs tracking-widest py-4 rounded-2xl shadow-xl hover:bg-blue-50 transition-all active:scale-95 disabled:opacity-50"
                                 >

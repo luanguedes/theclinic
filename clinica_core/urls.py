@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/pacientes/', include('pacientes.urls')),
     path('api/operadores/', include('usuarios.urls')),
     path('api/configuracoes/', include('configuracoes.urls')),
+    path('api/cadastros/', include('configuracoes.cadastros_urls')),
     path('api/auditoria/', include('auditoria.urls')),
 
     #  routers "puros" primeiro
