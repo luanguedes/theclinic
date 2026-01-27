@@ -7,6 +7,7 @@ import {
     CalendarRange, Search, Plus, Filter, Edit, Trash2, 
     X, Save, Clock, CalendarDays, PlusCircle, Calculator, DollarSign, ShieldCheck, Users, ListFilter, ChevronDown, Check, Loader2 
 } from 'lucide-react';
+import { formatDateDMY } from '../utils/date';
 
 // --- HELPERS DE TEMPO (Mantidos para o Cálculo Real-Time) ---
 const timeToMinutes = (time) => {
@@ -171,8 +172,8 @@ export default function ConfigurarAgenda() {
       { value: 'dia_filtro', label: 'Dia da Semana' },
   ];
 
-  const formatData = (dataString) => { if (!dataString) return '-'; const [ano, mes, dia] = dataString.split('-'); return `${dia}/${mes}/${ano}`; };
-  const formatDateBr = (dateString) => { if(!dateString) return ''; const [year, month, day] = dateString.split('-'); return `${day}/${month}/${year}`; };
+  const formatData = (dataString) => (dataString ? formatDateDMY(dataString) : '-');
+  const formatDateBr = (dateString) => (dateString ? formatDateDMY(dateString) : '');
 
   const getStatusBadge = (item) => {
       const hoje = new Date().toISOString().split('T')[0];

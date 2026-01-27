@@ -8,6 +8,7 @@ import {
     CalendarCheck, ChevronRight, Stethoscope,
     Calendar, Lock, Eye, EyeOff, Loader2, RefreshCw 
 } from 'lucide-react';
+import { formatDateDMY } from '../utils/date';
 
 // --- COMPONENTE DE BLOQUEIO VISUAL (Mantido) ---
 const RestrictedOverlay = ({ label }) => (
@@ -294,7 +295,7 @@ export default function Dashboard() {
                                         <Calendar size={64} className="text-slate-200 dark:text-slate-700"/>
                                     </div>
                                     <h4 className="text-slate-800 dark:text-white font-black text-xl uppercase tracking-tighter">Sem movimentação</h4>
-                                    <p className="text-slate-400 max-w-xs mx-auto mt-2 text-sm font-medium">Não existem agendamentos para o dia {filtroDia.split('-').reverse().join('/')}.</p>
+                                    <p className="text-slate-400 max-w-xs mx-auto mt-2 text-sm font-medium">Não existem agendamentos para o dia {formatDateDMY(filtroDia)}.</p>
                                 </div>
                             ) : (
                                 <div className="p-4">

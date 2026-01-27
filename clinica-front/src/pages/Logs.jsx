@@ -13,6 +13,7 @@ import {
   Eye,
   Loader2
 } from 'lucide-react';
+import { formatDateDMY } from '../utils/date';
 
 const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -475,7 +476,9 @@ export default function Logs() {
   const formatDate = (value) => {
     if (!value) return '-';
     const date = new Date(value);
-    return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    const data = formatDateDMY(date);
+    const hora = date.toLocaleTimeString('pt-BR');
+    return `${data} ${hora}`;
   };
 
   const thClass = 'px-5 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest';

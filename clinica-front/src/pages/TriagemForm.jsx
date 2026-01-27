@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
+import { formatDateDMY } from '../utils/date';
 import { ArrowLeft, CheckCircle2, Loader2, Save, Stethoscope } from 'lucide-react';
 
 const HISTORICO_FLAGS = [
@@ -229,7 +230,7 @@ export default function TriagemForm() {
                 <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Atendimento</div>
                   <div className="text-sm font-black text-slate-700 dark:text-slate-200">
-                    {agendamento?.data} • {agendamento?.horario?.slice(0, 5)}
+                    {formatDateDMY(agendamento?.data)} • {agendamento?.horario?.slice(0, 5)}
                   </div>
                 </div>
               </div>

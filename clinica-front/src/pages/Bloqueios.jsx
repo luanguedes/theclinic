@@ -6,6 +6,7 @@ import {
     CalendarX, Save, Trash2, AlertTriangle, FileDown, Ban, CheckCircle2, X, Pencil, FileText, RotateCcw, MessageSquare, CheckSquare, Square, Send, Loader2, Lock, CalendarDays, Clock
 } from 'lucide-react';
 import { generateConflictReport } from '../utils/generateReport';
+import { formatDateDMY } from '../utils/date';
 
 export default function Bloqueios() {
     const { api } = useAuth();
@@ -90,10 +91,7 @@ export default function Bloqueios() {
 
     const formatDateBr = (dateStr) => {
         if (!dateStr) return '';
-        const iso = String(dateStr).split('T')[0];
-        const [y, m, d] = iso.split('-');
-        if (!d) return new Date(dateStr).toLocaleDateString('pt-BR');
-        return `${d}/${m}/${y}`;
+        return formatDateDMY(dateStr);
     };
 
     const buildPeriodo = () => ({

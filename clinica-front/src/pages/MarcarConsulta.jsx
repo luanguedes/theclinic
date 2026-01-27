@@ -10,6 +10,7 @@ import {
     Users, Printer, Clock, Filter, Stethoscope, CalendarDays, CheckCircle2
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
+import { formatDateDMY } from '../utils/date';
 
 // --- CSS CUSTOMIZADO PARA AUMENTAR O CALENDÁRIO ---
 const calendarStyles = `
@@ -184,6 +185,8 @@ export default function MarcarConsulta() {
       const day = String(date.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
   };
+
+  const dateTitle = `${dateValue.toLocaleDateString('pt-BR', { weekday: 'long' })} • ${formatDateDMY(getLocalISODate(dateValue))}`;
 
   const isDateInPast = (date) => {
       const hoje = new Date();
@@ -471,7 +474,7 @@ export default function MarcarConsulta() {
                         <div>
                             <h3 className="font-black text-lg text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
                                 <CalendarDays className="text-blue-500"/>
-                                {dateValue.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                                {dateTitle}
                             </h3>
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
                                 {loadingAgenda ? 'Buscando...' : `${vagasDoDia.length} Horários Listados`}
@@ -570,7 +573,7 @@ export default function MarcarConsulta() {
                     <div className="p-8 space-y-6">
                         <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl flex justify-between items-center text-blue-800 dark:text-blue-300 font-black text-sm border border-blue-100 dark:border-blue-900/30">
                             <span className="flex items-center gap-2 uppercase tracking-wide"><Clock size={18}/> {horarioSelecionado || encaixeHora}</span>
-                            <span>{dateValue.toLocaleDateString()}</span>
+                            <span>{formatDateDMY(getLocalISODate(dateValue))}</span>
                         </div>
 
                         <div>

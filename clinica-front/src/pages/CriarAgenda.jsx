@@ -9,6 +9,7 @@ import {
     ChevronDown, X, Users, Pin, Hourglass, Repeat, ListPlus, Pencil, Ban, 
     CalendarDays, DollarSign, ShieldCheck, Plus, Trash2, Loader2, Save, PlusCircle
 } from 'lucide-react';
+import { formatDateDMY } from '../utils/date';
 
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -558,7 +559,7 @@ export default function CriarAgenda() {
                                         {regra.dias.map(d => <span key={d} className="text-[9px] font-black bg-purple-50 dark:bg-purple-900/30 text-purple-600 px-1.5 py-0.5 rounded uppercase">{diasSemana.find(dia => dia.id === d)?.label}</span>)}
                                     </div>
                                     <div className="space-y-1">
-                                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter"><CalendarDays size={12}/> {new Date(regra.data_inicio).toLocaleDateString()} - {new Date(regra.data_fim).toLocaleDateString()}</div>
+                                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter"><CalendarDays size={12}/> {formatDateDMY(regra.data_inicio)} - {formatDateDMY(regra.data_fim)}</div>
                                         <div className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">{regra.resumo}</div>
                                         <div className="pt-2 flex justify-between items-center border-t dark:border-slate-700 mt-2">
                                             <span className="text-[10px] font-black text-blue-500 uppercase flex items-center gap-1"><ShieldCheck size={12}/> {regra.convenio_nome}</span>

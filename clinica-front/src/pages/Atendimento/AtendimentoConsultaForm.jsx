@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import Layout from '../../components/Layout';
+import { formatDateDMY } from '../../utils/date';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -529,13 +530,13 @@ export default function AtendimentoConsultaForm() {
                 {paciente?.nome || agendamento?.nome_paciente}
               </div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                {paciente?.data_nascimento || agendamento?.detalhes_pdf?.paciente_nascimento} • Mae: {paciente?.nome_mae || agendamento?.detalhes_pdf?.paciente_mae || '-'}
+                {formatDateDMY(paciente?.data_nascimento || agendamento?.detalhes_pdf?.paciente_nascimento)} • Mae: {paciente?.nome_mae || agendamento?.detalhes_pdf?.paciente_mae || '-'}
               </div>
             </div>
             <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Atendimento</div>
               <div className="text-sm font-black text-slate-700 dark:text-slate-200">
-                {agendamento?.data} • {agendamento?.horario?.slice(0, 5)} • {agendamento?.nome_profissional}
+                {formatDateDMY(agendamento?.data)} • {agendamento?.horario?.slice(0, 5)} • {agendamento?.nome_profissional}
               </div>
             </div>
           </div>
