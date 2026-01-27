@@ -6,6 +6,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.http import HttpResponse
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from datetime import datetime, timedelta
 from agendamento.models import Agendamento
 from agendamento.serializers import AgendamentoSerializer
 from .models import Triagem, AtendimentoMedico
@@ -67,6 +68,30 @@ def _has_atendimento_access(user):
     )
 
 
+def _combine_data_hora(local_date, local_time):
+    """
+    Combina data + hora do agendamento em um datetime consciente de fuso.
+    """
+    if not local_date or not local_time:
+        return None
+    dt = datetime.combine(local_date, local_time)
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    return dt
+
+
+def _finalizado_editavel(agendamento):
+    """
+    Permite edicao por ate 24h apos o fim do atendimento.
+    """
+    if agendamento.status != Agendamento.Status.FINALIZADO:
+        return True
+    fim_dt = _combine_data_hora(agendamento.data, agendamento.fim_atendimento)
+    if not fim_dt:
+        return False
+    return timezone.now() - fim_dt <= timedelta(hours=24)
+
+
 class AtendimentoMedicoViewSet(viewsets.ModelViewSet):
     queryset = AtendimentoMedico.objects.all().select_related(
         'agendamento', 'paciente', 'profissional', 'cid_principal', 'cid_secundario'
@@ -122,8 +147,62 @@ class AtendimentoIniciarView(APIView):
 
         if agendamento.status == Agendamento.Status.AGUARDANDO:
             agendamento.status = Agendamento.Status.EM_ATENDIMENTO
-            agendamento.inicio_atendimento = timezone.now().time()
+            agendamento.inicio_atendimento = timezone.localtime().time()
             agendamento.save(update_fields=['status', 'inicio_atendimento', 'atualizado_em'])
+        elif agendamento.status == Agendamento.Status.FINALIZADO and _finalizado_editavel(agendamento):
+            # Durante a janela de 24h, o status "Em Atendimento" deve refletir
+            # apenas que a tela esta aberta.
+            agendamento.status = Agendamento.Status.EM_ATENDIMENTO
+            agendamento.save(update_fields=['status', 'atualizado_em'])
+
+        serializer = AgendamentoSerializer(agendamento, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AtendimentoPausarView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, paciente_id):
+        if not _has_atendimento_access(request.user):
+            return Response({'error': 'Acesso restrito.'}, status=status.HTTP_403_FORBIDDEN)
+
+        agendamento = get_object_or_404(Agendamento, pk=paciente_id)
+        if not request.user.is_superuser and request.user.profissional_id and agendamento.profissional_id != request.user.profissional_id:
+            return Response({'error': 'Agendamento nao pertence ao profissional.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if agendamento.status == Agendamento.Status.EM_ATENDIMENTO:
+            # Se ja havia fim registrado, volta para finalizado; senao, aguardando.
+            agendamento.status = (
+                Agendamento.Status.FINALIZADO if agendamento.fim_atendimento else Agendamento.Status.AGUARDANDO
+            )
+            agendamento.save(update_fields=['status', 'atualizado_em'])
+
+        serializer = AgendamentoSerializer(agendamento, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AtendimentoFinalizarView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, paciente_id):
+        if not _has_atendimento_access(request.user):
+            return Response({'error': 'Acesso restrito.'}, status=status.HTTP_403_FORBIDDEN)
+
+        agendamento = get_object_or_404(Agendamento, pk=paciente_id)
+        if not request.user.is_superuser and request.user.profissional_id and agendamento.profissional_id != request.user.profissional_id:
+            return Response({'error': 'Agendamento nao pertence ao profissional.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if agendamento.status == Agendamento.Status.FINALIZADO and not _finalizado_editavel(agendamento):
+            return Response(
+                {'error': 'Janela de edicao encerrada (mais de 24h).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        agendamento.status = Agendamento.Status.FINALIZADO
+        agendamento.fim_atendimento = timezone.localtime().time()
+        agendamento.save(update_fields=['status', 'fim_atendimento', 'atualizado_em'])
 
         serializer = AgendamentoSerializer(agendamento, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -147,6 +226,19 @@ class AtendimentoSalvarView(APIView):
         )
         if not request.user.is_superuser and request.user.profissional_id and agendamento.profissional_id != request.user.profissional_id:
             return Response({'error': 'Agendamento nao pertence ao profissional.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if agendamento.status == Agendamento.Status.FINALIZADO and not _finalizado_editavel(agendamento):
+            return Response(
+                {'error': 'Atendimento finalizado ha mais de 24h. Edicao bloqueada.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Garantia defensiva: se o medico abrir direto a rota e salvar,
+        # o status deve refletir que a tela esta aberta.
+        if agendamento.status == Agendamento.Status.AGUARDANDO:
+            agendamento.status = Agendamento.Status.EM_ATENDIMENTO
+            agendamento.inicio_atendimento = agendamento.inicio_atendimento or timezone.localtime().time()
+            agendamento.save(update_fields=['status', 'inicio_atendimento', 'atualizado_em'])
 
         payload = request.data.copy()
         payload['agendamento'] = agendamento.id

@@ -89,6 +89,7 @@ export default function AtendimentoConsultaForm() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
   const [agendamento, setAgendamento] = useState(null);
   const [paciente, setPaciente] = useState(null);
   const [triagem, setTriagem] = useState(null);
@@ -139,6 +140,27 @@ export default function AtendimentoConsultaForm() {
     encaminhamento: false,
     ficha: true
   });
+
+  const fimAtendimentoDt = useMemo(() => {
+    if (!agendamento?.data || !agendamento?.fim_atendimento) return null;
+    const dt = new Date(`${agendamento.data}T${agendamento.fim_atendimento}`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }, [agendamento]);
+
+  const finalizadoEditavel = useMemo(() => {
+    if (agendamento?.status !== 'finalizado') return true;
+    if (!fimAtendimentoDt) return false;
+    const janelaMs = 24 * 60 * 60 * 1000;
+    return Date.now() - fimAtendimentoDt.getTime() <= janelaMs;
+  }, [agendamento, fimAtendimentoDt]);
+
+  const isLocked = agendamento?.status === 'finalizado' && !finalizadoEditavel;
+
+  const janelaFimTexto = useMemo(() => {
+    if (!fimAtendimentoDt) return null;
+    const fimJanela = new Date(fimAtendimentoDt.getTime() + 24 * 60 * 60 * 1000);
+    return fimJanela.toLocaleString('pt-BR');
+  }, [fimAtendimentoDt]);
 
   useEffect(() => {
     const carregarDados = async () => {
@@ -203,6 +225,29 @@ export default function AtendimentoConsultaForm() {
 
     if (api && agendamentoId) carregarDados();
   }, [api, agendamentoId, notify]);
+
+  useEffect(() => {
+    if (!api || !agendamentoId) return undefined;
+    let active = true;
+
+    const marcarTelaAberta = async () => {
+      try {
+        const res = await api.post(`atendimento/iniciar/${agendamentoId}/`);
+        if (active && res?.data) {
+          setAgendamento(res.data);
+        }
+      } catch (error) {
+        // Silencioso: a tela pode ter sido aberta fora do fluxo padrao.
+      }
+    };
+
+    marcarTelaAberta();
+
+    return () => {
+      active = false;
+      api.post(`atendimento/pausar/${agendamentoId}/`).catch(() => {});
+    };
+  }, [api, agendamentoId]);
 
   useEffect(() => {
     if (!medicamentoQuery || medicamentoQuery.length < 2) {
@@ -341,8 +386,12 @@ export default function AtendimentoConsultaForm() {
     }));
   };
 
-  const salvarAtendimento = async () => {
+  const salvarAtendimento = async ({ silent = false } = {}) => {
     if (!agendamentoId) return;
+    if (isLocked) {
+      notify.warning('Atendimento finalizado ha mais de 24h. Edicao bloqueada.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -351,11 +400,34 @@ export default function AtendimentoConsultaForm() {
       };
       const res = await api.post('atendimento/salvar/', payload);
       setAtendimentoId(res.data.id);
-      notify.success('Atendimento salvo com sucesso.');
+      const resAg = await api.get(`agendamento/${agendamentoId}/`);
+      setAgendamento(resAg.data);
+      if (!silent) notify.success('Atendimento salvo com sucesso.');
     } catch (error) {
-      notify.error('Erro ao salvar atendimento.');
+      if (!silent) notify.error('Erro ao salvar atendimento.');
+      throw error;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const finalizarAtendimento = async () => {
+    if (!agendamentoId) return;
+    if (isLocked) {
+      notify.warning('Atendimento finalizado ha mais de 24h. Edicao bloqueada.');
+      return;
+    }
+    setFinalizing(true);
+    try {
+      await salvarAtendimento({ silent: true });
+      const res = await api.post(`atendimento/finalizar/${agendamentoId}/`);
+      setAgendamento(res.data);
+      notify.success('Atendimento finalizado.');
+      navigate('/atendimento-consultas');
+    } catch (error) {
+      notify.error('Erro ao finalizar atendimento.');
+    } finally {
+      setFinalizing(false);
     }
   };
 
@@ -468,6 +540,20 @@ export default function AtendimentoConsultaForm() {
             </div>
           </div>
         </div>
+
+        {agendamento?.status === 'finalizado' && (
+          <div
+            className={`mb-6 p-4 rounded-2xl border text-xs font-bold uppercase tracking-widest ${
+              finalizadoEditavel
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800'
+                : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+            }`}
+          >
+            {finalizadoEditavel
+              ? `Atendimento finalizado. Edicao permitida por 24h${janelaFimTexto ? ` (ate ${janelaFimTexto}).` : '.'}`
+              : 'Atendimento finalizado ha mais de 24h. Edicao bloqueada.'}
+          </div>
+        )}
 
         <div className="sticky top-20 z-[50] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-[20px] shadow-sm p-3 mb-6 flex flex-wrap gap-2">
           {sections.map((section) => {
@@ -686,16 +772,24 @@ export default function AtendimentoConsultaForm() {
         <div className="flex flex-col md:flex-row gap-3 justify-end">
           <button
             onClick={() => setModalOpen(true)}
-            className="px-8 py-3 bg-white border border-slate-200 dark:border-slate-700 text-slate-600 font-black uppercase text-[10px] tracking-widest rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 justify-center"
+            disabled={isLocked}
+            className="px-8 py-3 bg-white border border-slate-200 dark:border-slate-700 text-slate-600 font-black uppercase text-[10px] tracking-widest rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 justify-center disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <FileText size={16} /> Gerar Documentos
           </button>
           <button
             onClick={salvarAtendimento}
-            disabled={saving}
-            className="px-10 py-3 bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-xl shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center gap-2 justify-center"
+            disabled={saving || finalizing || isLocked}
+            className="px-10 py-3 bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-xl shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center gap-2 justify-center disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} Salvar Atendimento
+          </button>
+          <button
+            onClick={finalizarAtendimento}
+            disabled={saving || finalizing || isLocked}
+            className="px-10 py-3 bg-purple-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-xl shadow-purple-500/20 hover:bg-purple-700 transition-all flex items-center gap-2 justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {finalizing ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Finalizar Atendimento
           </button>
         </div>
       </div>

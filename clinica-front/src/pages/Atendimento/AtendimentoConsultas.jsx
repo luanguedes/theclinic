@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import Layout from '../../components/Layout';
@@ -7,6 +8,7 @@ import { Search, CheckCircle2, Clock, Loader2, Stethoscope } from 'lucide-react'
 export default function AtendimentoConsultas() {
   const { api, user } = useAuth();
   const { notify } = useNotification();
+  const navigate = useNavigate();
   const hasProfissional = !!user?.profissional_id || !!user?.is_superuser;
 
   const [loading, setLoading] = useState(false);
@@ -35,7 +37,7 @@ export default function AtendimentoConsultas() {
       const res = await api.get(`pacientes/atendimento/?${params.toString()}`);
       setAgendamentos(Array.isArray(res.data.results || res.data) ? (res.data.results || res.data) : []);
     } catch (error) {
-      notify.error('Erro ao carregar pacientes aguardando atendimento.');
+      notify.error('Erro ao carregar pacientes para atendimento.');
       setAgendamentos([]);
     } finally {
       setLoading(false);
@@ -52,12 +54,35 @@ export default function AtendimentoConsultas() {
     return Math.max(0, Math.floor(diffMs / 60000));
   };
 
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'em_atendimento':
+        return 'Em Atendimento';
+      case 'finalizado':
+        return 'Finalizado';
+      case 'aguardando':
+      default:
+        return 'Aguardando';
+    }
+  };
+
+  const getStatusClass = (status) => {
+    switch (status) {
+      case 'em_atendimento':
+        return 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
+      case 'finalizado':
+        return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
+      case 'aguardando':
+      default:
+        return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800';
+    }
+  };
+
   const iniciarAtendimento = async (agendamentoId) => {
     setStartingId(agendamentoId);
     try {
       await api.post(`atendimento/iniciar/${agendamentoId}/`);
-      window.open(`/atendimento-consultas/${agendamentoId}`, '_blank');
-      carregarLista();
+      navigate(`/atendimento-consultas/${agendamentoId}`);
     } catch (error) {
       notify.error('Erro ao iniciar atendimento.');
     } finally {
@@ -84,7 +109,7 @@ export default function AtendimentoConsultas() {
             <h1 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-tighter">
               <CheckCircle2 className="text-emerald-600" size={32} /> Atendimento de Consultas
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Pacientes aguardando para consulta medica.</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Lista do dia com pacientes aguardando, em atendimento e finalizados.</p>
           </div>
         </div>
 
@@ -109,16 +134,22 @@ export default function AtendimentoConsultas() {
             </div>
           </div>
           <div className="flex items-end">
-            <button
-              onClick={() => setApenasTriados((prev) => !prev)}
-              className={`w-full px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                apenasTriados
-                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200 shadow-md'
-                  : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              {apenasTriados ? 'Apenas Triados' : 'Todos os Pacientes'}
-            </button>
+            <label className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={apenasTriados}
+                onChange={(e) => setApenasTriados(e.target.checked)}
+                className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:border-slate-600"
+              />
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-200">
+                  Apenas triados
+                </div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Mostrar somente pacientes com triagem
+                </div>
+              </div>
+            </label>
           </div>
         </div>
         )}
@@ -131,6 +162,7 @@ export default function AtendimentoConsultas() {
                 <tr>
                   <th className="px-8 py-5">Hora / Espera</th>
                   <th className="px-8 py-5">Triagem</th>
+                  <th className="px-8 py-5">Status</th>
                   <th className="px-8 py-5">Paciente</th>
                   <th className="px-8 py-5">Profissional</th>
                   <th className="px-8 py-5 text-right">Acoes</th>
@@ -139,7 +171,7 @@ export default function AtendimentoConsultas() {
               <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                 {loading ? (
                   <tr>
-                    <td colSpan="5" className="p-20 text-center">
+                    <td colSpan="6" className="p-20 text-center">
                       <Loader2 className="animate-spin mx-auto text-blue-600" size={40} />
                     </td>
                   </tr>
@@ -167,6 +199,11 @@ export default function AtendimentoConsultas() {
                             Pendente
                           </span>
                         )}
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${getStatusClass(item.status)}`}>
+                          {getStatusLabel(item.status)}
+                        </span>
                       </td>
                       <td className="px-8 py-6">
                         <div className="font-black text-slate-800 dark:text-white uppercase text-sm">
