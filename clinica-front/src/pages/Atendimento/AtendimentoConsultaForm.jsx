@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import Layout from '../../components/Layout';
+import { normalizeSearchText } from '../../utils/text';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -81,6 +82,105 @@ const SearchableSelect = ({ label, options, value, onChange, query, setQuery, pl
   );
 };
 
+const TagInput = ({
+  label,
+  tags,
+  setTags,
+  inputValue,
+  setInputValue,
+  options = [],
+  placeholder,
+  loading,
+  onSelectOption
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const addTag = (value) => {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return;
+    const already = tags.some((tag) => normalizeSearchText(tag) === normalizeSearchText(trimmed));
+    if (already) {
+      setInputValue('');
+      setIsOpen(false);
+      return;
+    }
+    setTags([...tags, trimmed]);
+    setInputValue('');
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      {label && <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">{label}</label>}
+      <div className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 flex flex-wrap gap-2">
+        {tags.map((tag, index) => (
+          <span key={`${tag}-${index}`} className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-widest">
+            {tag}
+            <button type="button" onClick={() => setTags(tags.filter((_, i) => i !== index))} className="text-blue-700">×</button>
+          </span>
+        ))}
+        <input
+          type="text"
+          className="flex-1 min-w-[120px] bg-transparent outline-none text-sm font-bold text-slate-700 dark:text-white"
+          value={inputValue}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            setIsOpen(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+              e.preventDefault();
+              addTag(inputValue);
+            }
+          }}
+          onBlur={() => {
+            setTimeout(() => {
+              if (containerRef.current && containerRef.current.contains(document.activeElement)) {
+                return;
+              }
+              addTag(inputValue);
+            }, 0);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+        />
+      </div>
+      {isOpen && (options.length > 0 || loading) && (
+        <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-[200] max-h-60 overflow-auto">
+          {loading ? (
+            <div className="p-4 text-center text-xs text-slate-400 font-bold uppercase tracking-widest">
+              Carregando...
+            </div>
+          ) : options.map((opt) => (
+            <button
+              key={opt.id || opt.label}
+              type="button"
+              onClick={() => {
+                onSelectOption?.(opt);
+                addTag(opt.label || opt.nome || opt);
+              }}
+              className="w-full text-left px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
+            >
+              {opt.label || opt.nome}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function AtendimentoConsultaForm() {
   const { agendamentoId } = useParams();
   const { api } = useAuth();
@@ -121,6 +221,10 @@ export default function AtendimentoConsultaForm() {
   const [prescricaoDraft, setPrescricaoDraft] = useState({ posologia: '', via: '', quantidade: '' });
   const [medicamentoLoading, setMedicamentoLoading] = useState(false);
 
+  const [medicacoesOptions, setMedicacoesOptions] = useState([]);
+  const [medicacoesQuery, setMedicacoesQuery] = useState('');
+  const [medicacoesLoading, setMedicacoesLoading] = useState(false);
+
   const [exames, setExames] = useState([]);
   const [exameQuery, setExameQuery] = useState('');
   const [exameId, setExameId] = useState(null);
@@ -139,6 +243,10 @@ export default function AtendimentoConsultaForm() {
     encaminhamento: false,
     ficha: true
   });
+
+  const [alergiasTags, setAlergiasTags] = useState([]);
+  const [alergiasInput, setAlergiasInput] = useState('');
+  const [medicacoesTags, setMedicacoesTags] = useState([]);
 
   useEffect(() => {
     const carregarDados = async () => {
@@ -187,6 +295,16 @@ export default function AtendimentoConsultaForm() {
             cid_secundario: atendimento.cid_secundario || null,
             diagnostico_descricao: atendimento.diagnostico_descricao || ''
           });
+          const alergias = (atendimento.alergias_referidas || '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+          setAlergiasTags(alergias);
+          const medicacoes = (atendimento.medicacoes_em_uso || '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+          setMedicacoesTags(medicacoes);
           if (atendimento.cid_principal_codigo || atendimento.cid_principal_nome) {
             setCidQuery(`${atendimento.cid_principal_codigo || ''} ${atendimento.cid_principal_nome || ''}`.trim());
           }
@@ -203,6 +321,14 @@ export default function AtendimentoConsultaForm() {
 
     if (api && agendamentoId) carregarDados();
   }, [api, agendamentoId, notify]);
+
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, alergias_referidas: alergiasTags.join(', ') }));
+  }, [alergiasTags]);
+
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, medicacoes_em_uso: medicacoesTags.join(', ') }));
+  }, [medicacoesTags]);
 
   useEffect(() => {
     if (!medicamentoQuery || medicamentoQuery.length < 2) {
@@ -229,6 +355,32 @@ export default function AtendimentoConsultaForm() {
       clearTimeout(timer);
     };
   }, [api, medicamentoQuery]);
+
+  useEffect(() => {
+    if (!medicacoesQuery || medicacoesQuery.length < 2) {
+      setMedicacoesOptions([]);
+      return;
+    }
+    let active = true;
+    setMedicacoesLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get(`cadastros/medicamentos/?search=${encodeURIComponent(medicacoesQuery)}`);
+        const lista = Array.isArray(res.data.results || res.data) ? (res.data.results || res.data) : [];
+        if (active) {
+          setMedicacoesOptions(lista.map((m) => ({ id: m.id, label: m.nome_busca || m.nome })));
+        }
+      } catch (error) {
+        if (active) setMedicacoesOptions([]);
+      } finally {
+        if (active) setMedicacoesLoading(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [api, medicacoesQuery]);
 
   useEffect(() => {
     if (!exameQuery || exameQuery.length < 2) {
@@ -284,18 +436,24 @@ export default function AtendimentoConsultaForm() {
   }, [api, cidQuery, cidSecQuery]);
 
   const adicionarMedicamento = () => {
-    if (!medicamentoId) {
-      notify.warning('Selecione um medicamento.');
+    const nomeDigitado = medicamentoQuery.trim();
+    if (!medicamentoId && !nomeDigitado) {
+      notify.warning('Selecione ou digite um medicamento.');
       return;
     }
     const selecionado = medicamentos.find((m) => String(m.id) === String(medicamentoId));
+    const nome = selecionado?.label || nomeDigitado;
+    if (!nome) {
+      notify.warning('Selecione ou digite um medicamento.');
+      return;
+    }
     setForm((prev) => ({
       ...prev,
       prescricao_medicamentos: [
         ...prev.prescricao_medicamentos,
         {
-          id: medicamentoId,
-          nome: selecionado?.label || medicamentoQuery,
+          id: medicamentoId || null,
+          nome,
           ...prescricaoDraft
         }
       ]
@@ -404,7 +562,11 @@ export default function AtendimentoConsultaForm() {
 
   const scrollTo = (id) => {
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!el) return;
+    const nav = document.getElementById('atendimento-nav');
+    const offset = nav ? nav.getBoundingClientRect().height + 12 : 0;
+    const top = el.getBoundingClientRect().top + window.scrollY - offset;
+    window.scrollTo({ top, behavior: 'smooth' });
   };
 
   const inputClass = 'w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:text-white transition-all font-bold';
@@ -469,7 +631,7 @@ export default function AtendimentoConsultaForm() {
           </div>
         </div>
 
-        <div className="sticky top-20 z-[50] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-[20px] shadow-sm p-3 mb-6 flex flex-wrap gap-2">
+        <div id="atendimento-nav" className="sticky top-20 z-[50] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-[20px] shadow-sm p-3 mb-6 flex flex-wrap gap-2">
           {sections.map((section) => {
             const Icon = section.icon;
             return (
@@ -522,11 +684,25 @@ export default function AtendimentoConsultaForm() {
             </div>
             <div>
               <label className={labelClass}>Alergias Referidas</label>
-              <input value={form.alergias_referidas} onChange={(e) => setForm({ ...form, alergias_referidas: e.target.value })} className={inputClass} />
+              <TagInput
+                tags={alergiasTags}
+                setTags={setAlergiasTags}
+                inputValue={alergiasInput}
+                setInputValue={setAlergiasInput}
+                placeholder="Digite e use virgula para separar..."
+              />
             </div>
             <div>
               <label className={labelClass}>Medicacoes em Uso</label>
-              <input value={form.medicacoes_em_uso} onChange={(e) => setForm({ ...form, medicacoes_em_uso: e.target.value })} className={inputClass} />
+              <TagInput
+                tags={medicacoesTags}
+                setTags={setMedicacoesTags}
+                inputValue={medicacoesQuery}
+                setInputValue={setMedicacoesQuery}
+                options={medicacoesOptions}
+                loading={medicacoesLoading}
+                placeholder="Buscar medicamento ou digitar..."
+              />
             </div>
             <div className="md:col-span-2">
               <label className={labelClass}>Habitos de Vida</label>

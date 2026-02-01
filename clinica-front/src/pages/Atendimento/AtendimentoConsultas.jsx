@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import Layout from '../../components/Layout';
 import { Search, CheckCircle2, Clock, Loader2, Stethoscope } from 'lucide-react';
+import { normalizeSearchText } from '../../utils/text';
 
 export default function AtendimentoConsultas() {
   const { api, user } = useAuth();
@@ -68,8 +69,9 @@ export default function AtendimentoConsultas() {
   const itensFiltrados = useMemo(() => (
     agendamentos.filter((item) => {
       if (!buscaTexto) return true;
-      const termo = buscaTexto.toLowerCase();
-      return item.nome_paciente?.toLowerCase().includes(termo) || item.nome_profissional?.toLowerCase().includes(termo);
+      const termo = normalizeSearchText(buscaTexto);
+      return normalizeSearchText(item.nome_paciente).includes(termo)
+        || normalizeSearchText(item.nome_profissional).includes(termo);
     })
   ), [agendamentos, buscaTexto]);
 
@@ -108,7 +110,7 @@ export default function AtendimentoConsultas() {
               <input placeholder="Paciente..." value={buscaTexto} onChange={(e) => setBuscaTexto(e.target.value)} className={`${inputClass} pl-12`} />
             </div>
           </div>
-          <div className="flex items-end">
+          <div className="flex flex-col items-end gap-2">
             <button
               onClick={() => setApenasTriados((prev) => !prev)}
               className={`w-full px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
@@ -118,6 +120,14 @@ export default function AtendimentoConsultas() {
               }`}
             >
               {apenasTriados ? 'Apenas Triados' : 'Todos os Pacientes'}
+            </button>
+            <button
+              type="button"
+              onClick={carregarLista}
+              disabled={loading}
+              className="w-full px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all bg-blue-600 text-white border-blue-600 hover:bg-blue-700 disabled:opacity-60"
+            >
+              Recarregar
             </button>
           </div>
         </div>

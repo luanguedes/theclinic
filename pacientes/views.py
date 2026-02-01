@@ -5,6 +5,7 @@ from agendamento.models import Agendamento
 from agendamento.serializers import AgendamentoSerializer
 from .models import Paciente
 from .serializers import PacienteSerializer
+from clinica_core.filters import AccentInsensitiveSearchFilter
 
 class PacienteListCreateView(generics.ListCreateAPIView):
     queryset = Paciente.objects.all().order_by('-criado_em')
@@ -14,7 +15,7 @@ class PacienteListCreateView(generics.ListCreateAPIView):
     authentication_classes = [JWTAuthentication] # Forca aceitar o Token
     permission_classes = [permissions.IsAuthenticated]
 
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['nome', 'cpf', 'telefone', 'cidade']
 
     def get_queryset(self):

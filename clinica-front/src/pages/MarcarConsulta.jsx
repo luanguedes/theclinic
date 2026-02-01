@@ -10,6 +10,7 @@ import {
     Users, Printer, Clock, Filter, Stethoscope, CalendarDays, CheckCircle2
 } from 'lucide-react';
 import { generateAppointmentReceipt } from '../utils/generateReceipt';
+import { normalizeSearchText } from '../utils/text';
 
 // --- CSS CUSTOMIZADO PARA AUMENTAR O CALENDÁRIO ---
 const calendarStyles = `
@@ -100,7 +101,7 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
 
     const filtered = (query === '' || query === (safeOptions.find(o => String(o.id) === String(value))?.label)) 
         ? safeOptions 
-        : safeOptions.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+        : safeOptions.filter(o => normalizeSearchText(o.label).includes(normalizeSearchText(query)));
     
     return (
         <div className="relative w-full" ref={containerRef}>

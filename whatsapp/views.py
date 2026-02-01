@@ -14,6 +14,7 @@ from .serializers import (
     WhatsappStartChatSerializer
 )
 from .services import can_send_message, send_text_message, get_or_create_conversa, normalize_phone
+from clinica_core.filters import AccentInsensitiveSearchFilter
 
 
 def _has_whatsapp_access(user):
@@ -24,7 +25,7 @@ class WhatsappConversaViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = WhatsappConversaSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['contato__nome', 'contato__wa_id', 'contato__telefone']
 
     def get_queryset(self):

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import Layout from '../components/Layout';
 import { Search, CheckCircle2, Clock, Loader2 } from 'lucide-react';
+import { normalizeSearchText } from '../utils/text';
 
 const STATUS_OPTIONS = ['agendado', 'aguardando', 'em_atendimento', 'finalizado', 'faltou'];
 
@@ -86,8 +87,9 @@ export default function Triagem() {
   const itensFiltrados = agendamentos.filter((item) => {
     if (!statusVisiveis.includes(item.status)) return false;
     if (buscaTexto) {
-      const termo = buscaTexto.toLowerCase();
-      return item.nome_paciente?.toLowerCase().includes(termo) || item.nome_profissional?.toLowerCase().includes(termo);
+      const termo = normalizeSearchText(buscaTexto);
+      return normalizeSearchText(item.nome_paciente).includes(termo)
+        || normalizeSearchText(item.nome_profissional).includes(termo);
     }
     return true;
   });

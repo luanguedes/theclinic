@@ -9,6 +9,7 @@ import {
     ChevronDown, X, Users, Pin, Hourglass, Repeat, ListPlus, Pencil, Ban, 
     CalendarDays, DollarSign, ShieldCheck, Plus, Trash2, Loader2, Save, PlusCircle
 } from 'lucide-react';
+import { normalizeSearchText } from '../utils/text';
 
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -41,7 +42,7 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder, disabl
 
   const filtered = query === ''
     ? options
-    : options.filter((opt) => opt.label.toLowerCase().includes(query.toLowerCase()));
+    : options.filter((opt) => normalizeSearchText(opt.label).includes(normalizeSearchText(query)));
 
   const handleSelect = (option) => {
     onChange(option.id);

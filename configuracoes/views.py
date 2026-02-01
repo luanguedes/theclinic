@@ -19,6 +19,7 @@ from .serializers import ConvenioSerializer, DadosClinicaSerializer, Configuraca
 from .importacao import importar_medicamentos
 from .services.exames_import_service import importar_exames
 from .services.cids_import_service import importar_cids
+from clinica_core.filters import AccentInsensitiveSearchFilter
 
 # IMPORTANTE: Importar a funcao de disparo do WhatsApp
 try:
@@ -34,7 +35,7 @@ class ConvenioViewSet(viewsets.ModelViewSet):
     serializer_class = ConvenioSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['nome']
 
     def _parse_bool(self, value):
@@ -60,7 +61,7 @@ class MedicamentoViewSet(viewsets.ModelViewSet):
     serializer_class = MedicamentoSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['nome', 'principio_ativo', 'apresentacao', 'laboratorio', 'tarja', 'nome_busca']
 
     def _parse_bool(self, value):
@@ -135,7 +136,7 @@ class ExameViewSet(viewsets.ModelViewSet):
     serializer_class = ExameSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['codigo_tuss', 'nome', 'tipo', 'search_text']
 
     def _parse_bool(self, value):
@@ -206,7 +207,7 @@ class CidViewSet(viewsets.ModelViewSet):
     serializer_class = CidSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['codigo', 'nome', 'search_text']
 
     def _parse_bool(self, value):

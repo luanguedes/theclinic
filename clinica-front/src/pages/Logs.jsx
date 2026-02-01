@@ -13,6 +13,7 @@ import {
   Eye,
   Loader2
 } from 'lucide-react';
+import { normalizeSearchText } from '../utils/text';
 
 const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -27,7 +28,7 @@ const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter
     }
   }, [value, options]);
 
-  const filtered = options.filter((o) => o.label.toLowerCase().includes(text.toLowerCase()));
+  const filtered = options.filter((o) => normalizeSearchText(o.label).includes(normalizeSearchText(text)));
 
   useEffect(() => {
     const handleClickOutside = (e) => {

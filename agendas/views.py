@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.apps import apps
 from django.utils import timezone
 from auditoria.models import AuditLog
+from clinica_core.filters import normalize_text
 import uuid
 from .models import AgendaConfig
 from .serializers import AgendaConfigSerializer
@@ -184,13 +185,6 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
         if is_valid(self.request.query_params.get('dia_filtro')):
             queryset = queryset.filter(dia_semana=self.request.query_params.get('dia_filtro'))
             
-        if is_valid(self.request.query_params.get('search')):
-            term = self.request.query_params.get('search')
-            queryset = queryset.filter(
-                Q(profissional__nome__icontains=term) | 
-                Q(especialidade__nome__icontains=term)
-            )
-
         return queryset
 
     # --- DADOS PARA FILTROS (Dropdowns) ---
@@ -228,6 +222,18 @@ class AgendaConfigViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
+
+        def _is_valid(val):
+            return val and str(val).strip() not in ['', 'undefined', 'null']
+
+        search_term = request.query_params.get('search')
+        if _is_valid(search_term):
+            term_norm = normalize_text(search_term)
+            queryset = [
+                item for item in queryset
+                if term_norm in normalize_text(getattr(item.profissional, 'nome', ''))
+                or term_norm in normalize_text(getattr(item.especialidade, 'nome', ''))
+            ]
         
         if request.query_params.get('nopage') or request.query_params.get('todos_os_dias'):
             serializer = self.get_serializer(queryset, many=True)

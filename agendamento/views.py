@@ -15,6 +15,7 @@ import threading
 from .models import BloqueioAgenda, Agendamento
 from .serializers import BloqueioAgendaSerializer, AgendamentoSerializer
 from .whatsapp import enviar_mensagem_agendamento, enviar_mensagem_cancelamento_bloqueio
+from clinica_core.filters import AccentInsensitiveSearchFilter
 
 # --- VIEWSET DE BLOQUEIOS ---
 class BloqueioAgendaViewSet(viewsets.ModelViewSet):
@@ -147,7 +148,7 @@ class AgendamentoViewSet(viewsets.ModelViewSet):
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['paciente__nome', 'profissional__nome', 'paciente__cpf']
 
     def destroy(self, request, *args, **kwargs):

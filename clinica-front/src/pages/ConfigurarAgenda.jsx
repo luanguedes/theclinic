@@ -7,6 +7,7 @@ import {
     CalendarRange, Search, Plus, Filter, Edit, Trash2, 
     X, Save, Clock, CalendarDays, PlusCircle, Calculator, DollarSign, ShieldCheck, Users, ListFilter, ChevronDown, Check, Loader2 
 } from 'lucide-react';
+import { normalizeSearchText } from '../utils/text';
 
 // --- HELPERS DE TEMPO (Mantidos para o Cálculo Real-Time) ---
 const timeToMinutes = (time) => {
@@ -37,7 +38,7 @@ const FilterSearchableSelect = ({ options, value, onChange, placeholder, onEnter
         }
     }, [value, options]);
 
-    const filtered = options.filter(o => o.label.toLowerCase().includes(text.toLowerCase()));
+    const filtered = options.filter(o => normalizeSearchText(o.label).includes(normalizeSearchText(text)));
 
     useEffect(() => {
         const handleClickOutside = (e) => {

@@ -153,7 +153,7 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'clinica_core.pagination.ConfigurablePageNumberPagination',
-    'DEFAULT_FILTER_BACKENDS': ['rest_framework.filters.SearchFilter', 'rest_framework.filters.OrderingFilter'],
+    'DEFAULT_FILTER_BACKENDS': ['clinica_core.filters.AccentInsensitiveSearchFilter', 'rest_framework.filters.OrderingFilter'],
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),

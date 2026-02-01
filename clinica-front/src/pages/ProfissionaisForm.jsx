@@ -8,6 +8,7 @@ import {
     User, Save, ArrowLeft, Plus, Trash2, 
     BriefcaseMedical, ChevronDown, Check, X, Loader2, Award 
 } from 'lucide-react';
+import { normalizeSearchText } from '../utils/text';
 
 const SearchableSelect = ({ options, value, onChange, placeholder, required }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -40,7 +41,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, required }) =
 
     const filtered = (query === '' || (options.find(o => o.label === query))) 
         ? options 
-        : options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+        : options.filter(o => normalizeSearchText(o.label).includes(normalizeSearchText(query)));
     
     const handleSelect = (id, label) => {
         onChange(id);

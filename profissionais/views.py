@@ -8,13 +8,14 @@ from .models import Especialidade, Profissional, ProfissionalEspecialidade
 from .serializers import EspecialidadeSerializer, ProfissionalSerializer
 from .utils.cbo_processing import processar_cbo
 from .services.cbo_import import importar_cbo
+from clinica_core.filters import AccentInsensitiveSearchFilter
 
 class EspecialidadeViewSet(viewsets.ModelViewSet):
     queryset = Especialidade.objects.all().order_by('nome')
     serializer_class = EspecialidadeSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['nome', 'codigo', 'codigo_visual', 'search_text']
 
     def _parse_bool(self, value):
@@ -84,7 +85,7 @@ class ProfissionalViewSet(viewsets.ModelViewSet):
     serializer_class = ProfissionalSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['nome', 'cpf']
 
     def get_queryset(self):

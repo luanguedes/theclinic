@@ -5,12 +5,13 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from .models import Operador, Privilegio
 from .serializers import OperadorSerializer, PrivilegioSerializer, MinhaContaSerializer
+from clinica_core.filters import AccentInsensitiveSearchFilter
 
 class OperadorViewSet(viewsets.ModelViewSet):
     queryset = Operador.objects.all().select_related('profissional').prefetch_related('privilegios').order_by('first_name')
     serializer_class = OperadorSerializer
     permission_classes = [IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [AccentInsensitiveSearchFilter]
     search_fields = ['username', 'first_name', 'email']
 
     def _parse_bool(self, value):

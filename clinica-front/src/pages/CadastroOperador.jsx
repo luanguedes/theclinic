@@ -7,6 +7,7 @@ import useUnsavedChanges from '../hooks/useUnsavedChanges';
 import { 
   UserCog, Mail, Lock, Shield, Save, Check, DollarSign, KeyRound, ArrowLeft, Loader2, Search, ChevronDown, X, AlertCircle, MessageCircle 
 } from 'lucide-react';
+import { normalizeSearchText } from '../utils/text';
 
 const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -34,7 +35,7 @@ const SearchableSelect = ({ label, options, value, onChange, placeholder }) => {
 
     const filtered = (query === '' || query === (safeOptions.find(o => String(o.id) === String(value))?.label)) 
         ? safeOptions 
-        : safeOptions.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+        : safeOptions.filter(o => normalizeSearchText(o.label).includes(normalizeSearchText(query)));
     
     return (
         <div className="relative mb-4" ref={containerRef}>

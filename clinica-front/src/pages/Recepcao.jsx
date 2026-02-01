@@ -7,6 +7,7 @@ import {
     Pencil, UserX, RotateCcw, Flag, Accessibility, Baby, Users, Heart, 
     AlertTriangle, UserCog, MapPin, Stethoscope, ShieldCheck, Check
 } from 'lucide-react';
+import { normalizeSearchText } from '../utils/text';
 
 // Mapeamento visual das prioridades
 const PRIORIDADES = {
@@ -243,8 +244,9 @@ export default function Recepcao() {
     const itensFiltrados = agendamentos.filter(item => {
         if (!statusVisiveis.includes(item.status)) return false;
         if (buscaTexto) {
-            const termo = buscaTexto.toLowerCase();
-            return item.nome_paciente?.toLowerCase().includes(termo) || item.nome_profissional?.toLowerCase().includes(termo);
+            const termo = normalizeSearchText(buscaTexto);
+            return normalizeSearchText(item.nome_paciente).includes(termo)
+                || normalizeSearchText(item.nome_profissional).includes(termo);
         }
         return true;
     });
