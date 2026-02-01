@@ -1,6 +1,7 @@
 ﻿from rest_framework import generics, permissions, filters
 from rest_framework_simplejwt.authentication import JWTAuthentication # <--- IMPORTANTE
 from django.utils import timezone
+from django.db.models import Case, When, Value, IntegerField
 from agendamento.models import Agendamento
 from agendamento.serializers import AgendamentoSerializer
 from .models import Paciente
@@ -74,7 +75,13 @@ class PacienteAtendimentoListView(generics.ListAPIView):
 
         qs = Agendamento.objects.all().select_related(
             'paciente', 'profissional', 'especialidade', 'triagem'
-        ).filter(status=Agendamento.Status.AGUARDANDO)
+        ).filter(
+            status__in=[
+                Agendamento.Status.AGUARDANDO,
+                Agendamento.Status.EM_ATENDIMENTO,
+                Agendamento.Status.FINALIZADO,
+            ]
+        )
 
         data = self.request.query_params.get('data')
         if data:
@@ -89,7 +96,17 @@ class PacienteAtendimentoListView(generics.ListAPIView):
         if apenas_triados is True:
             qs = qs.filter(triagem__isnull=False)
 
-        return qs.order_by('horario')
+        qs = qs.annotate(
+            prioridade_status=Case(
+                When(status=Agendamento.Status.EM_ATENDIMENTO, then=Value(1)),
+                When(status=Agendamento.Status.AGUARDANDO, then=Value(2)),
+                When(status=Agendamento.Status.FINALIZADO, then=Value(3)),
+                default=Value(10),
+                output_field=IntegerField(),
+            )
+        )
+
+        return qs.order_by('prioridade_status', 'horario')
 
 class PacienteDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Paciente.objects.all()

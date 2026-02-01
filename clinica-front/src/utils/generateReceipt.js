@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { formatDateDMY } from './date';
 
 const getDataUri = (url) => {
     return new Promise((resolve) => {
@@ -115,8 +116,9 @@ export const generateAppointmentReceipt = async (agendamento) => {
 
     doc.setFontSize(11);
     doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    const dataFormatada = new Date(agendamento.data).toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    doc.text(`${dataFormatada.toUpperCase()}`, marginLeft + 4, y + 13);
+    const weekday = new Date(agendamento.data).toLocaleDateString('pt-BR', { weekday: 'long' });
+    const dataFormatada = `${weekday} • ${formatDateDMY(agendamento.data)}`;
+    doc.text(dataFormatada.toUpperCase(), marginLeft + 4, y + 13);
     
     doc.setFontSize(11);
     doc.text(`HORARIO: ${agendamento.horario.substring(0, 5)}`, marginLeft + contentWidth - 35, y + 13);
@@ -147,7 +149,7 @@ export const generateAppointmentReceipt = async (agendamento) => {
     drawField("Nome Completo", agendamento.nome_paciente, marginLeft, y);
     y += 8.5;
     drawField("CPF / Documento", pdfData.paciente_cpf, marginLeft, y);
-    drawField("Data de Nascimento", pdfData.paciente_nascimento ? new Date(pdfData.paciente_nascimento).toLocaleDateString('pt-BR') : "-", marginLeft + 62, y);
+    drawField("Data de Nascimento", pdfData.paciente_nascimento ? formatDateDMY(pdfData.paciente_nascimento) : "-", marginLeft + 62, y);
     drawField("Sexo", pdfData.paciente_sexo, marginLeft + 120, y);
     y += 8.5;
     drawField("Telefone de Contato", agendamento.telefone_paciente, marginLeft, y);

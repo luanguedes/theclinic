@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { formatDateDMY } from './date';
 
 export const generateConflictReport = (pacientes, motivoBloqueio) => {
     const doc = new jsPDF({
@@ -68,9 +69,9 @@ export const generateConflictReport = (pacientes, motivoBloqueio) => {
             doc.rect(marginLeft, y - 5, contentWidth, 12, 'F');
         }
 
-        const dataF = new Date(p.data).toLocaleDateString('pt-BR');
+        const dataF = formatDateDMY(p.data);
         const horaF = p.horario.substring(0, 5);
-        const nascimento = p.paciente_nascimento ? new Date(p.paciente_nascimento).toLocaleDateString('pt-BR') : 'N/D';
+        const nascimento = p.paciente_nascimento ? formatDateDMY(p.paciente_nascimento) : 'N/D';
 
         // Coluna 1: Data e Hora
         doc.setFont("helvetica", "bold");
